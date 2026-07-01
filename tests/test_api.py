@@ -76,7 +76,7 @@ class TestAPI(unittest.TestCase):
         self.assertEqual(data["choices"][0]["message"]["content"], "Hello! I am your general model.")
         
         # Verify routing and manager were called correctly
-        mock_route_chat.assert_called_once_with([{"role": "user", "content": "Hello!"}], "auto")
+        mock_route_chat.assert_called_once_with([{"role": "user", "content": "Hello!"}], "auto", unittest.mock.ANY)
         mock_get_model.assert_called_once_with("general-llama3")
 
 if __name__ == "__main__":
