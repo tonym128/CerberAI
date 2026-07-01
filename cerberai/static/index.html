@@ -58,7 +58,25 @@
                 <!-- Populated dynamically -->
             </div>
             
+            <!-- Automations Section -->
+            <div class="section-title">Automations</div>
+            <div class="automation-card">
+                <div class="auto-header">Yesterday's News Video</div>
+                <p class="auto-description">Generates the top 10 news stories of yesterday, writes summaries, draws graphics, synthesizes voice tracks, and stitches them into a final broadcast video.</p>
+                <button id="btn-news-video" class="btn btn-primary w-full">Generate Video</button>
+                <div id="news-video-status-container" class="status-container hidden">
+                    <div class="progress-bar-bg">
+                        <div id="news-video-progress" class="progress-bar" style="width: 0%"></div>
+                    </div>
+                    <span id="news-video-status-msg" class="status-msg">Starting...</span>
+                </div>
+                <div id="news-video-player-container" class="player-container hidden">
+                    <video id="news-video-player" controls class="w-full" style="border-radius: 8px; margin-top: 10px; max-height: 200px; border: 1px solid var(--border-color);"></video>
+                </div>
+            </div>
+            
             <div class="sidebar-footer">
+
                 <div class="connection-status">
                     <span class="status-dot green"></span>
                     <span>Connected to CerberAI</span>
@@ -81,7 +99,13 @@
                         <span class="slider"></span>
                         <span class="toggle-label">Stream</span>
                     </label>
+                    <label class="stream-toggle">
+                        <input type="checkbox" id="tools-check" checked>
+                        <span class="slider"></span>
+                        <span class="toggle-label">Tools</span>
+                    </label>
                 </div>
+
             </header>
 
             <!-- Chat Window -->

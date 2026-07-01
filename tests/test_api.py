@@ -21,7 +21,8 @@ class TestAPI(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         data = response.json()
         self.assertEqual(data["status"], "healthy")
-        self.assertEqual(data["limits"]["max_vram_gb"], 12.0)
+        from cerberai.main import config
+        self.assertEqual(data["limits"]["max_vram_gb"], config.resource_limits.max_vram_gb)
         self.assertIn("active_models", data)
         self.assertIn("all_configured_models", data)
 

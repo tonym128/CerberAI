@@ -1,10 +1,12 @@
 import asyncio
+import base64
 import io
 import json
 import re
 import time
 import warnings
 warnings.filterwarnings("ignore")
+
 
 from contextlib import asynccontextmanager
 from typing import Dict, Any
@@ -208,7 +210,150 @@ async def chat_completions(request: Request):
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"Image generation error: {str(e)}")
 
+    # If the routed model is a TTS model, handle inline audio synthesis
+    if model_cfg and model_cfg.type == "tts":
+        try:
+            last_message_content = messages[-1].get("content", "") if messages else ""
+            audio_bytes = await backend.handle_audio_speech({"input": last_message_content})
+            b64_data = base64.b64encode(audio_bytes).decode('utf-8')
+            
+            # Embed HTML5 Audio controls
+            markdown_content = f"Here is the spoken audio for **\"{last_message_content}\"**:\n\n<audio controls src=\"data:audio/mpeg;base64,{b64_data}\" style=\"width: 100%; margin-top: 8px;\"></audio>"
+            
+            chat_response = {
+                "id": f"chatcmpl-tts-{int(time.time())}",
+                "object": "chat.completion",
+                "created": int(time.time()),
+                "model": target_model_id,
+                "choices": [{
+                    "index": 0,
+                    "message": {
+                        "role": "assistant",
+                        "content": markdown_content
+                    },
+                    "finish_reason": "stop"
+                }]
+            }
+            
+            if stream:
+                async def stream_tts_markdown():
+                    yield f"data: {json.dumps({'choices': [{'delta': {'role': 'assistant', 'content': ''}, 'index': 0, 'finish_reason': None}]})}\n\n"
+                    yield f"data: {json.dumps({'choices': [{'delta': {'content': markdown_content}, 'index': 0, 'finish_reason': None}]})}\n\n"
+                    yield f"data: {json.dumps({'choices': [{'delta': {}, 'index': 0, 'finish_reason': 'stop'}]})}\n\n"
+                    yield "data: [DONE]\n\n"
+                return StreamingResponse(stream_tts_markdown(), media_type="text/event-stream")
+            else:
+                return JSONResponse(content=chat_response)
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"TTS inline error: {str(e)}")
+
+    # If the routed model is an STT model, prompt the user on how to use it
+    if model_cfg and model_cfg.type == "stt":
+        markdown_content = "🎙️ **Speech-to-Text Model Selected**\n\nTo transcribe audio, please click the **Microphone** icon button next to the input area to upload an audio file directly into the chat."
+        
+        chat_response = {
+            "id": f"chatcmpl-stt-{int(time.time())}",
+            "object": "chat.completion",
+            "created": int(time.time()),
+            "model": target_model_id,
+            "choices": [{
+                "index": 0,
+                "message": {
+                    "role": "assistant",
+                    "content": markdown_content
+                },
+                "finish_reason": "stop"
+            }]
+        }
+        
+        if stream:
+            async def stream_stt_markdown():
+                yield f"data: {json.dumps({'choices': [{'delta': {'role': 'assistant', 'content': ''}, 'index': 0, 'finish_reason': None}]})}\n\n"
+                yield f"data: {json.dumps({'choices': [{'delta': {'content': markdown_content}, 'index': 0, 'finish_reason': None}]})}\n\n"
+                yield f"data: {json.dumps({'choices': [{'delta': {}, 'index': 0, 'finish_reason': 'stop'}]})}\n\n"
+                yield "data: [DONE]\n\n"
+            return StreamingResponse(stream_stt_markdown(), media_type="text/event-stream")
+        else:
+            return JSONResponse(content=chat_response)
+
+    # Check if tool calling should run
+    tools_enabled = payload.get("tools_enabled", True)
+
+    if tools_enabled and agent.tools and model_cfg and model_cfg.type == "llm":
+        try:
+            sys_extension = agent.get_system_prompt_extension()
+            local_messages = list(messages)
+            
+            # Inject system instructions
+            if local_messages and local_messages[0].get("role") == "system":
+                system_msg = local_messages[0].copy()
+                system_msg["content"] += sys_extension
+                local_messages[0] = system_msg
+            else:
+                local_messages.insert(0, {
+                    "role": "system",
+                    "content": "You are a helpful assistant." + sys_extension
+                })
+                
+            # For small models, also append a reminder directly to the last user message
+            for msg in reversed(local_messages):
+                if msg.get("role") == "user":
+                    user_msg = msg.copy()
+                    user_msg["content"] += (
+                        "\n\n[TOOL CALL REMINDER]\n"
+                        "To search the web, you must output exactly:\n"
+                        "<tool_call>{\"name\": \"web_search\", \"arguments\": {\"query\": \"search keywords\"}}</tool_call>"
+                    )
+                    idx = local_messages.index(msg)
+                    local_messages[idx] = user_msg
+                    break
+
+            local_payload = dict(payload)
+            local_payload["messages"] = local_messages
+            local_payload["stream"] = False  # Disable streaming for intermediate agent reasoning steps
+
+            
+            loop_limit = 5
+            for step in range(loop_limit):
+                response = await backend.handle_chat_completion(local_payload)
+                content = response["choices"][0]["message"]["content"]
+                
+                # Check for tool call tags
+                match = re.search(r"<tool_call>(.*?)</tool_call>", content, re.DOTALL)
+                if match:
+                    tool_call_json = match.group(1).strip()
+                    tool_result = await agent.execute_tool(tool_call_json)
+                    
+                    # Append history
+                    local_messages.append({"role": "assistant", "content": content})
+                    local_messages.append({
+                        "role": "user",
+                        "content": f"[TOOL RESPONSE]\n{tool_result}"
+                    })
+                    local_payload["messages"] = local_messages
+                    continue
+                else:
+                    # Final response reached!
+                    if stream:
+                        async def stream_pregenerated():
+                            yield f"data: {json.dumps({'choices': [{'delta': {'role': 'assistant', 'content': ''}, 'index': 0, 'finish_reason': None}]})}\n\n"
+                            yield f"data: {json.dumps({'choices': [{'delta': {'content': content}, 'index': 0, 'finish_reason': None}]})}\n\n"
+                            yield f"data: {json.dumps({'choices': [{'delta': {}, 'index': 0, 'finish_reason': 'stop'}]})}\n\n"
+                            yield "data: [DONE]\n\n"
+                        return StreamingResponse(stream_pregenerated(), media_type="text/event-stream")
+                    else:
+                        return JSONResponse(content=response)
+            
+            # If loop limit exceeded, return last response
+            return JSONResponse(content=response)
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            raise HTTPException(status_code=500, detail=f"Agent loop error: {str(e)}")
+
+
     # 3. Execute completion (stream vs regular response)
+
 
 
     if stream:
@@ -296,6 +441,25 @@ async def image_generations(request: Request):
         raise HTTPException(status_code=501, detail=f"Image generation not implemented for backend type.")
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/v1/automate/news-video")
+async def start_news_video_automation(background_tasks: BackgroundTasks):
+    """Trigger the news video generation workflow in the background."""
+    from .automation import generate_yesterday_news_video, get_status, update_status
+    
+    current_status = get_status()
+    if current_status["status"] == "running":
+        return JSONResponse(content={"message": "Automation is already running.", "status": current_status})
+        
+    update_status("running", 0, "Starting automation task...")
+    background_tasks.add_task(generate_yesterday_news_video, manager, agent)
+    return JSONResponse(content={"message": "Automation started successfully.", "status": get_status()})
+
+@app.get("/v1/automate/news-video/status")
+async def get_news_video_automation_status():
+    """Retrieve the real-time status of the news video automation task."""
+    from .automation import get_status
+    return JSONResponse(content=get_status())
 
 if __name__ == "__main__":
     uvicorn.run(

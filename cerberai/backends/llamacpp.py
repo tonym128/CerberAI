@@ -161,26 +161,56 @@ class LlamaCppBackend(BaseBackend):
         return False
 
     async def handle_chat_completion(self, payload: Dict[str, Any]) -> Dict[str, Any]:
-        """Forward request to the llama-server's OpenAI endpoint."""
+        """Forward request to the llama-server's OpenAI endpoint, with auto-restart on connection failure."""
         url = f"http://{self.host}:{self.port}/v1/chat/completions"
-        async with httpx.AsyncClient(timeout=180.0) as client:
-            response = await client.post(url, json=payload)
-            if response.status_code == 200:
-                return response.json()
-            else:
-                raise Exception(f"llama-server returned error {response.status_code}: {response.text}")
+        for attempt in range(2):
+            try:
+                async with httpx.AsyncClient(timeout=180.0) as client:
+                    response = await client.post(url, json=payload)
+                    if response.status_code == 200:
+                        try:
+                            return response.json()
+                        except Exception as je:
+                            print(f"Error: llama-server on port {self.port} returned 200 OK but content is not valid JSON!")
+                            print(f"Content: {response.text}")
+                            raise Exception(f"llama-server returned 200 OK but response is not valid JSON: {response.text}") from je
+                    else:
+                        raise Exception(f"llama-server returned error {response.status_code}: {response.text}")
+            except (httpx.ConnectError, httpx.ConnectTimeout) as ce:
+                print(f"Connection to llama-server on port {self.port} failed (attempt {attempt+1}/2): {ce}")
+                if attempt == 0:
+                    print("Attempting to restart llama-server...")
+                    await self.unload()
+                    success = await self.load()
+                    if not success:
+                        raise Exception(f"Failed to restart llama-server on port {self.port}: {ce}")
+                else:
+                    raise
 
     async def stream_chat_completion(self, payload: Dict[str, Any]) -> AsyncIterator[bytes]:
-        """Forward the OpenAI compatible request and stream the response."""
+        """Forward the OpenAI compatible request and stream the response, with auto-restart on connection failure."""
         url = f"http://{self.host}:{self.port}/v1/chat/completions"
         modified_payload = payload.copy()
         modified_payload["stream"] = True
+        for attempt in range(2):
+            try:
+                async with httpx.AsyncClient(timeout=180.0) as client:
+                    async with client.stream("POST", url, json=modified_payload) as response:
+                        if response.status_code != 200:
+                            err_content = await response.aread()
+                            raise Exception(f"llama-server returned error {response.status_code}: {err_content.decode(errors='ignore')}")
+                        async for chunk in response.aiter_bytes():
+                            yield chunk
+                break
+            except (httpx.ConnectError, httpx.ConnectTimeout) as ce:
+                print(f"Connection to llama-server on port {self.port} failed during stream (attempt {attempt+1}/2): {ce}")
+                if attempt == 0:
+                    print("Attempting to restart llama-server for stream...")
+                    await self.unload()
+                    success = await self.load()
+                    if not success:
+                        raise Exception(f"Failed to restart llama-server on port {self.port}: {ce}")
+                else:
+                    raise
 
-        async with httpx.AsyncClient(timeout=180.0) as client:
-            async with client.stream("POST", url, json=modified_payload) as response:
-                if response.status_code != 200:
-                    err_content = await response.aread()
-                    raise Exception(f"llama-server returned error {response.status_code}: {err_content.decode(errors='ignore')}")
-                async for chunk in response.aiter_bytes():
-                    yield chunk
 

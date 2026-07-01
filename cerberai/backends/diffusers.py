@@ -23,7 +23,12 @@ class DiffusersBackend(BaseBackend):
             from diffusers import AutoPipelineForText2Image
             
             device = "cuda" if torch.cuda.is_available() else "cpu"
-            torch_dtype = torch.float16 if device == "cuda" else torch.float32
+            is_flux = "flux" in self.model_name.lower()
+            
+            if is_flux:
+                torch_dtype = torch.bfloat16 if (device == "cuda" and torch.cuda.is_bf16_supported()) else torch.float16
+            else:
+                torch_dtype = torch.float16 if device == "cuda" else torch.float32
             
             self.pipeline = AutoPipelineForText2Image.from_pretrained(
                 self.model_name,
@@ -32,7 +37,10 @@ class DiffusersBackend(BaseBackend):
                 requires_safety_checker=False
             )
 
-            self.pipeline.to(device)
+            if is_flux and device == "cuda":
+                self.pipeline.enable_model_cpu_offload()
+            else:
+                self.pipeline.to(device)
             
             # Setup LCM scheduler if using a Latent Consistency Model for fast 4-step generation
             if "lcm" in self.model_name.lower():
@@ -75,15 +83,17 @@ class DiffusersBackend(BaseBackend):
         if not prompt:
             raise ValueError("Prompt is required for image generation.")
 
-        # Default to 4 steps for LCM, 20 steps otherwise
+        # Default to 4 steps for LCM/Flux, 20 steps otherwise
         is_lcm = "lcm" in self.model_name.lower()
-        default_steps = 4 if is_lcm else 20
+        is_flux = "flux" in self.model_name.lower()
+        
+        default_steps = 4 if (is_lcm or is_flux) else 20
         steps = payload.get("num_inference_steps", default_steps)
         width = payload.get("width", 512)
         height = payload.get("height", 512)
         
-        # Determine guidance scale (Sweet spot for LCM is 1.0 - 2.0. Standard SD uses 7.5)
-        default_guidance = 1.5 if is_lcm else 7.5
+        # Determine guidance scale (Sweet spot for LCM is 1.0 - 2.0. Standard SD uses 7.5. Flux requires 0.0)
+        default_guidance = 0.0 if is_flux else (1.5 if is_lcm else 7.5)
         guidance = payload.get("guidance_scale", default_guidance)
         
         # Limit steps for local execution safety

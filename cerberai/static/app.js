@@ -19,7 +19,9 @@ const currentChatModelLabel = document.getElementById("current-chat-model");
 const routingDescLabel = document.getElementById("routing-description");
 const clearChatBtn = document.getElementById("clear-chat");
 const streamCheck = document.getElementById("stream-check");
+const toolsCheck = document.getElementById("tools-check");
 const sendBtn = document.getElementById("send-btn");
+
 
 // Suggestions click handler
 function setPrompt(text) {
@@ -206,8 +208,10 @@ chatForm.addEventListener("submit", async (e) => {
         const payload = {
             model: activeModelId,
             messages: chatHistory,
-            stream: stream
+            stream: stream,
+            tools_enabled: toolsCheck ? toolsCheck.checked : false
         };
+
 
         const response = await fetch("/v1/chat/completions", {
             method: "POST",
@@ -441,4 +445,86 @@ if (audioUploadBtn && audioFileInput) {
         }
     });
 }
+
+// News Video Automation
+const btnNewsVideo = document.getElementById("btn-news-video");
+const newsVideoStatusContainer = document.getElementById("news-video-status-container");
+const newsVideoProgress = document.getElementById("news-video-progress");
+const newsVideoStatusMsg = document.getElementById("news-video-status-msg");
+const newsVideoPlayerContainer = document.getElementById("news-video-player-container");
+const newsVideoPlayer = document.getElementById("news-video-player");
+
+if (btnNewsVideo) {
+    let pollInterval = null;
+
+    const checkAutomationStatus = async () => {
+        try {
+            const res = await fetch("/v1/automate/news-video/status");
+            if (!res.ok) return;
+            const data = await res.json();
+
+            if (data.status === "running") {
+                btnNewsVideo.disabled = true;
+                btnNewsVideo.textContent = "Processing...";
+                newsVideoStatusContainer.classList.remove("hidden");
+                newsVideoProgress.style.width = `${data.progress}%`;
+                newsVideoStatusMsg.textContent = data.message;
+                
+                // If pollInterval is not active, start it
+                if (!pollInterval) {
+                    pollInterval = setInterval(checkAutomationStatus, 2500);
+                }
+            } else if (data.status === "completed") {
+                if (pollInterval) {
+                    clearInterval(pollInterval);
+                    pollInterval = null;
+                }
+                btnNewsVideo.disabled = false;
+                btnNewsVideo.textContent = "Generate Video";
+                newsVideoStatusContainer.classList.add("hidden");
+                
+                // Load and play video
+                newsVideoPlayer.src = data.video_url;
+                newsVideoPlayerContainer.classList.remove("hidden");
+            } else if (data.status === "failed") {
+                if (pollInterval) {
+                    clearInterval(pollInterval);
+                    pollInterval = null;
+                }
+                btnNewsVideo.disabled = false;
+                btnNewsVideo.textContent = "Generate Video";
+                newsVideoStatusContainer.classList.add("hidden");
+                alert(`Automation failed: ${data.message}`);
+            }
+        } catch (err) {
+            console.error("Status check failed", err);
+        }
+    };
+
+    btnNewsVideo.addEventListener("click", async () => {
+        btnNewsVideo.disabled = true;
+        btnNewsVideo.textContent = "Initiating...";
+        newsVideoStatusContainer.classList.remove("hidden");
+        newsVideoPlayerContainer.classList.add("hidden");
+        newsVideoProgress.style.width = "0%";
+        newsVideoStatusMsg.textContent = "Starting automation task...";
+
+        try {
+            const res = await fetch("/v1/automate/news-video", { method: "POST" });
+            if (!res.ok) throw new Error("Could not start automation");
+            
+            // Start polling status
+            pollInterval = setInterval(checkAutomationStatus, 2500);
+        } catch (err) {
+            alert(`Failed to start news video generation: ${err.message}`);
+            btnNewsVideo.disabled = false;
+            btnNewsVideo.textContent = "Generate Video";
+            newsVideoStatusContainer.classList.add("hidden");
+        }
+    });
+
+    // Check status on load in case a task is already running
+    checkAutomationStatus();
+}
+
 

@@ -4,6 +4,7 @@ import json
 import asyncio
 import importlib.util
 import urllib.parse
+from pathlib import Path
 from typing import List, Dict, Any, Optional
 import httpx
 from .config import AppConfig
@@ -72,7 +73,6 @@ class AgentExecutor:
             Path(os.path.expanduser("~/.gemini/config/skills")),
             Path(".agents/skills")
         ]
-        from pathlib import Path
         for path in skills_paths:
             if not path.exists():
                 continue
@@ -127,11 +127,67 @@ class AgentExecutor:
         )
 
     async def execute_tool(self, call_json: str) -> str:
-        """Execute a parsed tool call JSON string."""
+        """Execute a parsed tool call JSON string, with resilient fallback parsing."""
         try:
-            data = json.loads(call_json)
+            # 1. Clean up string
+            call_json = call_json.strip()
+            
+            # Remove potential markdown wrapping
+            if call_json.startswith("```"):
+                call_json = re.sub(r"^```[a-zA-Z0-9]*\n", "", call_json)
+                call_json = re.sub(r"\n```$", "", call_json)
+            call_json = call_json.strip()
+            if not call_json:
+                return "Error: Tool call content is empty."
+                
+            data = None
+
+            
+            # 2. Check if it looks like a function call instead of JSON
+            if not call_json.startswith("{"):
+                func_match = re.match(r"^(\w+)\((.*)\)$", call_json, re.DOTALL)
+                if func_match:
+                    name = func_match.group(1)
+                    inner = func_match.group(2).strip()
+                    args = {}
+                    
+                    # Parse arg=val patterns
+                    kw_match = re.findall(r"(\w+)\s*=\s*['\"](.*?)['\"]", inner)
+                    if kw_match:
+                        args = {k: v for k, v in kw_match}
+                    elif inner:
+                        # Otherwise parse it as a single raw value passed to 'query'
+                        val = re.sub(r"^['\"]|['\"]$", "", inner).strip()
+                        args = {"query": val}
+                        
+                    data = {"name": name, "arguments": args}
+            
+            # 3. Try standard JSON parsing
+            if not data:
+                try:
+                    data = json.loads(call_json)
+                except json.JSONDecodeError as je:
+                    # Try to fix single quotes to double quotes
+                    if "'" in call_json and '"' not in call_json:
+                        try:
+                            data = json.loads(call_json.replace("'", '"'))
+                        except Exception:
+                            return f"Error: Invalid tool call syntax: {je}. Please try again using exactly: <tool_call>{{\"name\": \"tool_name\", \"arguments\": {{\"arg_name\": \"value\"}}}}</tool_call>"
+                    else:
+                        return f"Error: Invalid tool call syntax: {je}. Please try again using exactly: <tool_call>{{\"name\": \"tool_name\", \"arguments\": {{\"arg_name\": \"value\"}}}}</tool_call>"
+
+            
             name = data.get("name")
             args = data.get("arguments", {})
+            
+            # 4. Resilient arguments resolution
+            if not isinstance(args, dict):
+                # If arguments is a raw value rather than a dict, map to query
+                args = {"query": str(args)}
+            elif not args:
+                # If arguments is empty, treat all other top-level keys as parameters
+                args = {k: v for k, v in data.items() if k != "name"}
+
             
             if name not in self.tools:
                 return f"Error: Tool '{name}' is not registered."

@@ -12,3 +12,6 @@ diffusers>=0.20.0
 transformers>=4.30.0
 accelerate>=0.20.0
 pillow>=9.5.0
+kokoro-onnx>=0.3.0
+onnxruntime>=1.15.0
+soundfile>=0.12.0
