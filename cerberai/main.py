@@ -1,3 +1,4 @@
+import os
 import asyncio
 import base64
 import io
@@ -23,6 +24,8 @@ from .agent import AgentExecutor
 
 # Load application configuration
 config = load_config()
+if config.hf_token:
+    os.environ["HF_TOKEN"] = config.hf_token
 
 # Initialize managers
 manager = DynamicModelManager(config)
@@ -494,6 +497,10 @@ async def save_config(request: Request):
         # Reload configuration in memory
         from .config import load_config
         config = load_config()
+        if config.hf_token:
+            os.environ["HF_TOKEN"] = config.hf_token
+        else:
+            os.environ.pop("HF_TOKEN", None)
         manager = DynamicModelManager(config)
         
         # Update the agent executor references

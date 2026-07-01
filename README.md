@@ -32,9 +32,10 @@ CerberAI is built on a modular, event-driven Python architecture:
 
 *   **FastAPI Gateway**: Serves as the high-throughput asynchronous API shell. It intercepts incoming OpenAI-compatible payloads and handles request queueing, client connections, and SSE stream formatting.
 *   **Dynamic Model Manager (DMM)**: Keeps track of all loaded models and their estimated memory footprints (VRAM/RAM). If loading a new model exceeds the user's configured `max_vram_gb`, the DMM triggers a **Least-Recently-Used (LRU)** eviction chain, cleanly unloading stale models before initializing the new one.
-*   **Intelligent Intent Router**: Classifies incoming requests using lightweight regex-based heuristics (to minimize classification overhead) or a local classifier LLM. It routes coding prompts to optimized coding engines, general prompts to chat engines, image prompts to diffusers, and audio requests to speech backends.
-*   **Self-Healing Subprocess Adapters**: Adapters (such as `LlamaCppBackend`) manage running model processes. If a subprocess crashes due to host GPU pressure, the adapter automatically detects the connection drop, unloads the stale process, re-initializes the backend, and retries the request transparently.
+*   **Dynamic Purpose Intent Router**: Classifies incoming requests using lightweight regex-based heuristics or a local classifier LLM. When using LLM routing, the system dynamically queries the loaded LLM with a list of all active model IDs and their configured **purpose specifiers** to choose the best engine on-the-fly, bypassing network loops.
+*   **Self-Healing Subprocess Adapters**: Adapters (such as `LlamaCppBackend`) manage running model processes. If a connection drop occurs, the adapter automatically calls `unload()` followed by `load()` to restart the local `llama-server` process transparently.
 *   **ReAct Tool Executor**: Contains an inline agent executor. If tool calling is enabled, it parses model responses for tool calls, executes them locally (e.g., executing Python script code, searching the web locally using DuckDuckGo), and feeds the results back to the model before returning the final response.
+*   **Global Settings & Gated Models**: Allows configuration of a global `hf_token` variable which is hot-injected into environment variables to authorize gated downloads from Hugging Face.
 
 ---
 
@@ -42,7 +43,8 @@ CerberAI is built on a modular, event-driven Python architecture:
 
 - **OpenAI-Compatible Endpoints**: Use with any tool that supports OpenAI's API (e.g. Open WebUI, LibreChat, Cursor, Cline).
 - **Dynamic Resource Loading/Unloading**: Keeps memory footprint low by loading models on-demand and unloading them when idle or to make room for other models.
-- **Intelligent Routing**: Uses a lightweight router model or heuristics to analyze incoming requests and direct them to the appropriate model (e.g., General, Coding, Image, TTS, STT).
+- **Dynamic Purpose-Based LLM Routing**: Introspects model definitions and matches them to incoming intents using custom descriptions.
+- **Interactive Setup Dashboard**: An inline WebUI configuration screen to add, remove, and update LLM/STT/Image models and hot-reload settings in memory.
 - **Multiple Backends**: Integrates with Ollama, llama.cpp, Whisper, Diffusers, Kokoro, and others.
 
 ## Directory Structure
@@ -123,7 +125,7 @@ Perfect for standard mainstream cards (e.g., RTX 3060/4060, RX 6600/7600).
 For high-end workstation cards (e.g., RTX 4080, RX 7800 XT, or dual-GPU setups). Allows loading larger reasoning models and SOTA graphics pipelines.
 *   **General LLM**: `Qwen/Qwen2.5-14B-Instruct-GGUF` (File: `qwen2.5-14b-instruct-q4_k_m.gguf` ~ 9.0 GB VRAM) or `Meta-Llama-3.1-8B-Instruct` (FP16 or Q8_0 ~ 8.5 GB VRAM)
 *   **Coding LLM**: `Qwen/Qwen2.5-Coder-14B-Instruct-GGUF` (File: `qwen2.5-coder-14b-instruct-q4_k_m.gguf` ~ 9.0 GB VRAM)
-*   **Image Generation**: `stabilityai/stable-diffusion-xl-base-1.0` (with LCM LoRA or SSD-1B distilled ~ 6.0 GB VRAM) or `black-forest-labs/FLUX.1-schnell` (Quantized ~ 12.0 GB VRAM)
+*   **Image Generation**: `stabilityai/sdxl-turbo` (1-step distilled high-quality image generation ~ 5.5 GB VRAM / fits comfortably with 16 GB system RAM and 16 GB GPU VRAM)
 *   **Speech (TTS)**: `Kokoro-82M ONNX` (GPU execution, ~0.3 GB VRAM)
 *   **Transcription (STT)**: `openai-whisper` (Model: `large-v3` ~ 4.8 GB VRAM)
 *   *Config Recommendation*: Set `max_vram_gb: 16.0` in `config.yaml`.

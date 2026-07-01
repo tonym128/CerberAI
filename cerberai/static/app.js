@@ -639,6 +639,7 @@ if (openSetupBtn && setupModal) {
             // Populate resource limits
             document.getElementById("setup-vram").value = config.resource_limits.max_vram_gb;
             document.getElementById("setup-ram").value = config.resource_limits.max_ram_gb;
+            document.getElementById("setup-hf-token").value = config.hf_token || "";
 
             // Clear dynamic cards
             setupContainer.innerHTML = "";
@@ -747,6 +748,7 @@ if (openSetupBtn && setupModal) {
         });
 
         // Reconstruct the exact AppConfig structure
+        const hfTokenVal = document.getElementById("setup-hf-token").value.trim();
         const payload = {
             server: {
                 host: "127.0.0.1",
@@ -762,7 +764,8 @@ if (openSetupBtn && setupModal) {
                 model_type: "heuristics",
                 fallback_model: "general-llama3"
             },
-            models: modelPayloads
+            models: modelPayloads,
+            hf_token: hfTokenVal || null
         };
 
         try {

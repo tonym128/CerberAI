@@ -31,6 +31,7 @@ class AppConfig(BaseModel):
     resource_limits: ResourceLimits = Field(default_factory=ResourceLimits)
     router: RouterConfig
     models: List[ModelConfig] = Field(default_factory=list)
+    hf_token: Optional[str] = None
 
 def load_config(config_path: str = "config.yaml") -> AppConfig:
     if not os.path.exists(config_path):

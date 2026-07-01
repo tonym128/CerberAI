@@ -93,17 +93,18 @@ class DiffusersBackend(BaseBackend):
         if not prompt:
             raise ValueError("Prompt is required for image generation.")
 
-        # Default to 4 steps for LCM/Flux, 20 steps otherwise
+        # Default steps and guidance based on model architecture
         is_lcm = "lcm" in self.model_name.lower()
         is_flux = "flux" in self.model_name.lower()
+        is_turbo = "turbo" in self.model_name.lower()
         
-        default_steps = 4 if (is_lcm or is_flux) else 20
+        default_steps = 4 if (is_lcm or is_flux) else (1 if is_turbo else 20)
         steps = payload.get("num_inference_steps", default_steps)
         width = payload.get("width", 512)
         height = payload.get("height", 512)
         
-        # Determine guidance scale (Sweet spot for LCM is 1.0 - 2.0. Standard SD uses 7.5. Flux requires 0.0)
-        default_guidance = 0.0 if is_flux else (1.5 if is_lcm else 7.5)
+        # Determine guidance scale (Flux/Turbo require 0.0, LCM sweet spot is 1.5, SD uses 7.5)
+        default_guidance = 0.0 if (is_flux or is_turbo) else (1.5 if is_lcm else 7.5)
         guidance = payload.get("guidance_scale", default_guidance)
         
         # Limit steps for local execution safety
