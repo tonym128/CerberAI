@@ -527,4 +527,163 @@ if (btnNewsVideo) {
     checkAutomationStatus();
 }
 
+// ==========================================================================
+// SETUP MODAL OPERATIONS
+// ==========================================================================
+const openSetupBtn = document.getElementById("open-setup");
+const setupModal = document.getElementById("setup-modal");
+const closeSetupBtn = document.getElementById("close-setup");
+const cancelSetupBtn = document.getElementById("btn-cancel-setup");
+const setupForm = document.getElementById("setup-form");
+
+if (openSetupBtn && setupModal) {
+    // Open Setup Modal & Fetch Config
+    openSetupBtn.addEventListener("click", async () => {
+        try {
+            const res = await fetch("/api/config");
+            if (!res.ok) throw new Error("Could not retrieve config.");
+            const config = await res.json();
+
+            // Populate resource limits
+            document.getElementById("setup-vram").value = config.resource_limits.max_vram_gb;
+            document.getElementById("setup-ram").value = config.resource_limits.max_ram_gb;
+
+            // Populate models
+            config.models.forEach(model => {
+                if (model.id === "general-llama3") {
+                    document.getElementById("setup-general-repo").value = model.backend_config.repo_id || "";
+                    document.getElementById("setup-general-file").value = model.backend_config.filename || "";
+                    document.getElementById("setup-general-vram").value = model.vram_estimate_gb;
+                    document.getElementById("setup-general-port").value = model.backend_config.port || 8081;
+                } else if (model.id === "coding-qwen") {
+                    document.getElementById("setup-coding-repo").value = model.backend_config.repo_id || "";
+                    document.getElementById("setup-coding-file").value = model.backend_config.filename || "";
+                    document.getElementById("setup-coding-vram").value = model.vram_estimate_gb;
+                    document.getElementById("setup-coding-port").value = model.backend_config.port || 8082;
+                } else if (model.id === "image-lcm") {
+                    document.getElementById("setup-image-repo").value = model.backend_config.model_name || "";
+                    document.getElementById("setup-image-vram").value = model.vram_estimate_gb;
+                } else if (model.id === "stt-whisper") {
+                    document.getElementById("setup-stt-name").value = model.backend_config.model_name || "";
+                    document.getElementById("setup-stt-vram").value = model.vram_estimate_gb;
+                }
+            });
+
+            // Show modal
+            setupModal.classList.remove("hidden");
+        } catch (err) {
+            alert(`Failed to load server settings: ${err.message}`);
+        }
+    });
+
+    // Close Modal
+    const closeModal = () => setupModal.classList.add("hidden");
+    closeSetupBtn.addEventListener("click", closeModal);
+    cancelSetupBtn.addEventListener("click", closeModal);
+
+    // Save and Reload Config
+    setupForm.addEventListener("submit", async (e) => {
+        e.preventDefault();
+        const submitBtn = setupForm.querySelector("button[type='submit']");
+        const originalText = submitBtn.textContent;
+        submitBtn.disabled = true;
+        submitBtn.textContent = "Reloading...";
+
+        // Construct config structure
+        const payload = {
+            server: {
+                host: "127.0.0.1",
+                port: 8000,
+                timeout_keep_alive: 300
+            },
+            resource_limits: {
+                max_vram_gb: parseFloat(document.getElementById("setup-vram").value),
+                max_ram_gb: parseFloat(document.getElementById("setup-ram").value),
+                eviction_strategy: "lru"
+            },
+            router: {
+                model_type: "heuristics",
+                fallback_model: "general-llama3"
+            },
+            models: [
+                {
+                    id: "general-llama3",
+                    type: "llm",
+                    backend: "llama.cpp",
+                    backend_config: {
+                        repo_id: document.getElementById("setup-general-repo").value,
+                        filename: document.getElementById("setup-general-file").value,
+                        port: parseInt(document.getElementById("setup-general-port").value),
+                        n_gpu_layers: 99
+                    },
+                    vram_estimate_gb: parseFloat(document.getElementById("setup-general-vram").value)
+                },
+                {
+                    id: "coding-qwen",
+                    type: "llm",
+                    backend: "llama.cpp",
+                    backend_config: {
+                        repo_id: document.getElementById("setup-coding-repo").value,
+                        filename: document.getElementById("setup-coding-file").value,
+                        port: parseInt(document.getElementById("setup-coding-port").value),
+                        n_gpu_layers: 99
+                    },
+                    vram_estimate_gb: parseFloat(document.getElementById("setup-coding-vram").value)
+                },
+                {
+                    id: "stt-whisper",
+                    type: "stt",
+                    backend: "whisper",
+                    backend_config: {
+                        model_name: document.getElementById("setup-stt-name").value
+                    },
+                    vram_estimate_gb: parseFloat(document.getElementById("setup-stt-vram").value)
+                },
+                {
+                    id: "tts-offline",
+                    type: "tts",
+                    backend: "tts",
+                    backend_config: {
+                        engine: "kokoro",
+                        voice: "af_sarah"
+                    },
+                    vram_estimate_gb: 0.5
+                },
+                {
+                    id: "image-lcm",
+                    type: "image",
+                    backend: "diffusers",
+                    backend_config: {
+                        model_name: document.getElementById("setup-image-repo").value
+                    },
+                    vram_estimate_gb: parseFloat(document.getElementById("setup-image-vram").value)
+                }
+            ]
+        };
+
+        try {
+            const res = await fetch("/api/config", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(payload)
+            });
+            if (!res.ok) throw new Error("Server rejected configuration reload.");
+            const data = await res.json();
+            
+            alert(data.message || "Settings updated and server reloaded!");
+            closeModal();
+            
+            // Refresh dashboard model catalog & limits
+            fetchModels();
+            pollStatus();
+        } catch (err) {
+            alert(`Failed to save configuration: ${err.message}`);
+        } finally {
+            submitBtn.disabled = false;
+            submitBtn.textContent = originalText;
+        }
+    });
+}
+
+
 

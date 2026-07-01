@@ -1,6 +1,42 @@
 # CerberAI
 
-CerberAI is an OpenAI-compatible API server designed to optimize local LLM, TTS, STT, and Image/Video generation model resource consumption. It intercepts incoming requests, routes them to specific specialized models using a local router LLM or heuristic classification, and dynamically loads and unloads models in VRAM/RAM on demand.
+CerberAI is an OpenAI-compatible API gateway designed to optimize local AI model execution. It intercepts incoming LLM, Image, TTS, STT, and Video requests, routes them to specialized local backends on-the-fly, and dynamically manages system VRAM/RAM by loading and unloading models on-demand.
+
+*A note on the name: Cerberus is the infamous three-headed hound guarding the gates of the Underworld. If you run multiple instances of Cerberus, you get Cerberi (or Cerberii). Since this gateway sits at the gates of your GPU routing traffic to multiple specialized model "heads" simultaneously, it is only logical to call it **CerberAI**.*
+
+---
+
+## Why CerberAI Exists (The Problem)
+
+Local AI has reached a point where consumer-grade hardware (NVIDIA, AMD, Intel Arc) can run highly capable models (such as Llama 3, Qwen 2.5 Coder, Stable Diffusion XL, Flux, Kokoro TTS, and Whisper) completely offline.
+
+However, **VRAM is a hard constraint**. Typically, to run a complete local assistant suite, users must run multiple independent software servers concurrently (e.g., Ollama for general tasks, llama-server for coding, a Diffusers API for graphics, and specialized packages for audio synthesis and transcription). 
+Running all of these concurrently will instantly trigger **Out-Of-Memory (OOM) crashes**, or force models to offload to the CPU, reducing performance to a crawl.
+
+**CerberAI solves this by acting as a single, unified, intelligent broker.** It presents a single OpenAI-compatible API gateway. Under the hood, it monitors active model lifespans and dynamically swaps models in and out of GPU memory depending on the user's intent.
+
+---
+
+## Project Goals
+
+1.  **Zero-Downtime Swapping**: Swap models in and out of GPU VRAM transparently during active chat and generation workflows without interrupting the user.
+2.  **Unified API Surface**: Provide a single, standardized endpoint (`/v1/chat/completions`, `/v1/images/generations`, `/v1/audio/transcriptions`) that mimics OpenAI's API, allowing it to drop into any existing frontend (e.g., Open WebUI, LibreChat, Cursor, Cline).
+3.  **Hardware Inclusivity**: Run efficiently on consumer graphics hardware from all major manufacturers—NVIDIA (CUDA), AMD (ROCm), and Intel (XPU).
+4.  **Complete Privacy & Autonomy**: Zero external api keys, zero internet telemetry, and zero subscription costs. The gateway is designed to run 100% offline.
+
+---
+
+## System Design & Implementation
+
+CerberAI is built on a modular, event-driven Python architecture:
+
+*   **FastAPI Gateway**: Serves as the high-throughput asynchronous API shell. It intercepts incoming OpenAI-compatible payloads and handles request queueing, client connections, and SSE stream formatting.
+*   **Dynamic Model Manager (DMM)**: Keeps track of all loaded models and their estimated memory footprints (VRAM/RAM). If loading a new model exceeds the user's configured `max_vram_gb`, the DMM triggers a **Least-Recently-Used (LRU)** eviction chain, cleanly unloading stale models before initializing the new one.
+*   **Intelligent Intent Router**: Classifies incoming requests using lightweight regex-based heuristics (to minimize classification overhead) or a local classifier LLM. It routes coding prompts to optimized coding engines, general prompts to chat engines, image prompts to diffusers, and audio requests to speech backends.
+*   **Self-Healing Subprocess Adapters**: Adapters (such as `LlamaCppBackend`) manage running model processes. If a subprocess crashes due to host GPU pressure, the adapter automatically detects the connection drop, unloads the stale process, re-initializes the backend, and retries the request transparently.
+*   **ReAct Tool Executor**: Contains an inline agent executor. If tool calling is enabled, it parses model responses for tool calls, executes them locally (e.g., executing Python script code, searching the web locally using DuckDuckGo), and feeds the results back to the model before returning the final response.
+
+---
 
 ## Features
 
@@ -91,3 +127,53 @@ For high-end workstation cards (e.g., RTX 4080, RX 7800 XT, or dual-GPU setups).
 *   **Speech (TTS)**: `Kokoro-82M ONNX` (GPU execution, ~0.3 GB VRAM)
 *   **Transcription (STT)**: `openai-whisper` (Model: `large-v3` ~ 4.8 GB VRAM)
 *   *Config Recommendation*: Set `max_vram_gb: 16.0` in `config.yaml`.
+
+---
+
+## GPU Hardware Acceleration Setup (NVIDIA, AMD, Intel)
+
+To run high-fidelity graphics (Diffusers / Flux) and transcription models at hardware speed, PyTorch must be configured to communicate with your specific graphics card. Follow the steps below for your hardware manufacturer:
+
+### 1. NVIDIA GPUs (CUDA)
+NVIDIA cards are supported out-of-the-box by standard PyPI packages.
+*   **Prerequisites**: Verify your system has NVIDIA drivers and the CUDA Toolkit installed (`nvidia-smi`).
+*   **Installation**:
+    ```bash
+    pip install torch torchvision
+    ```
+*   **Verification**:
+    ```bash
+    python -c "import torch; print('CUDA Available:', torch.cuda.is_available())"
+    ```
+
+### 2. AMD GPUs (ROCm)
+AMD cards are supported on Linux via ROCm. Since the default PyPI packages only compile CUDA libraries, you must force-reinstall PyTorch from PyTorch's official ROCm wheel repositories.
+*   **Prerequisites**:
+    1. Verify ROCm is installed on your host system (e.g., check `/opt/rocm`).
+    2. Check your host ROCm version:
+       ```bash
+       cat /opt/rocm/.info/version
+       ```
+*   **Installation**: Force-reinstall PyTorch using the matching ROCm index URL (e.g., if your host is running ROCm `7.2.4`, use `rocm7.2`; if running `6.0.x`, use `rocm6.0`):
+    ```bash
+    pip install --force-reinstall torch torchvision --index-url https://download.pytorch.org/whl/rocm7.2
+    ```
+*   **Verification**: PyTorch uses the standard `cuda` device name namespace for ROCm as well. Verify your Radeon card is visible:
+    ```bash
+    python -c "import torch; print('ROCm Available:', torch.cuda.is_available()); print('Device Name:', torch.cuda.get_device_name(0) if torch.cuda.is_available() else 'None')"
+    ```
+
+### 3. Intel GPUs (XPU)
+Intel Arc and Xe graphics cards are supported natively in recent PyTorch releases via the `XPU` backend.
+*   **Prerequisites**:
+    1. Ensure Intel GPU drivers are configured on your Linux host.
+    2. Install Intel Level Zero runtime libraries (e.g., `sudo apt install level-zero level-zero-dev`).
+*   **Installation**: Install PyTorch from PyTorch's specialized XPU wheel index:
+    ```bash
+    pip install torch torchvision --index-url https://download.pytorch.org/whl/xpu
+    ```
+*   **Verification**: Intel GPUs use the `xpu` device namespace. CerberAI automatically detects this backend and routes diffusion tasks to your Arc GPU:
+    ```bash
+    python -c "import torch; print('XPU Available:', torch.xpu.is_available() if hasattr(torch, 'xpu') else False)"
+    ```
+

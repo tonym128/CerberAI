@@ -125,6 +125,14 @@ class DynamicModelManager:
                         if m_id in self.last_used:
                             del self.last_used[m_id]
 
+    async def unload_all(self):
+        """Unload all active model backends."""
+        async with self.lock:
+            for m_id, backend in list(self.backends.items()):
+                if await backend.is_loaded():
+                    await backend.unload()
+            self.last_used.clear()
+
     async def start_cleanup_loop(self):
         """Start background loop for idle unloading."""
         while True:

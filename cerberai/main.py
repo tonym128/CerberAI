@@ -461,6 +461,51 @@ async def get_news_video_automation_status():
     from .automation import get_status
     return JSONResponse(content=get_status())
 
+@app.get("/api/config")
+async def get_current_config():
+    """Retrieve the raw configuration values directly from config.yaml."""
+    import yaml
+    try:
+        with open("config.yaml", "r") as f:
+            data = yaml.safe_load(f)
+        return JSONResponse(content=data)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to read config: {str(e)}")
+
+@app.post("/api/config")
+async def save_config(request: Request):
+    """Save the updated configuration payload to config.yaml and reload it in the active server memory."""
+    global config, manager, agent
+    import yaml
+    try:
+        new_data = await request.json()
+        
+        # Verify basic structure
+        if "models" not in new_data or "resource_limits" not in new_data:
+            raise HTTPException(status_code=400, detail="Invalid config format. Missing 'models' or 'resource_limits'.")
+            
+        # Write to config.yaml
+        with open("config.yaml", "w") as f:
+            yaml.safe_dump(new_data, f, default_flow_style=False)
+            
+        # Unload all currently loaded models first
+        await manager.unload_all()
+        
+        # Reload configuration in memory
+        from .config import load_config
+        config = load_config()
+        manager = DynamicModelManager(config)
+        
+        # Update the agent executor references
+        agent.config = config
+        agent.manager = manager
+        agent.tools = agent._scan_and_load_tools()  # Rescan tools if models changed
+        
+        return JSONResponse(content={"message": "Configuration updated and reloaded successfully!"})
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to save or reload config: {str(e)}")
+
+
 if __name__ == "__main__":
     uvicorn.run(
         "cerberai.main:app",

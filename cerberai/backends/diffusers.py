@@ -22,13 +22,23 @@ class DiffusersBackend(BaseBackend):
             import torch
             from diffusers import AutoPipelineForText2Image
             
-            device = "cuda" if torch.cuda.is_available() else "cpu"
-            is_flux = "flux" in self.model_name.lower()
-            
-            if is_flux:
-                torch_dtype = torch.bfloat16 if (device == "cuda" and torch.cuda.is_bf16_supported()) else torch.float16
+            if torch.cuda.is_available():
+                device = "cuda"
+            elif hasattr(torch, "xpu") and torch.xpu.is_available():
+                device = "xpu"
             else:
-                torch_dtype = torch.float16 if device == "cuda" else torch.float32
+                device = "cpu"
+                
+            is_flux = "flux" in self.model_name.lower()
+            if is_flux and device == "cpu":
+                raise RuntimeError("Flux models cannot be run on CPU because they are too large and slow. A hardware accelerator (CUDA/XPU) is required.")
+            
+
+            if is_flux:
+                # Flux requires bfloat16 to support CPU offloading without float16-on-CPU warnings
+                torch_dtype = torch.bfloat16
+            else:
+                torch_dtype = torch.float16 if device in ["cuda", "xpu"] else torch.float32
             
             self.pipeline = AutoPipelineForText2Image.from_pretrained(
                 self.model_name,
@@ -37,7 +47,7 @@ class DiffusersBackend(BaseBackend):
                 requires_safety_checker=False
             )
 
-            if is_flux and device == "cuda":
+            if is_flux and device in ["cuda", "xpu"]:
                 self.pipeline.enable_model_cpu_offload()
             else:
                 self.pipeline.to(device)
