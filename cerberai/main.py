@@ -155,7 +155,7 @@ async def chat_completions(request: Request):
 
     # 1. Route request to appropriate model
     try:
-        target_model_id = await router.route_chat(messages, requested_model)
+        target_model_id = await router.route_chat(messages, requested_model, manager)
     except Exception as e:
         print(f"Routing error: {e}")
         target_model_id = config.router.fallback_model

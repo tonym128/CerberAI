@@ -19,7 +19,7 @@ class IntentRouter:
         self.default_general = self.general_models[0] if self.general_models else self.fallback_model
         self.default_image = self.image_models[0] if self.image_models else None
 
-    async def route_chat(self, messages: List[Dict[str, str]], requested_model: str) -> str:
+    async def route_chat(self, messages: List[Dict[str, str]], requested_model: str, manager=None) -> str:
         """
         Decide which model ID should handle this request.
         If a specific valid model is requested, use it. Otherwise, auto-route.
@@ -52,7 +52,7 @@ class IntentRouter:
         last_message = messages[-1].get("content", "")
         
         if self.config.model_type == "llm" and self.config.model_name:
-            return await self._route_with_llm(last_message)
+            return await self._route_with_llm(last_message, manager)
         else:
             return self._route_with_heuristics(last_message)
 
@@ -93,25 +93,60 @@ class IntentRouter:
         print("Heuristics routed to General model (fallback)")
         return self.default_general
 
-    async def _route_with_llm(self, prompt: str) -> str:
-        """Call a local router model to categorize the request."""
-        # We query Ollama's local instance directly for routing to avoid infinite recursion
-        url = "http://localhost:11434/api/generate"
+    async def _route_with_llm(self, prompt: str, manager=None) -> str:
+        """Call a local router model to categorize the request based on dynamic purposes."""
+        # Gather all LLM and image models and their purposes dynamically
+        options = []
+        for m in self.models:
+            if m.type == "llm":
+                purpose = m.purpose or ("for general writing, chat, Q&A, and fallback reasoning" if "general" in m.id else "for programming, debugging, and software engineering")
+                options.append(f"- Model ID: '{m.id}' | Purpose: {purpose}")
+        if self.default_image:
+            options.append(f"- Model ID: '{self.default_image}' | Purpose: for generating images, drawing, painting, or graphics")
+            
+        options_str = "\n".join(options)
+
         system_prompt = (
-            "You are a router. Classify the user prompt into exactly one of these categories: 'coding', 'image', or 'general'.\n"
-            "If the request asks to write, explain, debug, or refactor code/scripts, reply 'coding'.\n"
-            "If the request asks to draw, paint, generate or create an image/picture/illustration, reply 'image'.\n"
-            "Otherwise, reply 'general'.\n"
-            "Reply with ONLY the word 'coding', 'image', or 'general' and nothing else. Do not explain."
+            "You are a model routing classifier. You must choose the single best model ID from the list below to process the user's request based on the model purposes.\n\n"
+            "Available Models:\n"
+            f"{options_str}\n\n"
+            "Rules:\n"
+            "1. Reply with ONLY the exact matching Model ID string (e.g. 'coding-qwen' or 'general-llama3') and absolutely nothing else.\n"
+            "2. Do not include any explanations, greetings, formatting, or extra characters."
         )
-        
+
+        # 1. Try querying via local manager directly (to avoid HTTP/FastAPI loop recursion)
+        if manager and self.config.model_name in manager.backends:
+            try:
+                backend = await manager.get_model(self.config.model_name)
+                payload = {
+                    "messages": [
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": prompt}
+                    ],
+                    "temperature": 0.0,
+                    "max_tokens": 15
+                }
+                response = await backend.handle_chat_completion(payload)
+                result = response["choices"][0]["message"]["content"].strip()
+                print(f"Router LLM (via manager) output: '{result}'")
+                
+                # Check which model ID matches or is contained in result
+                for m in self.models:
+                    if m.id.lower() in result.lower():
+                        return m.id
+            except Exception as e:
+                print(f"Routing via local manager failed ({e}). Falling back to Ollama API.")
+
+        # 2. Fallback to Ollama local API if manager is unavailable or fails
+        url = "http://localhost:11434/api/generate"
         payload = {
             "model": self.config.model_name,
-            "prompt": f"System: {system_prompt}\nUser Request: {prompt}\nCategory:",
+            "prompt": f"System: {system_prompt}\nUser Request: {prompt}\nSelected Model ID:",
             "stream": False,
             "options": {
                 "temperature": 0.0,
-                "num_predict": 5
+                "num_predict": 15
             }
         }
         
@@ -119,14 +154,11 @@ class IntentRouter:
             async with httpx.AsyncClient(timeout=5.0) as client:
                 response = await client.post(url, json=payload)
                 if response.status_code == 200:
-                    result = response.json().get("response", "").strip().lower()
-                    print(f"Router LLM output: '{result}'")
-                    if "coding" in result:
-                        return self.default_coding
-                    if "image" in result and self.default_image:
-                        return self.default_image
-                    if "general" in result:
-                        return self.default_general
+                    result = response.json().get("response", "").strip()
+                    print(f"Router LLM (via Ollama) output: '{result}'")
+                    for m in self.models:
+                        if m.id.lower() in result.lower():
+                            return m.id
         except Exception as e:
             print(f"Router LLM classification failed ({e}). Falling back to heuristics.")
             

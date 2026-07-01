@@ -535,8 +535,100 @@ const setupModal = document.getElementById("setup-modal");
 const closeSetupBtn = document.getElementById("close-setup");
 const cancelSetupBtn = document.getElementById("btn-cancel-setup");
 const setupForm = document.getElementById("setup-form");
+const setupContainer = document.getElementById("models-setup-container");
+const addCustomLlmBtn = document.getElementById("btn-add-custom-llm");
 
 if (openSetupBtn && setupModal) {
+    // Helper to render a single model setup card dynamically
+    const renderSetupCard = (model) => {
+        const card = document.createElement("div");
+        card.className = "model-setup-card";
+        card.dataset.type = model.type;
+        
+        if (model.type === "llm") {
+            const isFallback = (model.id === "general-llama3");
+            const removeBtnHtml = isFallback ? "" : `<button type="button" class="btn-remove-model" style="background: rgba(239, 68, 68, 0.15); color: var(--accent-red); padding: 4px 10px; border-radius: 6px; border: 1px solid rgba(239, 68, 68, 0.3); font-size: 11px; cursor: pointer; float: right;">Remove Model</button>`;
+
+            card.innerHTML = `
+                <div style="margin-bottom: 12px; overflow: auto;">
+                    <h4 style="margin-bottom: 0; float: left;">${isFallback ? "🧠 General LLM (Fallback)" : "🤖 LLM Model"}</h4>
+                    ${removeBtnHtml}
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Model ID</label>
+                        <input type="text" class="model-id" value="${model.id}" ${isFallback ? "readonly style='opacity: 0.7;'" : ""} required>
+                    </div>
+                    <div class="form-group">
+                        <label>Specifier / Purpose</label>
+                        <input type="text" class="model-purpose" value="${model.purpose || ""}" placeholder="e.g. for general reasoning, for coding, for roleplay" required>
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>HF Repo ID</label>
+                        <input type="text" class="model-repo" value="${model.backend_config.repo_id || ""}" required>
+                    </div>
+                    <div class="form-group">
+                        <label>HF Filename (GGUF only)</label>
+                        <input type="text" class="model-filename" value="${model.backend_config.filename || ""}" required>
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>VRAM Estimate (GB)</label>
+                        <input type="number" class="model-vram" step="0.1" value="${model.vram_estimate_gb}" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Port</label>
+                        <input type="number" class="model-port" value="${model.backend_config.port || 8081}" required>
+                    </div>
+                </div>
+            `;
+            
+            // Add remove event listener
+            if (!isFallback) {
+                card.querySelector(".btn-remove-model").addEventListener("click", () => {
+                    card.remove();
+                });
+            }
+        } else if (model.type === "image") {
+            card.innerHTML = `
+                <h4>🎨 Image Generator: ${model.id}</h4>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>HF Repo ID / Model Name</label>
+                        <input type="text" class="model-repo" value="${model.backend_config.model_name || ""}" required>
+                    </div>
+                    <div class="form-group">
+                        <label>VRAM Estimate (GB)</label>
+                        <input type="number" class="model-vram" step="0.1" value="${model.vram_estimate_gb}" required>
+                    </div>
+                </div>
+            `;
+        } else if (model.type === "stt") {
+            card.innerHTML = `
+                <h4>🎙️ Speech to Text (STT): ${model.id}</h4>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Model Size / Name</label>
+                        <input type="text" class="model-repo" value="${model.backend_config.model_name || ""}" required>
+                    </div>
+                    <div class="form-group">
+                        <label>VRAM Estimate (GB)</label>
+                        <input type="number" class="model-vram" step="0.1" value="${model.vram_estimate_gb}" required>
+                    </div>
+                </div>
+            `;
+        } else {
+            // Unhandled models (like tts-offline) return empty or keep properties statically
+            card.style.display = "none";
+            card.innerHTML = `<input type="hidden" class="model-raw-json" value='${JSON.stringify(model)}'>`;
+        }
+
+        setupContainer.appendChild(card);
+    };
+
     // Open Setup Modal & Fetch Config
     openSetupBtn.addEventListener("click", async () => {
         try {
@@ -548,25 +640,12 @@ if (openSetupBtn && setupModal) {
             document.getElementById("setup-vram").value = config.resource_limits.max_vram_gb;
             document.getElementById("setup-ram").value = config.resource_limits.max_ram_gb;
 
+            // Clear dynamic cards
+            setupContainer.innerHTML = "";
+
             // Populate models
             config.models.forEach(model => {
-                if (model.id === "general-llama3") {
-                    document.getElementById("setup-general-repo").value = model.backend_config.repo_id || "";
-                    document.getElementById("setup-general-file").value = model.backend_config.filename || "";
-                    document.getElementById("setup-general-vram").value = model.vram_estimate_gb;
-                    document.getElementById("setup-general-port").value = model.backend_config.port || 8081;
-                } else if (model.id === "coding-qwen") {
-                    document.getElementById("setup-coding-repo").value = model.backend_config.repo_id || "";
-                    document.getElementById("setup-coding-file").value = model.backend_config.filename || "";
-                    document.getElementById("setup-coding-vram").value = model.vram_estimate_gb;
-                    document.getElementById("setup-coding-port").value = model.backend_config.port || 8082;
-                } else if (model.id === "image-lcm") {
-                    document.getElementById("setup-image-repo").value = model.backend_config.model_name || "";
-                    document.getElementById("setup-image-vram").value = model.vram_estimate_gb;
-                } else if (model.id === "stt-whisper") {
-                    document.getElementById("setup-stt-name").value = model.backend_config.model_name || "";
-                    document.getElementById("setup-stt-vram").value = model.vram_estimate_gb;
-                }
+                renderSetupCard(model);
             });
 
             // Show modal
@@ -574,6 +653,26 @@ if (openSetupBtn && setupModal) {
         } catch (err) {
             alert(`Failed to load server settings: ${err.message}`);
         }
+    });
+
+    // Add Custom LLM Card on click
+    addCustomLlmBtn.addEventListener("click", () => {
+        const customCount = setupContainer.querySelectorAll(".model-setup-card[data-type='llm']").length + 1;
+        const newLlm = {
+            id: `custom-llm-${customCount}`,
+            type: "llm",
+            backend: "llama.cpp",
+            backend_config: {
+                repo_id: "",
+                filename: "",
+                port: 8080 + customCount,
+                n_gpu_layers: 99
+            },
+            vram_estimate_gb: 4.5,
+            purpose: ""
+        };
+        renderSetupCard(newLlm);
+        setupContainer.lastElementChild.scrollIntoView({ behavior: "smooth" });
     });
 
     // Close Modal
@@ -589,7 +688,65 @@ if (openSetupBtn && setupModal) {
         submitBtn.disabled = true;
         submitBtn.textContent = "Reloading...";
 
-        // Construct config structure
+        // Extract models dynamically from rendered cards
+        const modelPayloads = [];
+        const cards = setupContainer.querySelectorAll(".model-setup-card");
+        
+        cards.forEach(card => {
+            const type = card.dataset.type;
+            if (type === "llm") {
+                const id = card.querySelector(".model-id").value.trim();
+                const purpose = card.querySelector(".model-purpose").value.trim();
+                const repo = card.querySelector(".model-repo").value.trim();
+                const filename = card.querySelector(".model-filename").value.trim();
+                const vram = parseFloat(card.querySelector(".model-vram").value);
+                const port = parseInt(card.querySelector(".model-port").value);
+
+                modelPayloads.push({
+                    id: id,
+                    type: "llm",
+                    backend: "llama.cpp",
+                    backend_config: {
+                        repo_id: repo,
+                        filename: filename,
+                        port: port,
+                        n_gpu_layers: 99
+                    },
+                    vram_estimate_gb: vram,
+                    purpose: purpose
+                });
+            } else if (type === "image") {
+                const modelName = card.querySelector(".model-repo").value.trim();
+                const vram = parseFloat(card.querySelector(".model-vram").value);
+                modelPayloads.push({
+                    id: "image-lcm",
+                    type: "image",
+                    backend: "diffusers",
+                    backend_config: {
+                        model_name: modelName
+                    },
+                    vram_estimate_gb: vram
+                });
+            } else if (type === "stt") {
+                const modelName = card.querySelector(".model-repo").value.trim();
+                const vram = parseFloat(card.querySelector(".model-vram").value);
+                modelPayloads.push({
+                    id: "stt-whisper",
+                    type: "stt",
+                    backend: "whisper",
+                    backend_config: {
+                        model_name: modelName
+                    },
+                    vram_estimate_gb: vram
+                });
+            } else {
+                // Parse hidden/raw model (e.g. tts-offline)
+                const rawData = JSON.parse(card.querySelector(".model-raw-json").value);
+                modelPayloads.push(rawData);
+            }
+        });
+
+        // Reconstruct the exact AppConfig structure
         const payload = {
             server: {
                 host: "127.0.0.1",
@@ -605,60 +762,7 @@ if (openSetupBtn && setupModal) {
                 model_type: "heuristics",
                 fallback_model: "general-llama3"
             },
-            models: [
-                {
-                    id: "general-llama3",
-                    type: "llm",
-                    backend: "llama.cpp",
-                    backend_config: {
-                        repo_id: document.getElementById("setup-general-repo").value,
-                        filename: document.getElementById("setup-general-file").value,
-                        port: parseInt(document.getElementById("setup-general-port").value),
-                        n_gpu_layers: 99
-                    },
-                    vram_estimate_gb: parseFloat(document.getElementById("setup-general-vram").value)
-                },
-                {
-                    id: "coding-qwen",
-                    type: "llm",
-                    backend: "llama.cpp",
-                    backend_config: {
-                        repo_id: document.getElementById("setup-coding-repo").value,
-                        filename: document.getElementById("setup-coding-file").value,
-                        port: parseInt(document.getElementById("setup-coding-port").value),
-                        n_gpu_layers: 99
-                    },
-                    vram_estimate_gb: parseFloat(document.getElementById("setup-coding-vram").value)
-                },
-                {
-                    id: "stt-whisper",
-                    type: "stt",
-                    backend: "whisper",
-                    backend_config: {
-                        model_name: document.getElementById("setup-stt-name").value
-                    },
-                    vram_estimate_gb: parseFloat(document.getElementById("setup-stt-vram").value)
-                },
-                {
-                    id: "tts-offline",
-                    type: "tts",
-                    backend: "tts",
-                    backend_config: {
-                        engine: "kokoro",
-                        voice: "af_sarah"
-                    },
-                    vram_estimate_gb: 0.5
-                },
-                {
-                    id: "image-lcm",
-                    type: "image",
-                    backend: "diffusers",
-                    backend_config: {
-                        model_name: document.getElementById("setup-image-repo").value
-                    },
-                    vram_estimate_gb: parseFloat(document.getElementById("setup-image-vram").value)
-                }
-            ]
+            models: modelPayloads
         };
 
         try {

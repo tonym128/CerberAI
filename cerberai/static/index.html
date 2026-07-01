@@ -176,87 +176,14 @@
                     <!-- Configured Models -->
                     <div class="form-section">
                         <h3>Model Engine Configurations</h3>
-                        <p class="section-desc">Specify model settings or provide custom Hugging Face repo IDs and estimates.</p>
+                        <p class="section-desc">Specify model settings or provide custom Hugging Face repo IDs, purposes, and VRAM estimates.</p>
                         
-                        <!-- General LLM -->
-                        <div class="model-setup-card" data-model-id="general-llama3">
-                            <h4>🧠 General LLM (Fallback)</h4>
-                            <div class="form-row">
-                                <div class="form-group">
-                                    <label>HF Repo ID</label>
-                                    <input type="text" class="model-repo" id="setup-general-repo" required>
-                                </div>
-                                <div class="form-group">
-                                    <label>HF Filename (GGUF only)</label>
-                                    <input type="text" class="model-filename" id="setup-general-file" required>
-                                </div>
-                            </div>
-                            <div class="form-row">
-                                <div class="form-group">
-                                    <label>VRAM Estimate (GB)</label>
-                                    <input type="number" class="model-vram" id="setup-general-vram" step="0.1" required>
-                                </div>
-                                <div class="form-group">
-                                    <label>Port</label>
-                                    <input type="number" class="model-port" id="setup-general-port" required>
-                                </div>
-                            </div>
+                        <!-- Container for dynamic setup cards -->
+                        <div id="models-setup-container">
+                            <!-- Populated dynamically via JS -->
                         </div>
 
-                        <!-- Coding LLM -->
-                        <div class="model-setup-card" data-model-id="coding-qwen">
-                            <h4>💻 Coding LLM</h4>
-                            <div class="form-row">
-                                <div class="form-group">
-                                    <label>HF Repo ID</label>
-                                    <input type="text" class="model-repo" id="setup-coding-repo" required>
-                                </div>
-                                <div class="form-group">
-                                    <label>HF Filename (GGUF only)</label>
-                                    <input type="text" class="model-filename" id="setup-coding-file" required>
-                                </div>
-                            </div>
-                            <div class="form-row">
-                                <div class="form-group">
-                                    <label>VRAM Estimate (GB)</label>
-                                    <input type="number" class="model-vram" id="setup-coding-vram" step="0.1" required>
-                                </div>
-                                <div class="form-group">
-                                    <label>Port</label>
-                                    <input type="number" class="model-port" id="setup-coding-port" required>
-                                </div>
-                            </div>
-                        </div>
-
-                        <!-- Image Generation Model -->
-                        <div class="model-setup-card" data-model-id="image-lcm">
-                            <h4>🎨 Image Generator</h4>
-                            <div class="form-row">
-                                <div class="form-group">
-                                    <label>HF Repo ID / Model Name</label>
-                                    <input type="text" class="model-repo" id="setup-image-repo" required>
-                                </div>
-                                <div class="form-group">
-                                    <label>VRAM Estimate (GB)</label>
-                                    <input type="number" class="model-vram" id="setup-image-vram" step="0.1" required>
-                                </div>
-                            </div>
-                        </div>
-
-                        <!-- STT Model -->
-                        <div class="model-setup-card" data-model-id="stt-whisper">
-                            <h4>🎙️ Speech to Text (STT)</h4>
-                            <div class="form-row">
-                                <div class="form-group">
-                                    <label>Model Size / Name</label>
-                                    <input type="text" class="model-repo" id="setup-stt-name" required>
-                                </div>
-                                <div class="form-group">
-                                    <label>VRAM Estimate (GB)</label>
-                                    <input type="number" class="model-vram" id="setup-stt-vram" step="0.1" required>
-                                </div>
-                            </div>
-                        </div>
+                        <button type="button" id="btn-add-custom-llm" class="btn btn-secondary w-full" style="margin-top: 10px; border-style: dashed; padding: 12px;">+ Add Custom LLM Model</button>
                     </div>
 
                     <div class="form-actions">
