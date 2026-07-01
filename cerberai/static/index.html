@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CerberAI Dashboard</title>
+    <!-- Modern Premium Typography -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=Plus+Jakarta+Sans:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <div class="app-container">
+        <!-- Sidebar -->
+        <aside class="sidebar">
+            <div class="logo-area">
+                <div class="logo-glow"></div>
+                <h1>Cerber<span>AI</span></h1>
+                <span class="badge">v0.1.0</span>
+            </div>
+
+            <!-- VRAM Monitor -->
+            <div class="monitor-card">
+                <h3>VRAM Allocator</h3>
+                <div class="progress-container">
+                    <div class="progress-bar-bg">
+                        <div id="vram-bar" class="progress-bar" style="width: 0%"></div>
+                    </div>
+                    <div class="progress-labels">
+                        <span id="vram-used">0.0 GB</span>
+                        <span id="vram-max">12.0 GB</span>
+                    </div>
+                </div>
+                <div class="metrics-grid">
+                    <div class="metric">
+                        <span class="metric-label">Max RAM</span>
+                        <span id="ram-limit" class="metric-val">16.0 GB</span>
+                    </div>
+                    <div class="metric">
+                        <span class="metric-label">Eviction</span>
+                        <span id="eviction-strategy" class="metric-val">LRU</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Model Selection -->
+            <div class="section-title">Active Routing Model</div>
+            <div class="model-picker-container">
+                <select id="model-select" class="custom-select">
+                    <option value="auto" selected>✨ Intelligent Router (Auto)</option>
+                </select>
+            </div>
+
+            <!-- Configured Models List -->
+            <div class="section-title">Model Catalog</div>
+            <div id="models-list" class="models-catalog">
+                <!-- Populated dynamically -->
+            </div>
+            
+            <div class="sidebar-footer">
+                <div class="connection-status">
+                    <span class="status-dot green"></span>
+                    <span>Connected to CerberAI</span>
+                </div>
+            </div>
+        </aside>
+
+        <!-- Main Chat Area -->
+        <main class="chat-container">
+            <!-- Header -->
+            <header class="chat-header">
+                <div class="header-info">
+                    <h2 id="current-chat-model">✨ Intelligent Router</h2>
+                    <p id="routing-description">Automatically selects between coding and general models based on your request.</p>
+                </div>
+                <div class="header-actions">
+                    <button id="clear-chat" class="btn btn-secondary">Clear Chat</button>
+                    <label class="stream-toggle">
+                        <input type="checkbox" id="stream-check" checked>
+                        <span class="slider"></span>
+                        <span class="toggle-label">Stream</span>
+                    </label>
+                </div>
+            </header>
+
+            <!-- Chat Window -->
+            <section id="chat-messages" class="chat-messages">
+                <div class="assistant-welcome">
+                    <div class="welcome-icon">⚡</div>
+                    <h2>Welcome to CerberAI</h2>
+                    <p>Ask a coding or general question. CerberAI will dynamically load the best model into memory and unload inactive ones to manage local hardware resources.</p>
+                    <div class="suggestions-grid">
+                        <div class="suggestion-card" onclick="setPrompt('Write a python script to sort a dictionary by its values')">
+                            <h4>💻 Coding Request</h4>
+                            <p>"Write a python script to sort a dictionary by its values"</p>
+                        </div>
+                        <div class="suggestion-card" onclick="setPrompt('Explain quantum physics in a single paragraph')">
+                            <h4>🧠 General Query</h4>
+                            <p>"Explain quantum physics in a single paragraph"</p>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Chat Input -->
+            <footer class="chat-input-area">
+                <form id="chat-form">
+                    <button type="button" id="audio-upload-btn" class="audio-btn" title="Upload Audio / Speech to Text">
+                        <svg viewBox="0 0 24 24" width="20" height="20">
+                            <path fill="currentColor" d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm5.3-3c0 3-2.54 5.1-5.3 5.1S6.7 14 6.7 11H5c0 3.41 2.72 6.23 6 6.72V21h2v-3.28c3.28-.48 6-3.3 6-6.72h-1.7z"/>
+                        </svg>
+                    </button>
+                    <input type="file" id="audio-file-input" accept="audio/*" style="display: none;">
+                    <textarea id="prompt-input" placeholder="Ask anything... (CerberAI will route and load models automatically)" rows="1"></textarea>
+                    <button type="submit" id="send-btn" class="btn btn-primary">
+                        <svg viewBox="0 0 24 24" width="24" height="24" class="send-icon">
+                            <path fill="currentColor" d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/>
+                        </svg>
+                    </button>
+                </form>
+            </footer>
+
+        </main>
+    </div>
+
+    <!-- MarkDown and Code Highlight Plugins (Using public CDNs) -->
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <script src="/static/app.js"></script>
+</body>
+</html>
