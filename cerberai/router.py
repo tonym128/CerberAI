@@ -98,7 +98,8 @@ class IntentRouter:
         # Gather all LLM and image models and their purposes dynamically
         options = []
         for m in self.models:
-            if m.type == "llm":
+            # Exclude the router classifier model itself from the destination choices
+            if m.type == "llm" and m.id != self.config.model_name:
                 purpose = m.purpose or ("for general writing, chat, Q&A, and fallback reasoning" if "general" in m.id else "for programming, debugging, and software engineering")
                 options.append(f"- Model ID: '{m.id}' | Purpose: {purpose}")
         if self.default_image:

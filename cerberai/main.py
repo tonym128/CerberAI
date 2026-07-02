@@ -225,6 +225,18 @@ async def chat_completions(request: Request):
 
     print(f"Request routed to model: '{target_model_id}' (requested: '{requested_model}')")
 
+    # If we used a router model and the target model is different, unload the router to free VRAM
+    if config.router.model_type == "llm" and config.router.model_name:
+        router_id = config.router.model_name
+        if target_model_id != router_id and router_id in manager.backends:
+            router_backend = manager.backends[router_id]
+            if await router_backend.is_loaded():
+                print(f"Unloading router model '{router_id}' to free VRAM for target model '{target_model_id}'...")
+                try:
+                    await router_backend.unload()
+                except Exception as ex:
+                    print(f"Warning: Failed to unload router model: {ex}")
+
     # 2. Get backend (triggers lazy load & memory eviction if required)
     try:
         backend = await manager.get_model(target_model_id)

@@ -733,7 +733,7 @@ if (openSetupBtn && setupModal) {
                 { id: "image-lcm", type: "image", backend: "diffusers", backend_config: { model_name: "Lykon/dreamshaper-8-lcm" }, vram_estimate_gb: 4.0 },
                 { id: "stt-whisper", type: "stt", backend: "whisper", backend_config: { model_name: "tiny" }, vram_estimate_gb: 0.5 },
                 { id: "tts-offline", type: "tts", backend: "tts", backend_config: { engine: "kokoro", voice: "af_sarah" }, vram_estimate_gb: 0.5 },
-                { id: "routing-phi", type: "llm", backend: "llama.cpp", backend_config: { repo_id: "microsoft/Phi-3-mini-4k-instruct-gguf", filename: "Phi-3-mini-4k-instruct-q4.gguf", port: 8083, n_gpu_layers: 99 }, vram_estimate_gb: 2.2, purpose: "routing classification", n_ctx: null }
+                { id: "routing-phi", type: "llm", backend: "llama.cpp", backend_config: { repo_id: "microsoft/Phi-3-mini-4k-instruct-gguf", filename: "Phi-3-mini-4k-instruct-q4.gguf", port: 8083, n_gpu_layers: 99 }, vram_estimate_gb: 2.2, purpose: "routing classification", n_ctx: 4096 }
             ]
         },
         "6": {
@@ -747,7 +747,7 @@ if (openSetupBtn && setupModal) {
                 { id: "image-lcm", type: "image", backend: "diffusers", backend_config: { model_name: "Lykon/dreamshaper-8-lcm" }, vram_estimate_gb: 4.0 },
                 { id: "stt-whisper", type: "stt", backend: "whisper", backend_config: { model_name: "base" }, vram_estimate_gb: 0.7 },
                 { id: "tts-offline", type: "tts", backend: "tts", backend_config: { engine: "kokoro", voice: "af_sarah" }, vram_estimate_gb: 0.5 },
-                { id: "routing-phi", type: "llm", backend: "llama.cpp", backend_config: { repo_id: "microsoft/Phi-3-mini-4k-instruct-gguf", filename: "Phi-3-mini-4k-instruct-q4.gguf", port: 8083, n_gpu_layers: 99 }, vram_estimate_gb: 2.2, purpose: "routing classification", n_ctx: null }
+                { id: "routing-phi", type: "llm", backend: "llama.cpp", backend_config: { repo_id: "microsoft/Phi-3-mini-4k-instruct-gguf", filename: "Phi-3-mini-4k-instruct-q4.gguf", port: 8083, n_gpu_layers: 99 }, vram_estimate_gb: 2.2, purpose: "routing classification", n_ctx: 4096 }
             ]
         },
         "8": {
@@ -761,7 +761,7 @@ if (openSetupBtn && setupModal) {
                 { id: "image-lcm", type: "image", backend: "diffusers", backend_config: { model_name: "Lykon/dreamshaper-8-lcm" }, vram_estimate_gb: 4.0 },
                 { id: "stt-whisper", type: "stt", backend: "whisper", backend_config: { model_name: "small" }, vram_estimate_gb: 1.5 },
                 { id: "tts-offline", type: "tts", backend: "tts", backend_config: { engine: "kokoro", voice: "af_sarah" }, vram_estimate_gb: 0.5 },
-                { id: "routing-phi", type: "llm", backend: "llama.cpp", backend_config: { repo_id: "microsoft/Phi-3-mini-4k-instruct-gguf", filename: "Phi-3-mini-4k-instruct-q4.gguf", port: 8083, n_gpu_layers: 99 }, vram_estimate_gb: 2.2, purpose: "routing classification", n_ctx: null }
+                { id: "routing-phi", type: "llm", backend: "llama.cpp", backend_config: { repo_id: "microsoft/Phi-3-mini-4k-instruct-gguf", filename: "Phi-3-mini-4k-instruct-q4.gguf", port: 8083, n_gpu_layers: 99 }, vram_estimate_gb: 2.2, purpose: "routing classification", n_ctx: 4096 }
             ]
         },
         "16": {
@@ -775,7 +775,7 @@ if (openSetupBtn && setupModal) {
                 { id: "image-lcm", type: "image", backend: "diffusers", backend_config: { model_name: "stabilityai/sdxl-turbo" }, vram_estimate_gb: 5.5 },
                 { id: "stt-whisper", type: "stt", backend: "whisper", backend_config: { model_name: "large-v3" }, vram_estimate_gb: 4.8 },
                 { id: "tts-offline", type: "tts", backend: "tts", backend_config: { engine: "kokoro", voice: "af_sarah" }, vram_estimate_gb: 0.5 },
-                { id: "routing-phi", type: "llm", backend: "llama.cpp", backend_config: { repo_id: "microsoft/Phi-3-mini-4k-instruct-gguf", filename: "Phi-3-mini-4k-instruct-q4.gguf", port: 8083, n_gpu_layers: 99 }, vram_estimate_gb: 2.2, purpose: "routing classification", n_ctx: null }
+                { id: "routing-phi", type: "llm", backend: "llama.cpp", backend_config: { repo_id: "microsoft/Phi-3-mini-4k-instruct-gguf", filename: "Phi-3-mini-4k-instruct-q4.gguf", port: 8083, n_gpu_layers: 99 }, vram_estimate_gb: 2.2, purpose: "routing classification", n_ctx: 4096 }
             ]
         },
         "24": {
@@ -789,7 +789,7 @@ if (openSetupBtn && setupModal) {
                 { id: "image-lcm", type: "image", backend: "diffusers", backend_config: { model_name: "black-forest-labs/FLUX.1-schnell" }, vram_estimate_gb: 11.5 },
                 { id: "stt-whisper", type: "stt", backend: "whisper", backend_config: { model_name: "large-v3" }, vram_estimate_gb: 4.8 },
                 { id: "tts-offline", type: "tts", backend: "tts", backend_config: { engine: "kokoro", voice: "af_sarah" }, vram_estimate_gb: 0.5 },
-                { id: "routing-phi", type: "llm", backend: "llama.cpp", backend_config: { repo_id: "microsoft/Phi-3-mini-4k-instruct-gguf", filename: "Phi-3-mini-4k-instruct-q4.gguf", port: 8083, n_gpu_layers: 99 }, vram_estimate_gb: 2.2, purpose: "routing classification", n_ctx: null }
+                { id: "routing-phi", type: "llm", backend: "llama.cpp", backend_config: { repo_id: "microsoft/Phi-3-mini-4k-instruct-gguf", filename: "Phi-3-mini-4k-instruct-q4.gguf", port: 8083, n_gpu_layers: 99 }, vram_estimate_gb: 2.2, purpose: "routing classification", n_ctx: 4096 }
             ]
         },
         "32": {
@@ -803,7 +803,7 @@ if (openSetupBtn && setupModal) {
                 { id: "image-lcm", type: "image", backend: "diffusers", backend_config: { model_name: "black-forest-labs/FLUX.1-dev" }, vram_estimate_gb: 12.0 },
                 { id: "stt-whisper", type: "stt", backend: "whisper", backend_config: { model_name: "large-v3" }, vram_estimate_gb: 4.8 },
                 { id: "tts-offline", type: "tts", backend: "tts", backend_config: { engine: "kokoro", voice: "af_sarah" }, vram_estimate_gb: 0.5 },
-                { id: "routing-phi", type: "llm", backend: "llama.cpp", backend_config: { repo_id: "microsoft/Phi-3-mini-4k-instruct-gguf", filename: "Phi-3-mini-4k-instruct-q4.gguf", port: 8083, n_gpu_layers: 99 }, vram_estimate_gb: 2.2, purpose: "routing classification", n_ctx: null }
+                { id: "routing-phi", type: "llm", backend: "llama.cpp", backend_config: { repo_id: "microsoft/Phi-3-mini-4k-instruct-gguf", filename: "Phi-3-mini-4k-instruct-q4.gguf", port: 8083, n_gpu_layers: 99 }, vram_estimate_gb: 2.2, purpose: "routing classification", n_ctx: 4096 }
             ]
         },
         "64": {
@@ -817,7 +817,7 @@ if (openSetupBtn && setupModal) {
                 { id: "image-lcm", type: "image", backend: "diffusers", backend_config: { model_name: "black-forest-labs/FLUX.1-dev" }, vram_estimate_gb: 16.0 },
                 { id: "stt-whisper", type: "stt", backend: "whisper", backend_config: { model_name: "large-v3" }, vram_estimate_gb: 4.8 },
                 { id: "tts-offline", type: "tts", backend: "tts", backend_config: { engine: "kokoro", voice: "af_sarah" }, vram_estimate_gb: 0.5 },
-                { id: "routing-phi", type: "llm", backend: "llama.cpp", backend_config: { repo_id: "microsoft/Phi-3-mini-4k-instruct-gguf", filename: "Phi-3-mini-4k-instruct-q4.gguf", port: 8083, n_gpu_layers: 99 }, vram_estimate_gb: 2.2, purpose: "routing classification", n_ctx: null }
+                { id: "routing-phi", type: "llm", backend: "llama.cpp", backend_config: { repo_id: "microsoft/Phi-3-mini-4k-instruct-gguf", filename: "Phi-3-mini-4k-instruct-q4.gguf", port: 8083, n_gpu_layers: 99 }, vram_estimate_gb: 2.2, purpose: "routing classification", n_ctx: 4096 }
             ]
         },
         "128": {
@@ -831,7 +831,7 @@ if (openSetupBtn && setupModal) {
                 { id: "image-lcm", type: "image", backend: "diffusers", backend_config: { model_name: "black-forest-labs/FLUX.1-dev" }, vram_estimate_gb: 22.0 },
                 { id: "stt-whisper", type: "stt", backend: "whisper", backend_config: { model_name: "large-v3" }, vram_estimate_gb: 4.8 },
                 { id: "tts-offline", type: "tts", backend: "tts", backend_config: { engine: "kokoro", voice: "af_sarah" }, vram_estimate_gb: 0.5 },
-                { id: "routing-phi", type: "llm", backend: "llama.cpp", backend_config: { repo_id: "microsoft/Phi-3-mini-4k-instruct-gguf", filename: "Phi-3-mini-4k-instruct-q4.gguf", port: 8083, n_gpu_layers: 99 }, vram_estimate_gb: 2.2, purpose: "routing classification", n_ctx: null }
+                { id: "routing-phi", type: "llm", backend: "llama.cpp", backend_config: { repo_id: "microsoft/Phi-3-mini-4k-instruct-gguf", filename: "Phi-3-mini-4k-instruct-q4.gguf", port: 8083, n_gpu_layers: 99 }, vram_estimate_gb: 2.2, purpose: "routing classification", n_ctx: 4096 }
             ]
         }
     };
