@@ -296,6 +296,42 @@ async def chat_completions(request: Request):
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"Image generation error: {str(e)}")
 
+    # If the routed model is a vision model, forward the request directly (llama-server handles multimodal input natively)
+    if model_cfg and model_cfg.type == "vision":
+        if stream:
+            try:
+                return StreamingResponse(
+                    stream_with_metrics(backend.stream_chat_completion(payload), target_model_id),
+                    media_type="text/event-stream"
+                )
+            except Exception as e:
+                raise HTTPException(status_code=500, detail=f"Vision streaming error: {str(e)}")
+        else:
+            try:
+                start_time = time.time()
+                result = await backend.handle_chat_completion(payload)
+                end_time = time.time()
+                
+                wall_time = end_time - start_time
+                content = result["choices"][0]["message"]["content"]
+                completion_tokens = 0
+                if "usage" in result and "completion_tokens" in result["usage"]:
+                    completion_tokens = result["usage"]["completion_tokens"]
+                else:
+                    completion_tokens = max(1, len(content) // 4)
+                    
+                tps = completion_tokens / wall_time if wall_time > 0 else 0.0
+                metrics = {
+                    "model": target_model_id,
+                    "wall_time_sec": wall_time,
+                    "completion_tokens": completion_tokens,
+                    "tokens_per_second": tps
+                }
+                result["metrics"] = metrics
+                return JSONResponse(content=result)
+            except Exception as e:
+                raise HTTPException(status_code=500, detail=f"Vision inference error: {str(e)}")
+
     # If the routed model is a TTS model, handle inline audio synthesis
     if model_cfg and model_cfg.type == "tts":
         try:

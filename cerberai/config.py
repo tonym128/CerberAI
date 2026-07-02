@@ -20,12 +20,14 @@ class RouterConfig(BaseModel):
 
 class ModelConfig(BaseModel):
     id: str
-    type: str  # 'llm', 'image', 'tts', 'stt', 'video'
+    type: str  # 'llm', 'image', 'vision', 'tts', 'stt', 'video'
     backend: str  # 'ollama', 'llama.cpp', 'diffusers', 'whisper', etc.
     backend_config: Dict[str, Any] = Field(default_factory=dict)
     vram_estimate_gb: float = 0.0
     purpose: Optional[str] = None
     n_ctx: Optional[int] = None
+    mmproj_repo_id: Optional[str] = None
+    mmproj_filename: Optional[str] = None
 
 class AppConfig(BaseModel):
     server: ServerConfig = Field(default_factory=ServerConfig)

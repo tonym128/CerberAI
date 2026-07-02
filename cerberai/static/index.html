@@ -8,7 +8,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=Plus+Jakarta+Sans:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="/static/style.css">
+    <link rel="stylesheet" href="/static/style.css?v=2">
 </head>
 <body>
     <div class="app-container">
@@ -162,18 +162,27 @@
             <!-- Chat Input -->
             <footer class="chat-input-area">
                 <form id="chat-form">
-                    <button type="button" id="audio-upload-btn" class="audio-btn" title="Upload Audio / Speech to Text">
-                        <svg viewBox="0 0 24 24" width="20" height="20">
-                            <path fill="currentColor" d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm5.3-3c0 3-2.54 5.1-5.3 5.1S6.7 14 6.7 11H5c0 3.41 2.72 6.23 6 6.72V21h2v-3.28c3.28-.48 6-3.3 6-6.72h-1.7z"/>
-                        </svg>
-                    </button>
-                    <input type="file" id="audio-file-input" accept="audio/*" style="display: none;">
-                    <textarea id="prompt-input" placeholder="Ask anything... (CerberAI will route and load models automatically)" rows="1"></textarea>
-                    <button type="submit" id="send-btn" class="btn btn-primary">
-                        <svg viewBox="0 0 24 24" width="24" height="24" class="send-icon">
-                            <path fill="currentColor" d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/>
-                        </svg>
-                    </button>
+                    <div id="image-preview-container" class="image-preview-container hidden"></div>
+                    <div class="input-controls-row" style="display: flex; align-items: flex-end; gap: 12px; width: 100%;">
+                        <button type="button" id="image-upload-btn" class="image-btn" title="Upload Image for Vision/Describe">
+                            <svg viewBox="0 0 24 24" width="20" height="20">
+                                <path fill="currentColor" d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z"/>
+                            </svg>
+                        </button>
+                        <input type="file" id="image-file-input" accept="image/*" style="display: none;">
+                        <button type="button" id="audio-upload-btn" class="audio-btn" title="Upload Audio / Speech to Text">
+                            <svg viewBox="0 0 24 24" width="20" height="20">
+                                <path fill="currentColor" d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm5.3-3c0 3-2.54 5.1-5.3 5.1S6.7 14 6.7 11H5c0 3.41 2.72 6.23 6 6.72V21h2v-3.28c3.28-.48 6-3.3 6-6.72h-1.7z"/>
+                            </svg>
+                        </button>
+                        <input type="file" id="audio-file-input" accept="audio/*" style="display: none;">
+                        <textarea id="prompt-input" placeholder="Ask anything... (CerberAI will route and load models automatically)" rows="1"></textarea>
+                        <button type="submit" id="send-btn" class="btn btn-primary">
+                            <svg viewBox="0 0 24 24" width="24" height="24" class="send-icon">
+                                <path fill="currentColor" d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/>
+                            </svg>
+                        </button>
+                    </div>
                 </form>
             </footer>
 
@@ -280,6 +289,6 @@
 
     <!-- MarkDown and Code Highlight Plugins (Using public CDNs) -->
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
-    <script src="/static/app.js"></script>
+    <script src="/static/app.js?v=2"></script>
 </body>
 </html>

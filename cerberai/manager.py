@@ -27,8 +27,8 @@ class DynamicModelManager:
         b_type = model_cfg.backend.lower()
         backend_config = dict(model_cfg.backend_config)
 
-        # Calculate context size (n_ctx / ctx_size) for LLMs
-        if model_cfg.type == "llm":
+        # Calculate context size (n_ctx / ctx_size) for LLMs and vision models
+        if model_cfg.type in ("llm", "vision"):
             max_vram = self.config.resource_limits.max_vram_gb
             model_vram = model_cfg.vram_estimate_gb
             

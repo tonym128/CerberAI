@@ -103,6 +103,7 @@ Designed for low-end GPUs or laptops. Leverages heavily quantized models and CPU
 *   **General LLM**: `Qwen/Qwen2.5-1.5B-Instruct-GGUF` (File: `qwen2.5-1.5b-instruct-q4_k_m.gguf` ~ 1.2 GB VRAM)
 *   **Coding LLM**: `Qwen/Qwen2.5-Coder-1.5B-Instruct-GGUF` (File: `qwen2.5-coder-1.5b-instruct-q4_k_m.gguf` ~ 1.2 GB VRAM)
 *   **Image Generation**: `Lykon/dreamshaper-8-lcm` (CPU mode, or 4-step generation, ~4.0 GB VRAM peak)
+*   **Vision (Image-to-Text)**: `ggml-org/nanollava-GGUF` (NanoLLaVA 1B, ultra-lightweight vision, ~1.0 GB VRAM)
 *   **Speech (TTS)**: `Kokoro-82M ONNX` (CPU execution, ~0.3 GB RAM)
 *   **Transcription (STT)**: `openai-whisper` (Model: `tiny` ~ 0.5 GB VRAM)
 *   *Config Recommendation*: Set `max_vram_gb: 4.0` in `config.yaml`.
@@ -112,6 +113,7 @@ The sweet-spot for budget gaming laptops or older desktop cards (e.g., RTX 2060/
 *   **General LLM**: `Qwen/Qwen2.5-3B-Instruct-GGUF` (File: `qwen2.5-3b-instruct-q4_k_m.gguf` ~ 2.2 GB VRAM)
 *   **Coding LLM**: `Qwen/Qwen2.5-Coder-3B-Instruct-GGUF` (File: `qwen2.5-coder-3b-instruct-q4_k_m.gguf` ~ 2.2 GB VRAM)
 *   **Image Generation**: `Lykon/dreamshaper-8-lcm` (Offloaded to GPU, ~4.0 GB VRAM)
+*   **Vision (Image-to-Text)**: `ggml-org/Qwen2.5-VL-3B-Instruct-GGUF` (File: `Qwen2.5-VL-3B-Instruct-Q4_K_M.gguf` + mmproj ~ 2.5 GB VRAM)
 *   **Speech (TTS)**: `Kokoro-82M ONNX` (CPU execution, ~0.3 GB RAM)
 *   **Transcription (STT)**: `openai-whisper` (Model: `base` ~ 0.7 GB VRAM)
 *   *Config Recommendation*: Set `max_vram_gb: 6.0` in `config.yaml`.
@@ -121,6 +123,7 @@ Perfect for standard mainstream cards (e.g., RTX 3060/4060, RX 6600/7600).
 *   **General LLM**: `QuantFactory/Meta-Llama-3.1-8B-Instruct-GGUF` (File: `Meta-Llama-3.1-8B-Instruct.Q4_K_M.gguf` ~ 4.8 GB VRAM)
 *   **Coding LLM**: `Qwen/Qwen2.5-Coder-7B-Instruct-GGUF` (File: `qwen2.5-coder-7b-instruct-q4_k_m.gguf` ~ 4.7 GB VRAM)
 *   **Image Generation**: `Lykon/dreamshaper-8-lcm` (Fits completely in VRAM ~ 4.0 GB)
+*   **Vision (Image-to-Text)**: `ggml-org/Qwen2.5-VL-3B-Instruct-GGUF` (File: `Qwen2.5-VL-3B-Instruct-Q4_K_M.gguf` + mmproj ~ 2.5 GB VRAM)
 *   **Speech (TTS)**: `Kokoro-82M ONNX` (GPU execution, ~0.3 GB VRAM)
 *   **Transcription (STT)**: `openai-whisper` (Model: `small` ~ 1.5 GB VRAM)
 *   *Config Recommendation*: Set `max_vram_gb: 8.0` in `config.yaml`.
@@ -130,6 +133,7 @@ For high-end workstation cards (e.g., RTX 4080, RX 7800 XT, or dual-GPU setups).
 *   **General LLM**: `Qwen/Qwen2.5-14B-Instruct-GGUF` (File: `qwen2.5-14b-instruct-q4_k_m.gguf` ~ 9.0 GB VRAM) or `Meta-Llama-3.1-8B-Instruct` (FP16 or Q8_0 ~ 8.5 GB VRAM)
 *   **Coding LLM**: `Qwen/Qwen2.5-Coder-14B-Instruct-GGUF` (File: `qwen2.5-coder-14b-instruct-q4_k_m.gguf` ~ 9.0 GB VRAM)
 *   **Image Generation**: `stabilityai/sdxl-turbo` (1-step distilled high-quality image generation ~ 5.5 GB VRAM / fits comfortably with 16 GB system RAM and 16 GB GPU VRAM)
+*   **Vision (Image-to-Text)**: `ggml-org/Qwen2.5-VL-3B-Instruct-GGUF` (File: `Qwen2.5-VL-3B-Instruct-Q4_K_M.gguf` + mmproj ~ 3.5 GB VRAM)
 *   **Speech (TTS)**: `Kokoro-82M ONNX` (GPU execution, ~0.3 GB VRAM)
 *   **Transcription (STT)**: `openai-whisper` (Model: `large-v3` ~ 4.8 GB VRAM)
 *   *Config Recommendation*: Set `max_vram_gb: 16.0` in `config.yaml`.
@@ -139,6 +143,7 @@ For extreme-performance consumer setups (e.g., RTX 3090, RTX 4090, RX 7900 XTX).
 *   **General LLM**: `Qwen/Qwen2.5-32B-Instruct-GGUF` (File: `qwen2.5-32b-instruct-q4_k_m.gguf` ~ 20.3 GB VRAM)
 *   **Coding LLM**: `Qwen/Qwen2.5-Coder-32B-Instruct-GGUF` (File: `qwen2.5-coder-32b-instruct-q4_k_m.gguf` ~ 20.3 GB VRAM)
 *   **Image Generation**: `black-forest-labs/FLUX.1-schnell` (quantized GGUF or NF4 ~ 11.5 GB VRAM)
+*   **Vision (Image-to-Text)**: `ggml-org/Qwen2.5-VL-7B-Instruct-GGUF` (File: `Qwen2.5-VL-7B-Instruct-Q4_K_M.gguf` + mmproj ~ 5.5 GB VRAM)
 *   **Speech (TTS)**: `Kokoro-82M ONNX` (GPU execution, ~0.3 GB VRAM)
 *   **Transcription (STT)**: `openai-whisper` (Model: `large-v3` ~ 4.8 GB VRAM)
 *   *Config Recommendation*: Set `max_vram_gb: 24.0` in `config.yaml`.
@@ -148,6 +153,7 @@ For professional workstations, base Apple Silicon Mac Studios, or dual-GPU setup
 *   **General LLM**: `Qwen/Qwen2.5-32B-Instruct-GGUF` (File: `qwen2.5-32b-instruct-q5_k_m.gguf` ~ 24.5 GB VRAM) or `QuantFactory/Meta-Llama-3.3-70B-Instruct-GGUF` (File: `Meta-Llama-3.3-70B-Instruct.Q3_K_S.gguf` ~ 29.5 GB VRAM)
 *   **Coding LLM**: `Qwen/Qwen2.5-Coder-32B-Instruct-GGUF` (File: `qwen2.5-coder-32b-instruct-q5_k_m.gguf` ~ 24.5 GB VRAM)
 *   **Image Generation**: `black-forest-labs/FLUX.1-dev` (quantized GGUF or NF4 ~ 12.0 GB VRAM)
+*   **Vision (Image-to-Text)**: `ggml-org/Qwen2.5-VL-7B-Instruct-GGUF` (File: `Qwen2.5-VL-7B-Instruct-Q8_0.gguf` + mmproj ~ 9.0 GB VRAM)
 *   **Speech (TTS)**: `Kokoro-82M ONNX` (GPU execution, ~0.3 GB VRAM)
 *   **Transcription (STT)**: `openai-whisper` (Model: `large-v3` ~ 4.8 GB VRAM)
 *   *Config Recommendation*: Set `max_vram_gb: 32.0` in `config.yaml`.
@@ -157,6 +163,7 @@ For high-end Apple Silicon Macs (64GB Unified Memory) or multi-GPU desktop tower
 *   **General LLM**: `QuantFactory/Meta-Llama-3.3-70B-Instruct-GGUF` (File: `Meta-Llama-3.3-70B-Instruct.Q5_K_M.gguf` ~ 48.0 GB VRAM) or `Qwen/Qwen2.5-72B-Instruct-GGUF` (File: `qwen2.5-72b-instruct-q4_k_m.gguf` ~ 44.0 GB VRAM)
 *   **Coding LLM**: `Qwen/Qwen2.5-Coder-32B-Instruct-GGUF` (File: `qwen2.5-coder-32b-instruct-q8_0.gguf` ~ 35.0 GB VRAM)
 *   **Image Generation**: `black-forest-labs/FLUX.1-dev` (Full FP16 or Q8 ~ 16.0 GB VRAM)
+*   **Vision (Image-to-Text)**: `ggml-org/Qwen2.5-VL-32B-Instruct-GGUF` (File: `Qwen2.5-VL-32B-Instruct-Q4_K_M.gguf` + mmproj ~ 20.0 GB VRAM)
 *   **Speech (TTS)**: `Kokoro-82M ONNX` (GPU execution, ~0.3 GB VRAM)
 *   **Transcription (STT)**: `openai-whisper` (Model: `large-v3` ~ 4.8 GB VRAM)
 *   *Config Recommendation*: Set `max_vram_gb: 64.0` in `config.yaml`.
@@ -166,6 +173,7 @@ For state-of-the-art enterprise servers, maxed Apple Silicon Macs (128GB Unified
 *   **General LLM**: `QuantFactory/Meta-Llama-3.3-70B-Instruct-GGUF` (File: `Meta-Llama-3.3-70B-Instruct.Q8_0.gguf` ~ 75.0 GB VRAM) or `Qwen/Qwen2.5-72B-Instruct-GGUF` (File: `qwen2.5-72b-instruct-q8_0.gguf` ~ 77.0 GB VRAM)
 *   **Coding LLM**: `Qwen/Qwen2.5-Coder-32B-Instruct-GGUF` (File: `qwen2.5-coder-32b-instruct-q8_0.gguf` ~ 35.0 GB VRAM) or `Qwen/Qwen2.5-Coder-72B-Instruct-GGUF` (File: `qwen2.5-coder-72b-instruct-q5_k_m.gguf` ~ 50.0 GB VRAM)
 *   **Image Generation**: `black-forest-labs/FLUX.1-dev` (Full FP16 ~ 22.0 GB VRAM)
+*   **Vision (Image-to-Text)**: `ggml-org/Qwen2.5-VL-72B-Instruct-GGUF` (File: `Qwen2.5-VL-72B-Instruct-Q4_K_M.gguf` + mmproj ~ 44.0 GB VRAM)
 *   **Speech (TTS)**: `Kokoro-82M ONNX` (GPU execution, ~0.3 GB VRAM)
 *   **Transcription (STT)**: `openai-whisper` (Model: `large-v3` ~ 4.8 GB VRAM)
 *   *Config Recommendation*: Set `max_vram_gb: 128.0` in `config.yaml`.

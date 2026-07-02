@@ -17,6 +17,9 @@ class LlamaCppBackend(BaseBackend):
         self.n_gpu_layers = config.get("n_gpu_layers", 0)
         self.ctx_size = config.get("ctx_size", 4096)
         self.additional_args = config.get("additional_args", [])
+        self.mmproj_repo_id = config.get("mmproj_repo_id")
+        self.mmproj_filename = config.get("mmproj_filename")
+        self.mmproj_path = config.get("mmproj_path")
         
         if not self.model_path and not (self.repo_id and self.filename):
             raise ValueError(f"llama.cpp backend for {model_id} must specify either 'model_path' or both 'repo_id' and 'filename'")
@@ -50,6 +53,16 @@ class LlamaCppBackend(BaseBackend):
                 print(f"Error: model_path '{self.model_path}' does not exist and no Hugging Face repo details are configured.")
                 return False
 
+        # Auto-download mmproj GGUF for vision models if missing
+        if self.mmproj_filename and (not self.mmproj_path or not os.path.exists(self.mmproj_path)):
+            if self.mmproj_repo_id and self.mmproj_filename:
+                from ..downloader import ensure_gguf_model
+                try:
+                    self.mmproj_path = await ensure_gguf_model(self.mmproj_repo_id, self.mmproj_filename, progress_callback)
+                except Exception as e:
+                    print(f"Failed to auto-download mmproj model: {e}")
+                    return False
+
         if self.process and self.process.poll() is None:
             # Process is already running
             self._is_loaded = True
@@ -65,6 +78,10 @@ class LlamaCppBackend(BaseBackend):
             "-c", str(self.ctx_size),
             "-ngl", str(self.n_gpu_layers)
         ]
+
+        # Add multimodal projector for vision models
+        if self.mmproj_path and os.path.exists(self.mmproj_path):
+            cmd.extend(["--mmproj", self.mmproj_path])
         
         # Add any additional arguments
         if isinstance(self.additional_args, list):

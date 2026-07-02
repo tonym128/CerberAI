@@ -3,6 +3,7 @@ let chatHistory = [];
 let configuredModels = [];
 let activeModelId = "auto";
 let isGenerating = false;
+let uploadedImages = []; // Stores base64 data URLs of uploaded images
 
 // DOM Elements
 const modelSelect = document.getElementById("model-select");
@@ -21,6 +22,9 @@ const clearChatBtn = document.getElementById("clear-chat");
 const streamCheck = document.getElementById("stream-check");
 const toolsCheck = document.getElementById("tools-check");
 const sendBtn = document.getElementById("send-btn");
+const imageUploadBtn = document.getElementById("image-upload-btn");
+const imageFileInput = document.getElementById("image-file-input");
+const imagePreviewContainer = document.getElementById("image-preview-container");
 
 
 // Suggestions click handler
@@ -231,8 +235,28 @@ chatForm.addEventListener("submit", async (e) => {
     adjustTextareaHeight();
     
     // Add user message to UI
-    appendMessage("user", prompt);
-    chatHistory.push({ role: "user", content: prompt });
+    appendMessage("user", prompt, null, uploadedImages);
+    
+    if (uploadedImages.length > 0) {
+        const contentList = [{ type: "text", text: prompt }];
+        uploadedImages.forEach(img => {
+            contentList.push({
+                type: "image_url",
+                image_url: { url: img }
+            });
+        });
+        chatHistory.push({ role: "user", content: contentList });
+    } else {
+        chatHistory.push({ role: "user", content: prompt });
+    }
+    
+    // Clear preview state
+    uploadedImages = [];
+    if (imagePreviewContainer) {
+        imagePreviewContainer.innerHTML = "";
+        imagePreviewContainer.classList.add("hidden");
+    }
+    
     syncActiveConversation(); // Save user message
     
     // Remove welcome card if exists
@@ -354,7 +378,7 @@ chatForm.addEventListener("submit", async (e) => {
 });
 
 // Append message to UI returning the unique row element ID
-function appendMessage(sender, text, metrics = null) {
+function appendMessage(sender, text, metrics = null, images = []) {
     const messageId = `msg-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
     const row = document.createElement("div");
     row.id = messageId;
@@ -364,8 +388,32 @@ function appendMessage(sender, text, metrics = null) {
     const displayName = sender === "user" ? "You" : "CerberAI";
     const timeString = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     
+    let displayText = "";
+    let displayImages = [...images];
+
+    if (Array.isArray(text)) {
+        text.forEach(part => {
+            if (part && part.type === "text") {
+                displayText += part.text;
+            } else if (part && part.type === "image_url" && part.image_url) {
+                displayImages.push(part.image_url.url);
+            }
+        });
+    } else {
+        displayText = text;
+    }
+
     // Parse markdown initially (only for non-empty texts)
-    const formattedText = sender === "assistant" && text === "Thinking..." ? text : marked.parse(text);
+    const formattedText = sender === "assistant" && displayText === "Thinking..." ? displayText : marked.parse(displayText || "");
+
+    let imagesHtml = "";
+    if (displayImages.length > 0) {
+        imagesHtml = `<div class="msg-attached-images" style="display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px;">`;
+        displayImages.forEach(img => {
+            imagesHtml += `<img src="${img}" class="msg-attached-image" style="max-width: 250px; max-height: 250px; border-radius: 8px; border: 1px solid var(--border-color); cursor: pointer; transition: transform 0.2s;" onclick="window.open(this.src, '_blank')">`;
+        });
+        imagesHtml += `</div>`;
+    }
 
     let metricsHtml = "";
     if (sender === "assistant" && metrics) {
@@ -381,7 +429,7 @@ function appendMessage(sender, text, metrics = null) {
         <div class="msg-avatar">${avatar}</div>
         <div class="msg-content-wrapper">
             <span class="msg-meta">${displayName} &bull; ${timeString}</span>
-            <div class="msg-bubble">${formattedText}</div>
+            <div class="msg-bubble">${formattedText}${imagesHtml}</div>
             ${sender === 'assistant' ? '<button class="tts-play-btn">🔊 Listen</button>' : ''}
             ${metricsHtml}
         </div>
@@ -522,6 +570,67 @@ if (audioUploadBtn && audioFileInput) {
             adjustTextareaHeight();
         }
     });
+}
+
+// Image Upload handler
+console.log("CerberAI: Initializing image upload elements...");
+console.log("CerberAI: imageUploadBtn:", imageUploadBtn);
+console.log("CerberAI: imageFileInput:", imageFileInput);
+console.log("CerberAI: imagePreviewContainer:", imagePreviewContainer);
+
+if (imageUploadBtn && imageFileInput && imagePreviewContainer) {
+    imageUploadBtn.addEventListener("click", () => {
+        console.log("CerberAI: imageUploadBtn clicked, triggering file input");
+        imageFileInput.click();
+    });
+
+    imageFileInput.addEventListener("change", async (e) => {
+        const file = e.target.files[0];
+        console.log("CerberAI: file selected:", file ? file.name : "none");
+        if (!file) return;
+
+        // Reset input value so it can be re-triggered
+        imageFileInput.value = "";
+
+        const reader = new FileReader();
+        reader.onload = function(event) {
+            console.log("CerberAI: file read finished");
+            const base64Data = event.target.result;
+            uploadedImages.push(base64Data);
+            renderImagePreviews();
+        };
+        reader.readAsDataURL(file);
+    });
+
+    function renderImagePreviews() {
+        imagePreviewContainer.innerHTML = "";
+        if (uploadedImages.length === 0) {
+            imagePreviewContainer.classList.add("hidden");
+            return;
+        }
+
+        imagePreviewContainer.classList.remove("hidden");
+        uploadedImages.forEach((imgData, index) => {
+            const previewItem = document.createElement("div");
+            previewItem.className = "image-preview-item";
+
+            const img = document.createElement("img");
+            img.src = imgData;
+            previewItem.appendChild(img);
+
+            const removeBtn = document.createElement("button");
+            removeBtn.type = "button";
+            removeBtn.className = "image-preview-remove";
+            removeBtn.innerHTML = "&times;";
+            removeBtn.addEventListener("click", () => {
+                uploadedImages.splice(index, 1);
+                renderImagePreviews();
+            });
+            previewItem.appendChild(removeBtn);
+
+            imagePreviewContainer.appendChild(previewItem);
+        });
+    }
 }
 
 // News Video Automation
