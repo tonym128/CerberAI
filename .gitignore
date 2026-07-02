@@ -33,3 +33,6 @@ test_bin_cache/
 # Local Configurations & API Secrets
 config.yaml
 .env
+
+# Generated Frontend Assets / Images
+cerberai/static/generated/
