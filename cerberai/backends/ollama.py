@@ -55,7 +55,7 @@ class OllamaBackend(BaseBackend):
             print(f"Error pulling model '{self.model_name}' from Ollama: {e}")
             return False
 
-    async def load(self) -> bool:
+    async def load(self, progress_callback=None) -> bool:
         """Tell Ollama to load the model into memory with a long keep_alive."""
         # Auto-pull if not available
         await self.ensure_pulled()

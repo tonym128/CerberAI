@@ -11,7 +11,7 @@ class DiffusersBackend(BaseBackend):
         self.model_name = config.get("model_name", "Lykon/dreamshaper-8-lcm")
         self.pipeline = None
 
-    async def load(self) -> bool:
+    async def load(self, progress_callback=None) -> bool:
         """Dynamically load the Stable Diffusion pipeline."""
         if self.pipeline:
             self._is_loaded = True

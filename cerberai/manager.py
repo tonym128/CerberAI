@@ -14,6 +14,7 @@ class DynamicModelManager:
         self.config = config
         self.backends: Dict[str, BaseBackend] = {}
         self.last_used: Dict[str, float] = {}
+        self.loading_status: Dict[str, Dict[str, Any]] = {}
         self.lock = asyncio.Lock()
         
         # Initialize backends based on config
@@ -24,19 +25,54 @@ class DynamicModelManager:
 
     def _create_backend(self, model_cfg: ModelConfig) -> Optional[BaseBackend]:
         b_type = model_cfg.backend.lower()
+        backend_config = dict(model_cfg.backend_config)
+
+        # Calculate context size (n_ctx / ctx_size) for LLMs
+        if model_cfg.type == "llm":
+            max_vram = self.config.resource_limits.max_vram_gb
+            model_vram = model_cfg.vram_estimate_gb
+            
+            # Auto-calculate if not explicitly provided or 0
+            if getattr(model_cfg, "n_ctx", None) is not None and model_cfg.n_ctx > 0:
+                ctx_size = model_cfg.n_ctx
+            else:
+                # Heuristic estimation:
+                available_vram = max_vram - model_vram
+                if available_vram <= 0.5:
+                    ctx_size = 2048
+                else:
+                    # Parameter size estimate: weights VRAM * 1.5 (e.g. 5GB ≈ 8B parameters)
+                    model_size = max(1.0, model_vram * 1.5)
+                    # FP16 KV cache memory: ~0.12 GB VRAM per 1024 tokens for an 8B model
+                    gb_per_1024 = model_size * 0.015
+                    estimated_tokens = (available_vram / gb_per_1024) * 1024
+                    
+                    # Round to the nearest standard context window step (power of 2)
+                    ctx_size = 2048
+                    for size in [32768, 16384, 8192, 4096]:
+                        if estimated_tokens >= size:
+                            ctx_size = size
+                            break
+            
+            # Pass n_ctx down as both n_ctx and ctx_size to support various backend formats
+            backend_config["ctx_size"] = ctx_size
+            backend_config["n_ctx"] = ctx_size
+            
+            # Save the calculated n_ctx back to model_cfg so that status displays the correct limit
+            model_cfg.n_ctx = ctx_size
+
         if b_type == "ollama":
-            return OllamaBackend(model_cfg.id, model_cfg.backend_config, model_cfg.vram_estimate_gb)
+            return OllamaBackend(model_cfg.id, backend_config, model_cfg.vram_estimate_gb)
         elif b_type == "llama.cpp" or b_type == "llamacpp":
-            return LlamaCppBackend(model_cfg.id, model_cfg.backend_config, model_cfg.vram_estimate_gb)
+            return LlamaCppBackend(model_cfg.id, backend_config, model_cfg.vram_estimate_gb)
         elif b_type == "whisper":
-            return WhisperBackend(model_cfg.id, model_cfg.backend_config, model_cfg.vram_estimate_gb)
+            return WhisperBackend(model_cfg.id, backend_config, model_cfg.vram_estimate_gb)
         elif b_type == "tts":
-            return TTSBackend(model_cfg.id, model_cfg.backend_config, model_cfg.vram_estimate_gb)
+            return TTSBackend(model_cfg.id, backend_config, model_cfg.vram_estimate_gb)
         elif b_type == "diffusers":
-            return DiffusersBackend(model_cfg.id, model_cfg.backend_config, model_cfg.vram_estimate_gb)
+            return DiffusersBackend(model_cfg.id, backend_config, model_cfg.vram_estimate_gb)
         else:
             print(f"Warning: Backend '{model_cfg.backend}' for model '{model_cfg.id}' is not implemented yet.")
-            # We can create a dummy backend or return None for now
             return None
 
 
@@ -50,20 +86,35 @@ class DynamicModelManager:
                 raise ValueError(f"Model ID '{model_id}' is not configured.")
 
             backend = self.backends[model_id]
-            
-            # Check if it's already loaded (update status)
             is_loaded = await backend.is_loaded()
             
             if not is_loaded:
                 # Ensure resources are available
                 await self._ensure_resources_for(model_id)
                 
+                # Update status to initializing/loading
+                self.loading_status[model_id] = {
+                    "status": "loading",
+                    "progress": None,
+                    "message": "Initializing model engine..."
+                }
+                
+                def progress_callback(percentage):
+                    self.loading_status[model_id] = {
+                        "status": "downloading",
+                        "progress": round(percentage, 1),
+                        "message": f"Downloading checkpoints... {percentage:.1f}%"
+                    }
+                
                 # Load the model
                 print(f"Loading model '{model_id}'...")
-                success = await backend.load()
-                if not success:
-                    raise RuntimeError(f"Failed to load model '{model_id}'")
-                print(f"Successfully loaded model '{model_id}'")
+                try:
+                    success = await backend.load(progress_callback=progress_callback)
+                    if not success:
+                        raise RuntimeError(f"Failed to load model '{model_id}'")
+                    print(f"Successfully loaded model '{model_id}'")
+                finally:
+                    self.loading_status.pop(model_id, None)
             
             # Update last used timestamp
             self.last_used[model_id] = time.time()
@@ -76,11 +127,15 @@ class DynamicModelManager:
         """
         target_cfg = next(m for m in self.config.models if m.id == target_model_id)
         target_vram = target_cfg.vram_estimate_gb
-        max_vram = self.config.resource_limits.max_vram_gb
+        # Deduct a standard system/desktop/runtime overhead buffer
+        # (Drivers, display servers, and framework overhead take about 1.5-2.0 GB of VRAM)
+        limit_gb = self.config.resource_limits.max_vram_gb
+        buffer_gb = 2.0 if limit_gb >= 8.0 else 1.0
+        max_vram = max(limit_gb - buffer_gb, limit_gb * 0.7)
 
         # If a single model exceeds total VRAM, we'll try to load it anyway but log a warning
         if target_vram > max_vram:
-            print(f"Warning: Model '{target_model_id}' requires {target_vram}GB, which exceeds max VRAM of {max_vram}GB.")
+            print(f"Warning: Model '{target_model_id}' requires {target_vram}GB, which exceeds effective max VRAM of {max_vram:.1f}GB (with system overhead buffer).")
 
         while True:
             # Calculate current VRAM usage of loaded models (excluding the target model itself)
@@ -114,7 +169,9 @@ class DynamicModelManager:
         # Don't hold lock for the entire sleep/poll loop
         for m_id, backend in list(self.backends.items()):
             if await backend.is_loaded():
-                last_active = self.last_used.get(m_id, 0.0)
+                if m_id not in self.last_used:
+                    self.last_used[m_id] = time.time()
+                last_active = self.last_used[m_id]
                 idle_duration = time.time() - last_active
                 
                 # If idle longer than timeout, unload it

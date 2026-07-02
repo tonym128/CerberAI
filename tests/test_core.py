@@ -48,7 +48,7 @@ class MockBackend(BaseBackend):
         self.unload_called_count = 0
         self.load_called_count = 0
 
-    async def load(self) -> bool:
+    async def load(self, progress_callback=None) -> bool:
         self._is_loaded = True
         self.load_called_count += 1
         return True

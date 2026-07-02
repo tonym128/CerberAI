@@ -17,7 +17,7 @@ class TTSBackend(BaseBackend):
         self.model_path = None
         self.voices_path = None
 
-    async def load(self) -> bool:
+    async def load(self, progress_callback=None) -> bool:
         """Initialize selected TTS engine (kokoro, pyttsx3 or gtts)."""
         if self.engine_type == "gtts":
             self._is_loaded = True

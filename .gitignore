@@ -1,1 +1,35 @@
+# Python Virtual Environment
+.venv/
+venv/
+ENV/
+env/
+
+# Python Cache & Compiled Files
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Local User Conversations & Chat Data
+conversations/
+
+# Log Files
+*.log
+llama.log
+
+# Model Binaries & Quantized Checkpoints
+*.gguf
+models/
+downloads/
+
+# Test Artifacts & Testing Caches
+test_model_cache/
+test_bin_cache/
+.ast/
+
+# Local Configurations & API Secrets
 config.yaml
+.env

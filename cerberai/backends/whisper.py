@@ -9,7 +9,7 @@ class WhisperBackend(BaseBackend):
         self.model_name = config.get("model_name", "tiny")
         self.model = None
 
-    async def load(self) -> bool:
+    async def load(self, progress_callback=None) -> bool:
         """Dynamically load the Whisper model into memory."""
         if self.model:
             self._is_loaded = True

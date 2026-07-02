@@ -39,8 +39,9 @@ class AgentExecutor:
         }
 
     async def web_search_tool(self, query: str) -> str:
-        """Query DuckDuckGo HTML search page and parse top results."""
-        url = f"https://html.duckduckgo.com/html/?q={urllib.parse.quote(query)}"
+        """Query Mojeek search page and parse top results."""
+        import html
+        url = f"https://www.mojeek.com/search?q={urllib.parse.quote(query)}"
         headers = {
             "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36"
         }
@@ -50,15 +51,15 @@ class AgentExecutor:
                 if response.status_code != 200:
                     return f"Error: Search returned HTTP {response.status_code}"
                 
-                html = response.text
-                # Simple regex parsing of results
-                snippets = re.findall(r'<a class="result__snippet"[^>]*>(.*?)</a>', html, re.DOTALL)
-                titles = re.findall(r'<a class="result__link"[^>]*>(.*?)</a>', html, re.DOTALL)
+                html_content = response.text
+                # Extract titles and snippets using Mojeek class selectors
+                titles = re.findall(r'<a class="title"[^>]*>(.*?)</a>', html_content, re.DOTALL)
+                snippets = re.findall(r'<p class="s">(.*?)</p>', html_content, re.DOTALL)
                 
                 results = []
                 for i, (title, snippet) in enumerate(zip(titles[:5], snippets[:5])):
-                    clean_title = re.sub(r'<[^>]+>', '', title).strip()
-                    clean_snippet = re.sub(r'<[^>]+>', '', snippet).strip()
+                    clean_title = html.unescape(re.sub(r'<[^>]+>', '', title).strip())
+                    clean_snippet = html.unescape(re.sub(r'<[^>]+>', '', snippet).strip())
                     results.append(f"{i+1}. {clean_title}\nSnippet: {clean_snippet}\n")
                     
                 if not results:

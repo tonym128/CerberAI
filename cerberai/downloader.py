@@ -12,7 +12,7 @@ def get_model_cache_path(filename: str) -> Path:
     CACHE_DIR.mkdir(parents=True, exist_ok=True)
     return CACHE_DIR / filename
 
-async def download_file(url: str, dest_path: Path):
+async def download_file(url: str, dest_path: Path, progress_callback=None):
     """Download a file with progress logging."""
     temp_path = dest_path.with_suffix(".tmp")
     print(f"Downloading from {url} to {dest_path}...")
@@ -40,6 +40,8 @@ async def download_file(url: str, dest_path: Path):
                         if percentage - last_reported >= 5.0 or bytes_downloaded == total_bytes:
                             print(f"Download progress: {percentage:.1f}% ({bytes_downloaded / 1024 / 1024:.1f} MB / {total_bytes / 1024 / 1024:.1f} MB)")
                             last_reported = percentage
+                            if progress_callback:
+                                progress_callback(percentage)
                     else:
                         # If no content-length, report downloaded size every 10MB
                         mb_downloaded = bytes_downloaded / 1024 / 1024
@@ -53,7 +55,7 @@ async def download_file(url: str, dest_path: Path):
     os.rename(temp_path, dest_path)
     print(f"Successfully downloaded {dest_path.name}")
 
-async def ensure_gguf_model(repo_id: str, filename: str) -> str:
+async def ensure_gguf_model(repo_id: str, filename: str, progress_callback=None) -> str:
     """
     Ensures a GGUF model is downloaded locally from Hugging Face.
     Returns the absolute path to the GGUF file.
@@ -66,7 +68,7 @@ async def ensure_gguf_model(repo_id: str, filename: str) -> str:
     url = f"https://huggingface.co/{repo_id}/resolve/main/{filename}"
     
     try:
-        await download_file(url, dest_path)
+        await download_file(url, dest_path, progress_callback)
     except Exception as e:
         temp_path = dest_path.with_suffix(".tmp")
         if temp_path.exists():

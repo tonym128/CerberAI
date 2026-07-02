@@ -45,6 +45,10 @@ CerberAI is built on a modular, event-driven Python architecture:
 - **Dynamic Resource Loading/Unloading**: Keeps memory footprint low by loading models on-demand and unloading them when idle or to make room for other models.
 - **Dynamic Purpose-Based LLM Routing**: Introspects model definitions and matches them to incoming intents using custom descriptions.
 - **Interactive Setup Dashboard**: An inline WebUI configuration screen to add, remove, and update LLM/STT/Image models and hot-reload settings in memory.
+- **Persistent Conversation Threads**: Track, review, and delete historical chats from a dynamic sidebar, with automatic session naming based on context.
+- **Inline Query Performance Metrics**: Real-time measurement and rendering of wall time, total completion tokens, and generation speed (tokens per second) for streaming and non-streaming prompts.
+- **Dynamic Context Size & KV Cache Allocator**: Auto-calculates model-level maximum supported KV cache size dynamically using the remaining VRAM budget, with optional custom token limit overrides.
+- **Real-Time Load & Download Indicators**: Dynamic polling updates the WebUI sidebar catalog and the active chat bubble with real-time model initialization and download progress percentages.
 - **Multiple Backends**: Integrates with Ollama, llama.cpp, Whisper, Diffusers, Kokoro, and others.
 
 ## Directory Structure
@@ -130,6 +134,42 @@ For high-end workstation cards (e.g., RTX 4080, RX 7800 XT, or dual-GPU setups).
 *   **Transcription (STT)**: `openai-whisper` (Model: `large-v3` ~ 4.8 GB VRAM)
 *   *Config Recommendation*: Set `max_vram_gb: 16.0` in `config.yaml`.
 
+### 5. 24 GB VRAM Tier (Extreme Workstation / Single Flagship GPU)
+For extreme-performance consumer setups (e.g., RTX 3090, RTX 4090, RX 7900 XTX). Run flagship-grade parameters locally.
+*   **General LLM**: `Qwen/Qwen2.5-32B-Instruct-GGUF` (File: `qwen2.5-32b-instruct-q4_k_m.gguf` ~ 20.3 GB VRAM)
+*   **Coding LLM**: `Qwen/Qwen2.5-Coder-32B-Instruct-GGUF` (File: `qwen2.5-coder-32b-instruct-q4_k_m.gguf` ~ 20.3 GB VRAM)
+*   **Image Generation**: `black-forest-labs/FLUX.1-schnell` (quantized GGUF or NF4 ~ 11.5 GB VRAM)
+*   **Speech (TTS)**: `Kokoro-82M ONNX` (GPU execution, ~0.3 GB VRAM)
+*   **Transcription (STT)**: `openai-whisper` (Model: `large-v3` ~ 4.8 GB VRAM)
+*   *Config Recommendation*: Set `max_vram_gb: 24.0` in `config.yaml`.
+
+### 6. 32 GB VRAM Tier (Pro Workstation / Dual-GPU)
+For professional workstations, base Apple Silicon Mac Studios, or dual-GPU setups (e.g. dual 16GB cards).
+*   **General LLM**: `Qwen/Qwen2.5-32B-Instruct-GGUF` (File: `qwen2.5-32b-instruct-q5_k_m.gguf` ~ 24.5 GB VRAM) or `QuantFactory/Meta-Llama-3.3-70B-Instruct-GGUF` (File: `Meta-Llama-3.3-70B-Instruct.Q3_K_S.gguf` ~ 29.5 GB VRAM)
+*   **Coding LLM**: `Qwen/Qwen2.5-Coder-32B-Instruct-GGUF` (File: `qwen2.5-coder-32b-instruct-q5_k_m.gguf` ~ 24.5 GB VRAM)
+*   **Image Generation**: `black-forest-labs/FLUX.1-dev` (quantized GGUF or NF4 ~ 12.0 GB VRAM)
+*   **Speech (TTS)**: `Kokoro-82M ONNX` (GPU execution, ~0.3 GB VRAM)
+*   **Transcription (STT)**: `openai-whisper` (Model: `large-v3` ~ 4.8 GB VRAM)
+*   *Config Recommendation*: Set `max_vram_gb: 32.0` in `config.yaml`.
+
+### 7. 64 GB VRAM Tier (AI Workstation Node / Apple Silicon Mac Studio)
+For high-end Apple Silicon Macs (64GB Unified Memory) or multi-GPU desktop towers (e.g., dual RTX 3090/4090).
+*   **General LLM**: `QuantFactory/Meta-Llama-3.3-70B-Instruct-GGUF` (File: `Meta-Llama-3.3-70B-Instruct.Q5_K_M.gguf` ~ 48.0 GB VRAM) or `Qwen/Qwen2.5-72B-Instruct-GGUF` (File: `qwen2.5-72b-instruct-q4_k_m.gguf` ~ 44.0 GB VRAM)
+*   **Coding LLM**: `Qwen/Qwen2.5-Coder-32B-Instruct-GGUF` (File: `qwen2.5-coder-32b-instruct-q8_0.gguf` ~ 35.0 GB VRAM)
+*   **Image Generation**: `black-forest-labs/FLUX.1-dev` (Full FP16 or Q8 ~ 16.0 GB VRAM)
+*   **Speech (TTS)**: `Kokoro-82M ONNX` (GPU execution, ~0.3 GB VRAM)
+*   **Transcription (STT)**: `openai-whisper` (Model: `large-v3` ~ 4.8 GB VRAM)
+*   *Config Recommendation*: Set `max_vram_gb: 64.0` in `config.yaml`.
+
+### 8. 128 GB VRAM Tier (Datacenter / Enterprise Node / Maxed Mac Studio)
+For state-of-the-art enterprise servers, maxed Apple Silicon Macs (128GB Unified Memory), or multi-GPU computing nodes.
+*   **General LLM**: `QuantFactory/Meta-Llama-3.3-70B-Instruct-GGUF` (File: `Meta-Llama-3.3-70B-Instruct.Q8_0.gguf` ~ 75.0 GB VRAM) or `Qwen/Qwen2.5-72B-Instruct-GGUF` (File: `qwen2.5-72b-instruct-q8_0.gguf` ~ 77.0 GB VRAM)
+*   **Coding LLM**: `Qwen/Qwen2.5-Coder-32B-Instruct-GGUF` (File: `qwen2.5-coder-32b-instruct-q8_0.gguf` ~ 35.0 GB VRAM) or `Qwen/Qwen2.5-Coder-72B-Instruct-GGUF` (File: `qwen2.5-coder-72b-instruct-q5_k_m.gguf` ~ 50.0 GB VRAM)
+*   **Image Generation**: `black-forest-labs/FLUX.1-dev` (Full FP16 ~ 22.0 GB VRAM)
+*   **Speech (TTS)**: `Kokoro-82M ONNX` (GPU execution, ~0.3 GB VRAM)
+*   **Transcription (STT)**: `openai-whisper` (Model: `large-v3` ~ 4.8 GB VRAM)
+*   *Config Recommendation*: Set `max_vram_gb: 128.0` in `config.yaml`.
+
 ---
 
 ## GPU Hardware Acceleration Setup (NVIDIA, AMD, Intel)
@@ -160,6 +200,11 @@ AMD cards are supported on Linux via ROCm. Since the default PyPI packages only 
     ```bash
     pip install --force-reinstall torch torchvision --index-url https://download.pytorch.org/whl/rocm7.2
     ```
+*   **llama.cpp GPU offloading (ROCm)**: Precompiled `llama.cpp` release binaries from GitHub only support CPU or NVIDIA CUDA. To enable GPU offloading for LLM models on AMD cards, compile `llama-server` from source using the provided automated script:
+    ```bash
+    ./build_llama_rocm.sh
+    ```
+    This script will clone `llama.cpp` (master branch), build it natively with `-DGGML_HIP=ON` using your ROCm LLVM Clang compiler, and place the executable and its dynamic libraries directly into CerberAI's local binaries cache (`~/.cache/cerberai/bin/`).
 *   **Verification**: PyTorch uses the standard `cuda` device name namespace for ROCm as well. Verify your Radeon card is visible:
     ```bash
     python -c "import torch; print('ROCm Available:', torch.cuda.is_available()); print('Device Name:', torch.cuda.get_device_name(0) if torch.cuda.is_available() else 'None')"

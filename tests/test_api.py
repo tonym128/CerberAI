@@ -25,6 +25,8 @@ class TestAPI(unittest.TestCase):
         self.assertEqual(data["limits"]["max_vram_gb"], config.resource_limits.max_vram_gb)
         self.assertIn("active_models", data)
         self.assertIn("all_configured_models", data)
+        self.assertIn("loading_status", data)
+        self.assertTrue(all("n_ctx" in m for m in data["all_configured_models"]))
 
     def test_root_endpoint(self):
         response = self.client.get("/")
@@ -78,6 +80,52 @@ class TestAPI(unittest.TestCase):
         # Verify routing and manager were called correctly
         mock_route_chat.assert_called_once_with([{"role": "user", "content": "Hello!"}], "auto", unittest.mock.ANY)
         mock_get_model.assert_called_once_with("general-llama3")
+
+    def test_conversations_flow(self):
+        # 1. Create a new conversation
+        response = self.client.post("/api/conversations", json={"title": "Test Chat"})
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        conv_id = data["id"]
+        self.assertEqual(data["title"], "Test Chat")
+        
+        # 2. Get list of conversations
+        response = self.client.get("/api/conversations")
+        self.assertEqual(response.status_code, 200)
+        list_data = response.json()
+        self.assertTrue(any(c["id"] == conv_id for c in list_data))
+        
+        # 3. Retrieve the created conversation
+        response = self.client.get(f"/api/conversations/{conv_id}")
+        self.assertEqual(response.status_code, 200)
+        conv_data = response.json()
+        self.assertEqual(conv_data["id"], conv_id)
+        self.assertEqual(conv_data["title"], "Test Chat")
+        self.assertEqual(conv_data["messages"], [])
+        
+        # 4. Save/Update conversation messages
+        updated_payload = {
+            "id": conv_id,
+            "title": "Updated Title",
+            "messages": [{"role": "user", "content": "Hi!"}, {"role": "assistant", "content": "Hello!"}]
+        }
+        response = self.client.post(f"/api/conversations/{conv_id}", json=updated_payload)
+        self.assertEqual(response.status_code, 200)
+        
+        # Verify changes saved
+        response = self.client.get(f"/api/conversations/{conv_id}")
+        self.assertEqual(response.status_code, 200)
+        conv_data = response.json()
+        self.assertEqual(conv_data["title"], "Updated Title")
+        self.assertEqual(len(conv_data["messages"]), 2)
+        
+        # 5. Delete conversation
+        response = self.client.delete(f"/api/conversations/{conv_id}")
+        self.assertEqual(response.status_code, 200)
+        
+        # Verify deleted
+        response = self.client.get(f"/api/conversations/{conv_id}")
+        self.assertEqual(response.status_code, 404)
 
 if __name__ == "__main__":
     unittest.main()

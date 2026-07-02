@@ -24,7 +24,7 @@ class LlamaCppBackend(BaseBackend):
         self.process: Optional[subprocess.Popen] = None
 
 
-    async def load(self) -> bool:
+    async def load(self, progress_callback=None) -> bool:
         """Start the llama-server subprocess and wait for it to become healthy."""
         import shutil
 
@@ -42,7 +42,7 @@ class LlamaCppBackend(BaseBackend):
             if self.repo_id and self.filename:
                 from ..downloader import ensure_gguf_model
                 try:
-                    self.model_path = await ensure_gguf_model(self.repo_id, self.filename)
+                    self.model_path = await ensure_gguf_model(self.repo_id, self.filename, progress_callback)
                 except Exception as e:
                     print(f"Failed to auto-download GGUF model: {e}")
                     return False
@@ -128,28 +128,29 @@ class LlamaCppBackend(BaseBackend):
 
     async def unload(self) -> bool:
         """Terminate the llama-server subprocess and wait for exit to release VRAM."""
-        if not self.process:
+        proc = self.process
+        if not proc:
             self._is_loaded = False
             return True
             
+        self.process = None
+        self._is_loaded = False
+        
         print(f"Terminating llama.cpp server on port {self.port}...")
         try:
-            self.process.terminate()
+            proc.terminate()
             # Wait up to 5 seconds for clean exit
             for _ in range(10):
-                if self.process.poll() is not None:
+                if proc.poll() is not None:
                     break
                 await asyncio.sleep(0.5)
             
-            if self.process.poll() is None:
+            if proc.poll() is None:
                 print("Force killing llama.cpp server...")
-                self.process.kill()
-                self.process.wait()
+                proc.kill()
+                proc.wait()
         except Exception as e:
             print(f"Error terminating llama.cpp server: {e}")
-        finally:
-            self.process = None
-            self._is_loaded = False
         return True
 
     async def is_loaded(self) -> bool:

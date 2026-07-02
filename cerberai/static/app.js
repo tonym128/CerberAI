@@ -41,8 +41,8 @@ function adjustTextareaHeight() {
 window.addEventListener("DOMContentLoaded", () => {
     fetchModels();
     pollStatus();
-    // Poll status every 3 seconds
     setInterval(pollStatus, 3000);
+    initConversations();
 });
 
 // Fetch all models
@@ -93,15 +93,69 @@ async function pollStatus() {
             vramBar.style.background = "linear-gradient(90deg, #8b5cf6 0%, #3b82f6 100%)";
         }
 
+        // Update Context & KV Cache Monitor
+        const contextMonitor = document.getElementById("context-monitor");
+        if (contextMonitor) {
+            const ctxBar = document.getElementById("ctx-bar");
+            const ctxUsed = document.getElementById("ctx-used");
+            const ctxMax = document.getElementById("ctx-max");
+            const cachePct = document.getElementById("cache-pct");
+            const ctxModelLimit = document.getElementById("ctx-model-limit");
+
+            let activeLLM = null;
+            if (activeModelId && activeModelId !== "auto") {
+                activeLLM = status.all_configured_models.find(m => m.id === activeModelId && m.type === "llm");
+            } else {
+                activeLLM = status.active_models.find(m => m.type === "llm");
+            }
+
+            if (activeLLM) {
+                contextMonitor.style.display = "block";
+                
+                // Calculate context in use from chatHistory
+                let totalChars = 0;
+                chatHistory.forEach(msg => {
+                    totalChars += (msg.content || "").length;
+                });
+                const currentTokens = Math.max(0, Math.floor(totalChars / 4));
+                const maxTokens = activeLLM.n_ctx || 4096;
+                const cachePctVal = Math.min((currentTokens / maxTokens) * 100, 100);
+                
+                ctxUsed.textContent = `${currentTokens.toLocaleString()} tokens`;
+                ctxMax.textContent = `${maxTokens.toLocaleString()} tokens`;
+                cachePct.textContent = `${cachePctVal.toFixed(1)}%`;
+                ctxModelLimit.textContent = maxTokens >= 1000 ? `${(maxTokens / 1000).toFixed(0)}K` : maxTokens;
+                ctxBar.style.width = `${cachePctVal}%`;
+                
+                if (cachePctVal > 80) {
+                    ctxBar.style.background = "linear-gradient(90deg, #f59e0b 0%, #ef4444 100%)";
+                } else {
+                    ctxBar.style.background = "linear-gradient(90deg, #3b82f6 0%, #10b981 100%)";
+                }
+            } else {
+                contextMonitor.style.display = "none";
+            }
+        }
+
+        // Update thinking bubble if there is an active model loading operation
+        const thinkingBubble = document.querySelector(".assistant-row:last-child .msg-bubble");
+        if (thinkingBubble && (thinkingBubble.textContent === "Thinking..." || thinkingBubble.textContent.startsWith("Downloading") || thinkingBubble.textContent.startsWith("Initializing") || thinkingBubble.innerHTML.includes("pulse"))) {
+            const loadingModelId = Object.keys(status.loading_status || {})[0];
+            if (loadingModelId) {
+                const op = status.loading_status[loadingModelId];
+                thinkingBubble.innerHTML = `<span style="color: var(--text-secondary); display: inline-flex; align-items: center; gap: 8px;"><span class="status-dot orange loading-pulse" style="display: inline-block; width: 8px; height: 8px; border-radius: 50%;"></span>${op.message}</span>`;
+            }
+        }
+
         // Render models catalog list
-        renderCatalog(status.all_configured_models, status.active_models);
+        renderCatalog(status.all_configured_models, status.active_models, status.loading_status || {});
     } catch (err) {
         console.error("Connection lost/failed to poll status:", err);
     }
 }
 
 // Render model catalog sidebar items
-function renderCatalog(allModels, activeModels) {
+function renderCatalog(allModels, activeModels, loadingStatus) {
     modelsList.innerHTML = "";
     
     // Create lookup map for active models
@@ -109,7 +163,7 @@ function renderCatalog(allModels, activeModels) {
 
     allModels.forEach(model => {
         const isActive = activeMap.has(model.id);
-        const activeInfo = activeMap.get(model.id);
+        const isLoading = loadingStatus && loadingStatus[model.id];
         
         const card = document.createElement("div");
         card.className = `catalog-item ${model.id === activeModelId ? 'active' : ''}`;
@@ -119,6 +173,10 @@ function renderCatalog(allModels, activeModels) {
         if (isActive) {
             statusText = "Active";
             dotClass = "green";
+        }
+        if (isLoading) {
+            statusText = loadingStatus[model.id].message;
+            dotClass = "orange loading-pulse";
         }
 
         card.innerHTML = `
@@ -131,7 +189,7 @@ function renderCatalog(allModels, activeModels) {
             </div>
             <div class="status-indicator">
                 <span class="status-dot ${dotClass}"></span>
-                <span>${statusText}</span>
+                <span style="font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 140px;" title="${statusText}">${statusText}</span>
             </div>
         `;
         
@@ -157,23 +215,9 @@ modelSelect.addEventListener("change", (e) => {
 // Clear Chat
 clearChatBtn.addEventListener("click", () => {
     chatHistory = [];
-    chatMessages.innerHTML = `
-        <div class="assistant-welcome">
-            <div class="welcome-icon">⚡</div>
-            <h2>Welcome to CerberAI</h2>
-            <p>Ask a coding or general question. CerberAI will dynamically load the best model into memory and unload inactive ones to manage local hardware resources.</p>
-            <div class="suggestions-grid">
-                <div class="suggestion-card" onclick="setPrompt('Write a python script to sort a dictionary by its values')">
-                    <h4>💻 Coding Request</h4>
-                    <p>"Write a python script to sort a dictionary by its values"</p>
-                </div>
-                <div class="suggestion-card" onclick="setPrompt('Explain quantum physics in a single paragraph')">
-                    <h4>🧠 General Query</h4>
-                    <p>"Explain quantum physics in a single paragraph"</p>
-                </div>
-            </div>
-        </div>
-    `;
+    chatMessages.innerHTML = "";
+    displayWelcome();
+    syncActiveConversation();
 });
 
 // Handle Form Submission
@@ -189,6 +233,7 @@ chatForm.addEventListener("submit", async (e) => {
     // Add user message to UI
     appendMessage("user", prompt);
     chatHistory.push({ role: "user", content: prompt });
+    syncActiveConversation(); // Save user message
     
     // Remove welcome card if exists
     const welcomeCard = document.querySelector(".assistant-welcome");
@@ -212,7 +257,6 @@ chatForm.addEventListener("submit", async (e) => {
             tools_enabled: toolsCheck ? toolsCheck.checked : false
         };
 
-
         const response = await fetch("/v1/chat/completions", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -227,6 +271,7 @@ chatForm.addEventListener("submit", async (e) => {
         if (stream) {
             assistantBubble.textContent = "";
             let accumulatedContent = "";
+            let metrics = null;
             
             const reader = response.body.getReader();
             const decoder = new TextDecoder("utf-8");
@@ -238,8 +283,6 @@ chatForm.addEventListener("submit", async (e) => {
                 
                 buffer += decoder.decode(value, { stream: true });
                 const lines = buffer.split("\n");
-                
-                // Keep the last partial line in buffer
                 buffer = lines.pop();
                 
                 for (const line of lines) {
@@ -253,26 +296,50 @@ chatForm.addEventListener("submit", async (e) => {
                         }
                         try {
                             const parsed = JSON.parse(dataStr);
-                            const delta = parsed.choices[0].delta.content;
-                            if (delta) {
-                                accumulatedContent += delta;
-                                assistantBubble.innerHTML = marked.parse(accumulatedContent);
-                                scrollChatToBottom();
+                            if (parsed.metrics) {
+                                metrics = parsed.metrics;
+                                // Append metrics bubble
+                                const wrapper = assistantBubble.parentElement;
+                                const metricsBubble = document.createElement("div");
+                                metricsBubble.className = "metrics-bubble";
+                                const modelText = metrics.model ? `[${metrics.model}] &middot; ` : "";
+                 metricsBubble.innerHTML = `⚡ ${modelText}${metrics.tokens_per_second.toFixed(1)} t/s &middot; ${metrics.wall_time_sec.toFixed(2)}s wall time &middot; ${metrics.completion_tokens} tokens`;
+                                wrapper.appendChild(metricsBubble);
+                            } else {
+                                const delta = parsed.choices[0].delta.content;
+                                if (delta) {
+                                    accumulatedContent += delta;
+                                    assistantBubble.innerHTML = marked.parse(accumulatedContent);
+                                    scrollChatToBottom();
+                                }
                             }
                         } catch (e) {
-                            // Suppress JSON parsing errors on malformed chunks
+                            // ignore json error
                         }
                     }
                 }
             }
             
-            // Append final content
-            chatHistory.push({ role: "assistant", content: accumulatedContent });
+            chatHistory.push({ role: "assistant", content: accumulatedContent, metrics: metrics });
+            syncActiveConversation(); // Save assistant message & metrics
         } else {
             const data = await response.json();
             const text = data.choices[0].message.content;
+            const metrics = data.metrics || null;
+            
             assistantBubble.innerHTML = marked.parse(text);
-            chatHistory.push({ role: "assistant", content: text });
+            
+            if (metrics) {
+                const wrapper = assistantBubble.parentElement;
+                const metricsBubble = document.createElement("div");
+                metricsBubble.className = "metrics-bubble";
+                const modelText = metrics.model ? `[${metrics.model}] &middot; ` : "";
+                metricsBubble.innerHTML = `⚡ ${modelText}${metrics.tokens_per_second.toFixed(1)} t/s &middot; ${metrics.wall_time_sec.toFixed(2)}s wall time &middot; ${metrics.completion_tokens} tokens`;
+                wrapper.appendChild(metricsBubble);
+            }
+            
+            chatHistory.push({ role: "assistant", content: text, metrics: metrics });
+            syncActiveConversation(); // Save assistant message & metrics
             scrollChatToBottom();
         }
         
@@ -287,8 +354,8 @@ chatForm.addEventListener("submit", async (e) => {
 });
 
 // Append message to UI returning the unique row element ID
-function appendMessage(sender, text) {
-    const messageId = `msg-${Date.now()}`;
+function appendMessage(sender, text, metrics = null) {
+    const messageId = `msg-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
     const row = document.createElement("div");
     row.id = messageId;
     row.className = `message-row ${sender}-row`;
@@ -300,12 +367,23 @@ function appendMessage(sender, text) {
     // Parse markdown initially (only for non-empty texts)
     const formattedText = sender === "assistant" && text === "Thinking..." ? text : marked.parse(text);
 
+    let metricsHtml = "";
+    if (sender === "assistant" && metrics) {
+        const modelText = metrics.model ? `[${metrics.model}] &middot; ` : "";
+        metricsHtml = `
+            <div class="metrics-bubble">
+                ⚡ ${modelText}${metrics.tokens_per_second.toFixed(1)} t/s &middot; ${metrics.wall_time_sec.toFixed(2)}s wall time &middot; ${metrics.completion_tokens} tokens
+            </div>
+        `;
+    }
+
     row.innerHTML = `
         <div class="msg-avatar">${avatar}</div>
         <div class="msg-content-wrapper">
             <span class="msg-meta">${displayName} &bull; ${timeString}</span>
             <div class="msg-bubble">${formattedText}</div>
             ${sender === 'assistant' ? '<button class="tts-play-btn">🔊 Listen</button>' : ''}
+            ${metricsHtml}
         </div>
     `;
 
@@ -584,6 +662,19 @@ if (openSetupBtn && setupModal) {
                         <input type="number" class="model-port" value="${model.backend_config.port || 8081}" required>
                     </div>
                 </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Context Size (n_ctx)</label>
+                        <select class="model-n-ctx custom-select">
+                            <option value="0" ${!model.n_ctx ? 'selected' : ''}>✨ Auto-calculate from VRAM</option>
+                            <option value="2048" ${model.n_ctx === 2048 ? 'selected' : ''}>2048 tokens</option>
+                            <option value="4096" ${model.n_ctx === 4096 ? 'selected' : ''}>4096 tokens</option>
+                            <option value="8192" ${model.n_ctx === 8192 ? 'selected' : ''}>8192 tokens</option>
+                            <option value="16384" ${model.n_ctx === 16384 ? 'selected' : ''}>16384 tokens</option>
+                            <option value="32768" ${model.n_ctx === 32768 ? 'selected' : ''}>32768 tokens</option>
+                        </select>
+                    </div>
+                </div>
             `;
             
             // Add remove event listener
@@ -629,6 +720,168 @@ if (openSetupBtn && setupModal) {
         setupContainer.appendChild(card);
     };
 
+    // Hardware Tier Configuration Presets
+    const PRESETS = {
+        "4": {
+            vram: 4.0,
+            ram: 16.0,
+            router_type: "llm",
+            router_model: "routing-phi",
+            models: [
+                { id: "general-llama3", type: "llm", backend: "llama.cpp", backend_config: { repo_id: "Qwen/Qwen2.5-1.5B-Instruct-GGUF", filename: "qwen2.5-1.5b-instruct-q4_k_m.gguf", port: 8081, n_gpu_layers: 99 }, vram_estimate_gb: 1.2, purpose: "general reasoning", n_ctx: null },
+                { id: "coding-qwen", type: "llm", backend: "llama.cpp", backend_config: { repo_id: "Qwen/Qwen2.5-Coder-1.5B-Instruct-GGUF", filename: "qwen2.5-coder-1.5b-instruct-q4_k_m.gguf", port: 8082, n_gpu_layers: 99 }, vram_estimate_gb: 1.2, purpose: "general coding", n_ctx: null },
+                { id: "image-lcm", type: "image", backend: "diffusers", backend_config: { model_name: "Lykon/dreamshaper-8-lcm" }, vram_estimate_gb: 4.0 },
+                { id: "stt-whisper", type: "stt", backend: "whisper", backend_config: { model_name: "tiny" }, vram_estimate_gb: 0.5 },
+                { id: "tts-offline", type: "tts", backend: "tts", backend_config: { engine: "kokoro", voice: "af_sarah" }, vram_estimate_gb: 0.5 },
+                { id: "routing-phi", type: "llm", backend: "llama.cpp", backend_config: { repo_id: "microsoft/Phi-3-mini-4k-instruct-gguf", filename: "Phi-3-mini-4k-instruct-q4.gguf", port: 8083, n_gpu_layers: 99 }, vram_estimate_gb: 2.2, purpose: "routing classification", n_ctx: null }
+            ]
+        },
+        "6": {
+            vram: 6.0,
+            ram: 16.0,
+            router_type: "llm",
+            router_model: "routing-phi",
+            models: [
+                { id: "general-llama3", type: "llm", backend: "llama.cpp", backend_config: { repo_id: "Qwen/Qwen2.5-3B-Instruct-GGUF", filename: "qwen2.5-3b-instruct-q4_k_m.gguf", port: 8081, n_gpu_layers: 99 }, vram_estimate_gb: 2.2, purpose: "general reasoning", n_ctx: null },
+                { id: "coding-qwen", type: "llm", backend: "llama.cpp", backend_config: { repo_id: "Qwen/Qwen2.5-Coder-3B-Instruct-GGUF", filename: "qwen2.5-coder-3b-instruct-q4_k_m.gguf", port: 8082, n_gpu_layers: 99 }, vram_estimate_gb: 2.2, purpose: "general coding", n_ctx: null },
+                { id: "image-lcm", type: "image", backend: "diffusers", backend_config: { model_name: "Lykon/dreamshaper-8-lcm" }, vram_estimate_gb: 4.0 },
+                { id: "stt-whisper", type: "stt", backend: "whisper", backend_config: { model_name: "base" }, vram_estimate_gb: 0.7 },
+                { id: "tts-offline", type: "tts", backend: "tts", backend_config: { engine: "kokoro", voice: "af_sarah" }, vram_estimate_gb: 0.5 },
+                { id: "routing-phi", type: "llm", backend: "llama.cpp", backend_config: { repo_id: "microsoft/Phi-3-mini-4k-instruct-gguf", filename: "Phi-3-mini-4k-instruct-q4.gguf", port: 8083, n_gpu_layers: 99 }, vram_estimate_gb: 2.2, purpose: "routing classification", n_ctx: null }
+            ]
+        },
+        "8": {
+            vram: 8.0,
+            ram: 16.0,
+            router_type: "llm",
+            router_model: "routing-phi",
+            models: [
+                { id: "general-llama3", type: "llm", backend: "llama.cpp", backend_config: { repo_id: "QuantFactory/Meta-Llama-3.1-8B-Instruct-GGUF", filename: "Meta-Llama-3.1-8B-Instruct.Q4_K_M.gguf", port: 8081, n_gpu_layers: 99 }, vram_estimate_gb: 4.8, purpose: "general reasoning", n_ctx: null },
+                { id: "coding-qwen", type: "llm", backend: "llama.cpp", backend_config: { repo_id: "Qwen/Qwen2.5-Coder-7B-Instruct-GGUF", filename: "qwen2.5-coder-7b-instruct-q4_k_m.gguf", port: 8082, n_gpu_layers: 99 }, vram_estimate_gb: 4.7, purpose: "general coding", n_ctx: null },
+                { id: "image-lcm", type: "image", backend: "diffusers", backend_config: { model_name: "Lykon/dreamshaper-8-lcm" }, vram_estimate_gb: 4.0 },
+                { id: "stt-whisper", type: "stt", backend: "whisper", backend_config: { model_name: "small" }, vram_estimate_gb: 1.5 },
+                { id: "tts-offline", type: "tts", backend: "tts", backend_config: { engine: "kokoro", voice: "af_sarah" }, vram_estimate_gb: 0.5 },
+                { id: "routing-phi", type: "llm", backend: "llama.cpp", backend_config: { repo_id: "microsoft/Phi-3-mini-4k-instruct-gguf", filename: "Phi-3-mini-4k-instruct-q4.gguf", port: 8083, n_gpu_layers: 99 }, vram_estimate_gb: 2.2, purpose: "routing classification", n_ctx: null }
+            ]
+        },
+        "16": {
+            vram: 16.0,
+            ram: 16.0,
+            router_type: "llm",
+            router_model: "routing-phi",
+            models: [
+                { id: "general-llama3", type: "llm", backend: "llama.cpp", backend_config: { repo_id: "bartowski/Qwen2.5-14B-Instruct-GGUF", filename: "Qwen2.5-14B-Instruct-Q4_K_M.gguf", port: 8081, n_gpu_layers: 99 }, vram_estimate_gb: 9.5, purpose: "general reasoning", n_ctx: null },
+                { id: "coding-qwen", type: "llm", backend: "llama.cpp", backend_config: { repo_id: "Qwen/Qwen2.5-Coder-14B-Instruct-GGUF", filename: "qwen2.5-coder-14b-instruct-q4_k_m.gguf", port: 8082, n_gpu_layers: 99 }, vram_estimate_gb: 9.5, purpose: "general coding", n_ctx: null },
+                { id: "image-lcm", type: "image", backend: "diffusers", backend_config: { model_name: "stabilityai/sdxl-turbo" }, vram_estimate_gb: 5.5 },
+                { id: "stt-whisper", type: "stt", backend: "whisper", backend_config: { model_name: "large-v3" }, vram_estimate_gb: 4.8 },
+                { id: "tts-offline", type: "tts", backend: "tts", backend_config: { engine: "kokoro", voice: "af_sarah" }, vram_estimate_gb: 0.5 },
+                { id: "routing-phi", type: "llm", backend: "llama.cpp", backend_config: { repo_id: "microsoft/Phi-3-mini-4k-instruct-gguf", filename: "Phi-3-mini-4k-instruct-q4.gguf", port: 8083, n_gpu_layers: 99 }, vram_estimate_gb: 2.2, purpose: "routing classification", n_ctx: null }
+            ]
+        },
+        "24": {
+            vram: 24.0,
+            ram: 32.0,
+            router_type: "llm",
+            router_model: "routing-phi",
+            models: [
+                { id: "general-llama3", type: "llm", backend: "llama.cpp", backend_config: { repo_id: "bartowski/Qwen2.5-32B-Instruct-GGUF", filename: "Qwen2.5-32B-Instruct-Q4_K_M.gguf", port: 8081, n_gpu_layers: 99 }, vram_estimate_gb: 20.3, purpose: "general reasoning", n_ctx: null },
+                { id: "coding-qwen", type: "llm", backend: "llama.cpp", backend_config: { repo_id: "Qwen/Qwen2.5-Coder-32B-Instruct-GGUF", filename: "qwen2.5-coder-32b-instruct-q4_k_m.gguf", port: 8082, n_gpu_layers: 99 }, vram_estimate_gb: 20.3, purpose: "general coding", n_ctx: null },
+                { id: "image-lcm", type: "image", backend: "diffusers", backend_config: { model_name: "black-forest-labs/FLUX.1-schnell" }, vram_estimate_gb: 11.5 },
+                { id: "stt-whisper", type: "stt", backend: "whisper", backend_config: { model_name: "large-v3" }, vram_estimate_gb: 4.8 },
+                { id: "tts-offline", type: "tts", backend: "tts", backend_config: { engine: "kokoro", voice: "af_sarah" }, vram_estimate_gb: 0.5 },
+                { id: "routing-phi", type: "llm", backend: "llama.cpp", backend_config: { repo_id: "microsoft/Phi-3-mini-4k-instruct-gguf", filename: "Phi-3-mini-4k-instruct-q4.gguf", port: 8083, n_gpu_layers: 99 }, vram_estimate_gb: 2.2, purpose: "routing classification", n_ctx: null }
+            ]
+        },
+        "32": {
+            vram: 32.0,
+            ram: 32.0,
+            router_type: "llm",
+            router_model: "routing-phi",
+            models: [
+                { id: "general-llama3", type: "llm", backend: "llama.cpp", backend_config: { repo_id: "bartowski/Qwen2.5-32B-Instruct-GGUF", filename: "Qwen2.5-32B-Instruct-Q5_K_M.gguf", port: 8081, n_gpu_layers: 99 }, vram_estimate_gb: 24.5, purpose: "general reasoning", n_ctx: null },
+                { id: "coding-qwen", type: "llm", backend: "llama.cpp", backend_config: { repo_id: "Qwen/Qwen2.5-Coder-32B-Instruct-GGUF", filename: "qwen2.5-coder-32b-instruct-q5_k_m.gguf", port: 8082, n_gpu_layers: 99 }, vram_estimate_gb: 24.5, purpose: "general coding", n_ctx: null },
+                { id: "image-lcm", type: "image", backend: "diffusers", backend_config: { model_name: "black-forest-labs/FLUX.1-dev" }, vram_estimate_gb: 12.0 },
+                { id: "stt-whisper", type: "stt", backend: "whisper", backend_config: { model_name: "large-v3" }, vram_estimate_gb: 4.8 },
+                { id: "tts-offline", type: "tts", backend: "tts", backend_config: { engine: "kokoro", voice: "af_sarah" }, vram_estimate_gb: 0.5 },
+                { id: "routing-phi", type: "llm", backend: "llama.cpp", backend_config: { repo_id: "microsoft/Phi-3-mini-4k-instruct-gguf", filename: "Phi-3-mini-4k-instruct-q4.gguf", port: 8083, n_gpu_layers: 99 }, vram_estimate_gb: 2.2, purpose: "routing classification", n_ctx: null }
+            ]
+        },
+        "64": {
+            vram: 64.0,
+            ram: 64.0,
+            router_type: "llm",
+            router_model: "routing-phi",
+            models: [
+                { id: "general-llama3", type: "llm", backend: "llama.cpp", backend_config: { repo_id: "bartowski/Llama-3.3-70B-Instruct-GGUF", filename: "Llama-3.3-70B-Instruct-Q5_K_S.gguf", port: 8081, n_gpu_layers: 99 }, vram_estimate_gb: 48.0, purpose: "general reasoning", n_ctx: null },
+                { id: "coding-qwen", type: "llm", backend: "llama.cpp", backend_config: { repo_id: "Qwen/Qwen2.5-Coder-32B-Instruct-GGUF", filename: "qwen2.5-coder-32b-instruct-q8_0.gguf", port: 8082, n_gpu_layers: 99 }, vram_estimate_gb: 35.0, purpose: "general coding", n_ctx: null },
+                { id: "image-lcm", type: "image", backend: "diffusers", backend_config: { model_name: "black-forest-labs/FLUX.1-dev" }, vram_estimate_gb: 16.0 },
+                { id: "stt-whisper", type: "stt", backend: "whisper", backend_config: { model_name: "large-v3" }, vram_estimate_gb: 4.8 },
+                { id: "tts-offline", type: "tts", backend: "tts", backend_config: { engine: "kokoro", voice: "af_sarah" }, vram_estimate_gb: 0.5 },
+                { id: "routing-phi", type: "llm", backend: "llama.cpp", backend_config: { repo_id: "microsoft/Phi-3-mini-4k-instruct-gguf", filename: "Phi-3-mini-4k-instruct-q4.gguf", port: 8083, n_gpu_layers: 99 }, vram_estimate_gb: 2.2, purpose: "routing classification", n_ctx: null }
+            ]
+        },
+        "128": {
+            vram: 128.0,
+            ram: 128.0,
+            router_type: "llm",
+            router_model: "routing-phi",
+            models: [
+                { id: "general-llama3", type: "llm", backend: "llama.cpp", backend_config: { repo_id: "bartowski/Llama-3.3-70B-Instruct-GGUF", filename: "Llama-3.3-70B-Instruct-Q5_K_S.gguf", port: 8081, n_gpu_layers: 99 }, vram_estimate_gb: 48.0, purpose: "general reasoning", n_ctx: null },
+                { id: "coding-qwen", type: "llm", backend: "llama.cpp", backend_config: { repo_id: "Qwen/Qwen2.5-Coder-32B-Instruct-GGUF", filename: "qwen2.5-coder-32b-instruct-q8_0.gguf", port: 8082, n_gpu_layers: 99 }, vram_estimate_gb: 35.0, purpose: "general coding", n_ctx: null },
+                { id: "image-lcm", type: "image", backend: "diffusers", backend_config: { model_name: "black-forest-labs/FLUX.1-dev" }, vram_estimate_gb: 22.0 },
+                { id: "stt-whisper", type: "stt", backend: "whisper", backend_config: { model_name: "large-v3" }, vram_estimate_gb: 4.8 },
+                { id: "tts-offline", type: "tts", backend: "tts", backend_config: { engine: "kokoro", voice: "af_sarah" }, vram_estimate_gb: 0.5 },
+                { id: "routing-phi", type: "llm", backend: "llama.cpp", backend_config: { repo_id: "microsoft/Phi-3-mini-4k-instruct-gguf", filename: "Phi-3-mini-4k-instruct-q4.gguf", port: 8083, n_gpu_layers: 99 }, vram_estimate_gb: 2.2, purpose: "routing classification", n_ctx: null }
+            ]
+        }
+    };
+
+    const setupPresetSelect = document.getElementById("setup-preset");
+    if (setupPresetSelect) {
+        setupPresetSelect.addEventListener("change", (e) => {
+            const val = e.target.value;
+            if (!val || !PRESETS[val]) return;
+
+            const preset = PRESETS[val];
+            if (!confirm(`Are you sure you want to load the ${val} GB VRAM preset? This will overwrite your current settings and model catalog configuration cards.`)) {
+                setupPresetSelect.value = "";
+                return;
+            }
+
+            // Overwrite VRAM / RAM
+            document.getElementById("setup-vram").value = preset.vram;
+            document.getElementById("setup-ram").value = preset.ram;
+
+            // Overwrite router
+            const routerTypeSelect = document.getElementById("setup-router-type");
+            const routerModelSelect = document.getElementById("setup-router-model");
+
+            routerTypeSelect.value = preset.router_type;
+            
+            // Re-populate router model dropdown with preset LLMs
+            routerModelSelect.innerHTML = "";
+            preset.models.forEach(model => {
+                if (model.type === "llm") {
+                    const opt = document.createElement("option");
+                    opt.value = model.id;
+                    opt.textContent = `${model.id} (${model.purpose || 'LLM reasoning'})`;
+                    routerModelSelect.appendChild(opt);
+                }
+            });
+            routerModelSelect.value = preset.router_model;
+            routerModelSelect.disabled = false;
+
+            // Clear and render new cards
+            setupContainer.innerHTML = "";
+            preset.models.forEach(model => {
+                renderSetupCard(model);
+            });
+
+            // Reset selection box back to default
+            setupPresetSelect.value = "";
+        });
+    }
+
     // Open Setup Modal & Fetch Config
     openSetupBtn.addEventListener("click", async () => {
         try {
@@ -640,6 +893,32 @@ if (openSetupBtn && setupModal) {
             document.getElementById("setup-vram").value = config.resource_limits.max_vram_gb;
             document.getElementById("setup-ram").value = config.resource_limits.max_ram_gb;
             document.getElementById("setup-hf-token").value = config.hf_token || "";
+
+            // Populate router settings
+            const routerTypeSelect = document.getElementById("setup-router-type");
+            const routerModelSelect = document.getElementById("setup-router-model");
+            
+            routerTypeSelect.value = config.router.model_type || "heuristics";
+            
+            // Populate router model options
+            routerModelSelect.innerHTML = "";
+            config.models.forEach(model => {
+                if (model.type === "llm") {
+                    const opt = document.createElement("option");
+                    opt.value = model.id;
+                    opt.textContent = `${model.id} (${model.purpose || 'LLM reasoning'})`;
+                    routerModelSelect.appendChild(opt);
+                }
+            });
+            
+            routerModelSelect.value = config.router.model_name || (config.models.find(m => m.type === "llm")?.id || "");
+            
+            const updateRouterFields = () => {
+                routerModelSelect.disabled = (routerTypeSelect.value !== "llm");
+            };
+            
+            routerTypeSelect.onchange = updateRouterFields;
+            updateRouterFields();
 
             // Clear dynamic cards
             setupContainer.innerHTML = "";
@@ -702,6 +981,8 @@ if (openSetupBtn && setupModal) {
                 const filename = card.querySelector(".model-filename").value.trim();
                 const vram = parseFloat(card.querySelector(".model-vram").value);
                 const port = parseInt(card.querySelector(".model-port").value);
+                const nCtxVal = parseInt(card.querySelector(".model-n-ctx").value);
+                const nCtx = nCtxVal > 0 ? nCtxVal : null;
 
                 modelPayloads.push({
                     id: id,
@@ -714,7 +995,8 @@ if (openSetupBtn && setupModal) {
                         n_gpu_layers: 99
                     },
                     vram_estimate_gb: vram,
-                    purpose: purpose
+                    purpose: purpose,
+                    n_ctx: nCtx
                 });
             } else if (type === "image") {
                 const modelName = card.querySelector(".model-repo").value.trim();
@@ -761,7 +1043,8 @@ if (openSetupBtn && setupModal) {
                 eviction_strategy: "lru"
             },
             router: {
-                model_type: "heuristics",
+                model_type: document.getElementById("setup-router-type").value,
+                model_name: document.getElementById("setup-router-type").value === "llm" ? document.getElementById("setup-router-model").value : null,
                 fallback_model: "general-llama3"
             },
             models: modelPayloads,
@@ -790,6 +1073,227 @@ if (openSetupBtn && setupModal) {
             submitBtn.textContent = originalText;
         }
     });
+}
+
+// ==========================================================================
+// CONVERSATION HISTORY OPERATIONS
+// ==========================================================================
+let currentConvId = null;
+let conversationsList = [];
+
+const conversationsContainer = document.getElementById("conversations-list");
+const newChatBtn = document.getElementById("btn-new-chat");
+
+async function initConversations() {
+    await fetchConversations();
+    
+    // Select first conversation, or create one if none exist
+    if (conversationsList.length > 0) {
+        await loadConversation(conversationsList[0].id);
+    } else {
+        await createNewChat();
+    }
+    
+    // Set up New Chat click event
+    if (newChatBtn) {
+        newChatBtn.addEventListener("click", createNewChat);
+    }
+}
+
+async function fetchConversations() {
+    try {
+        const res = await fetch("/api/conversations");
+        if (!res.ok) throw new Error("Could not retrieve conversations list");
+        conversationsList = await res.json();
+        renderConversationsList();
+    } catch (err) {
+        console.error("Failed to load conversations:", err);
+    }
+}
+
+function renderConversationsList() {
+    if (!conversationsContainer) return;
+    conversationsContainer.innerHTML = "";
+    conversationsList.forEach(conv => {
+        const item = document.createElement("div");
+        item.className = `conv-item ${conv.id === currentConvId ? 'active' : ''}`;
+        item.innerHTML = `
+            <span class="conv-title">${escapeHtml(conv.title)}</span>
+            <button class="conv-delete-btn" title="Delete Chat">&times;</button>
+        `;
+        
+        // Click item to load conversation
+        item.addEventListener("click", (e) => {
+            if (e.target.classList.contains("conv-delete-btn")) return;
+            loadConversation(conv.id);
+        });
+        
+        // Click delete button to delete conversation
+        item.querySelector(".conv-delete-btn").addEventListener("click", async (e) => {
+            e.stopPropagation();
+            if (confirm(`Are you sure you want to delete this chat thread?`)) {
+                await deleteConversation(conv.id);
+            }
+        });
+        
+        conversationsContainer.appendChild(item);
+    });
+}
+
+async function loadConversation(id) {
+    currentConvId = id;
+    renderConversationsList(); // Update active selection highlight
+    
+    try {
+        const res = await fetch(`/api/conversations/${id}`);
+        if (!res.ok) throw new Error("Could not load conversation");
+        const conv = await res.json();
+        
+        // Set chatHistory state
+        chatHistory = conv.messages || [];
+        
+        // Clear chat display
+        chatMessages.innerHTML = "";
+        
+        // If no messages, display welcome card
+        if (chatHistory.length === 0) {
+            displayWelcome();
+        } else {
+            // Populate messages in UI
+            chatHistory.forEach(msg => {
+                appendMessage(msg.role, msg.content, msg.metrics);
+            });
+        }
+    } catch (err) {
+        console.error("Error loading conversation:", err);
+    }
+}
+
+async function createNewChat() {
+    try {
+        const res = await fetch("/api/conversations", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ title: "New Chat" })
+        });
+        if (!res.ok) throw new Error("Could not create new conversation");
+        const conv = await res.json();
+        
+        currentConvId = conv.id;
+        chatHistory = [];
+        
+        // Reload list and highlight new active conversation
+        await fetchConversations();
+        
+        // Reset UI chat screen
+        chatMessages.innerHTML = "";
+        displayWelcome();
+        promptInput.value = "";
+        promptInput.focus();
+        adjustTextareaHeight();
+    } catch (err) {
+        console.error("Failed to create new chat:", err);
+    }
+}
+
+async function deleteConversation(id) {
+    try {
+        const res = await fetch(`/api/conversations/${id}`, { method: "DELETE" });
+        if (!res.ok) throw new Error("Failed to delete");
+        
+        // If we deleted the active conversation, find the next one or create a new one
+        if (id === currentConvId) {
+            const remaining = conversationsList.filter(c => c.id !== id);
+            if (remaining.length > 0) {
+                await loadConversation(remaining[0].id);
+            } else {
+                await createNewChat();
+                return; // createNewChat calls fetchConversations internally
+            }
+        }
+        await fetchConversations();
+    } catch (err) {
+        console.error("Delete conversation failed:", err);
+    }
+}
+
+// Helper to sync local messages list with backend
+async function syncActiveConversation() {
+    if (!currentConvId) return;
+    
+    // Generate a dynamic title if the title is still default and we have messages
+    let title = "New Chat";
+    const activeConv = conversationsList.find(c => c.id === currentConvId);
+    if (activeConv) {
+        title = activeConv.title;
+    }
+    
+    if (title === "New Chat" && chatHistory.length > 0) {
+        // Use a snippet of the first user message
+        const firstUserMsg = chatHistory.find(m => m.role === "user");
+        if (firstUserMsg) {
+            title = firstUserMsg.content.trim().slice(0, 30);
+            if (firstUserMsg.content.length > 30) title += "...";
+        }
+    }
+    
+    const payload = {
+        id: currentConvId,
+        title: title,
+        messages: chatHistory
+    };
+    
+    try {
+        const res = await fetch(`/api/conversations/${currentConvId}`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload)
+        });
+        if (res.ok) {
+            // Update local active title list representation without full reload
+            const updatedList = conversationsList.map(c => {
+                if (c.id === currentConvId) {
+                    return { ...c, title: title, updated_at: Date.now() / 1000 };
+                }
+                return c;
+            });
+            // Re-sort list by updated_at descending
+            updatedList.sort((a, b) => b.updated_at - a.updated_at);
+            conversationsList = updatedList;
+            renderConversationsList();
+        }
+    } catch (err) {
+        console.error("Failed to sync conversation:", err);
+    }
+}
+
+function displayWelcome() {
+    chatMessages.innerHTML = `
+        <div class="assistant-welcome">
+            <div class="welcome-icon">⚡</div>
+            <h2>Welcome to CerberAI</h2>
+            <p>Ask a coding or general question. CerberAI will dynamically load the best model into memory and unload inactive ones to manage local hardware resources.</p>
+            <div class="suggestions-grid">
+                <div class="suggestion-card" onclick="setPrompt('Write a python script to sort a dictionary by its values')">
+                    <h4>💻 Coding Request</h4>
+                    <p>"Write a python script to sort a dictionary by its values"</p>
+                </div>
+                <div class="suggestion-card" onclick="setPrompt('Explain quantum physics in a single paragraph')">
+                    <h4>🧠 General Query</h4>
+                    <p>"Explain quantum physics in a single paragraph"</p>
+                </div>
+            </div>
+        </div>
+    `;
+}
+
+function escapeHtml(text) {
+    return text
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
 }
 
 

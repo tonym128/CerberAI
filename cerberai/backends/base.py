@@ -9,7 +9,7 @@ class BaseBackend(ABC):
         self._is_loaded = False
 
     @abstractmethod
-    async def load(self) -> bool:
+    async def load(self, progress_callback=None) -> bool:
         """Load the model into RAM/VRAM or start the subprocess server."""
         pass
 

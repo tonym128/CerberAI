@@ -94,6 +94,7 @@ async def get_status():
                 "type": cfg.type,
                 "backend": cfg.backend,
                 "vram_estimate_gb": cfg.vram_estimate_gb,
+                "n_ctx": getattr(cfg, "n_ctx", None),
                 "last_active": manager.last_used.get(model_id, 0.0)
             })
             total_estimated_vram += cfg.vram_estimate_gb
@@ -111,8 +112,15 @@ async def get_status():
             "percentage": (total_estimated_vram / config.resource_limits.max_vram_gb * 100) if config.resource_limits.max_vram_gb > 0 else 0
         },
         "active_models": active_models,
+        "loading_status": manager.loading_status,
         "all_configured_models": [
-            {"id": m.id, "type": m.type, "backend": m.backend, "vram_estimate_gb": m.vram_estimate_gb}
+            {
+                "id": m.id,
+                "type": m.type,
+                "backend": m.backend,
+                "vram_estimate_gb": m.vram_estimate_gb,
+                "n_ctx": getattr(m, "n_ctx", None)
+            }
             for m in config.models
         ]
     }
@@ -142,6 +150,58 @@ async def list_models():
         "parent": None
     })
     return {"object": "list", "data": data}
+
+from typing import AsyncIterator
+
+async def stream_with_metrics(generator: AsyncIterator[bytes], model_id: str) -> AsyncIterator[bytes]:
+    start_time = time.time()
+    first_token_time = None
+    total_tokens = 0
+    accumulated_content = ""
+    
+    try:
+        async for chunk in generator:
+            try:
+                chunk_str = chunk.decode("utf-8")
+                for line in chunk_str.split("\n"):
+                    line = line.strip()
+                    if line.startswith("data: ") and not line.endswith("[DONE]"):
+                        data = json.loads(line[6:])
+                        choices = data.get("choices", [])
+                        if choices:
+                            delta = choices[0].get("delta", {})
+                            content = delta.get("content", "")
+                            if content:
+                                if first_token_time is None:
+                                    first_token_time = time.time()
+                                accumulated_content += content
+            except Exception:
+                pass
+                
+            yield chunk
+    except Exception as e:
+        print(f"Error streaming chat completion: {e}")
+        raise
+        
+    end_time = time.time()
+    wall_time = end_time - start_time
+    
+    if accumulated_content:
+        total_tokens = max(1, len(accumulated_content) // 4)
+        
+    tps = 0.0
+    if first_token_time is not None:
+        active_time = end_time - first_token_time
+        tps = total_tokens / active_time if active_time > 0 else 0.0
+        
+    metrics = {
+        "model": model_id,
+        "wall_time_sec": wall_time,
+        "completion_tokens": total_tokens,
+        "tokens_per_second": tps
+    }
+    
+    yield f"data: {json.dumps({'metrics': metrics})}\n\n".encode("utf-8")
 
 @app.post("/v1/chat/completions")
 async def chat_completions(request: Request):
@@ -181,7 +241,18 @@ async def chat_completions(request: Request):
             last_message_content = messages[-1].get("content", "") if messages else ""
             img_result = await backend.handle_image_generation({"prompt": last_message_content})
             b64_data = img_result["data"][0]["b64_json"]
-            markdown_content = f"Here is the image you requested for **\"{last_message_content}\"**:\n\n![Generated Image](data:image/png;base64,{b64_data})"
+            
+            # Save the image to the static generated assets folder
+            import uuid
+            img_filename = f"image_{uuid.uuid4().hex}.png"
+            img_dir = os.path.join("cerberai", "static", "generated")
+            os.makedirs(img_dir, exist_ok=True)
+            img_path = os.path.join(img_dir, img_filename)
+            with open(img_path, "wb") as fh:
+                fh.write(base64.b64decode(b64_data))
+            
+            static_url = f"/static/generated/{img_filename}"
+            markdown_content = f"Here is the image you requested for **\"{last_message_content}\"**:\n\n![Generated Image]({static_url})"
             
             chat_response = {
                 "id": f"chatcmpl-image-{int(time.time())}",
@@ -218,10 +289,18 @@ async def chat_completions(request: Request):
         try:
             last_message_content = messages[-1].get("content", "") if messages else ""
             audio_bytes = await backend.handle_audio_speech({"input": last_message_content})
-            b64_data = base64.b64encode(audio_bytes).decode('utf-8')
             
-            # Embed HTML5 Audio controls
-            markdown_content = f"Here is the spoken audio for **\"{last_message_content}\"**:\n\n<audio controls src=\"data:audio/mpeg;base64,{b64_data}\" style=\"width: 100%; margin-top: 8px;\"></audio>"
+            # Save audio to static generated assets folder
+            import uuid
+            audio_filename = f"audio_{uuid.uuid4().hex}.mp3"
+            img_dir = os.path.join("cerberai", "static", "generated")
+            os.makedirs(img_dir, exist_ok=True)
+            audio_path = os.path.join(img_dir, audio_filename)
+            with open(audio_path, "wb") as fh:
+                fh.write(audio_bytes)
+                
+            static_url = f"/static/generated/{audio_filename}"
+            markdown_content = f"Here is the spoken audio for **\"{last_message_content}\"**:\n\n<audio controls src=\"{static_url}\" style=\"width: 100%; margin-top: 8px;\"></audio>"
             
             chat_response = {
                 "id": f"chatcmpl-tts-{int(time.time())}",
@@ -284,6 +363,7 @@ async def chat_completions(request: Request):
 
     if tools_enabled and agent.tools and model_cfg and model_cfg.type == "llm":
         try:
+            start_time = time.time()
             sys_extension = agent.get_system_prompt_extension()
             local_messages = list(messages)
             
@@ -315,7 +395,6 @@ async def chat_completions(request: Request):
             local_payload["messages"] = local_messages
             local_payload["stream"] = False  # Disable streaming for intermediate agent reasoning steps
 
-            
             loop_limit = 5
             for step in range(loop_limit):
                 response = await backend.handle_chat_completion(local_payload)
@@ -337,39 +416,82 @@ async def chat_completions(request: Request):
                     continue
                 else:
                     # Final response reached!
+                    end_time = time.time()
+                    wall_time = end_time - start_time
+                    completion_tokens = 0
+                    if "usage" in response and "completion_tokens" in response["usage"]:
+                        completion_tokens = response["usage"]["completion_tokens"]
+                    else:
+                        completion_tokens = max(1, len(content) // 4)
+                        
+                    tps = completion_tokens / wall_time if wall_time > 0 else 0.0
+                    metrics = {
+                        "model": target_model_id,
+                        "wall_time_sec": wall_time,
+                        "completion_tokens": completion_tokens,
+                        "tokens_per_second": tps
+                    }
+                    
                     if stream:
                         async def stream_pregenerated():
                             yield f"data: {json.dumps({'choices': [{'delta': {'role': 'assistant', 'content': ''}, 'index': 0, 'finish_reason': None}]})}\n\n"
                             yield f"data: {json.dumps({'choices': [{'delta': {'content': content}, 'index': 0, 'finish_reason': None}]})}\n\n"
+                            yield f"data: {json.dumps({'metrics': metrics})}\n\n"
                             yield f"data: {json.dumps({'choices': [{'delta': {}, 'index': 0, 'finish_reason': 'stop'}]})}\n\n"
                             yield "data: [DONE]\n\n"
                         return StreamingResponse(stream_pregenerated(), media_type="text/event-stream")
                     else:
+                        response["metrics"] = metrics
                         return JSONResponse(content=response)
             
             # If loop limit exceeded, return last response
+            end_time = time.time()
+            wall_time = end_time - start_time
+            completion_tokens = max(1, len(content) // 4)
+            tps = completion_tokens / wall_time if wall_time > 0 else 0.0
+            response["metrics"] = {
+                "model": target_model_id,
+                "wall_time_sec": wall_time,
+                "completion_tokens": completion_tokens,
+                "tokens_per_second": tps
+            }
             return JSONResponse(content=response)
         except Exception as e:
             import traceback
             traceback.print_exc()
             raise HTTPException(status_code=500, detail=f"Agent loop error: {str(e)}")
 
-
     # 3. Execute completion (stream vs regular response)
-
-
-
     if stream:
         try:
             return StreamingResponse(
-                backend.stream_chat_completion(payload),
+                stream_with_metrics(backend.stream_chat_completion(payload), target_model_id),
                 media_type="text/event-stream"
             )
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"Streaming error: {str(e)}")
     else:
         try:
+            start_time = time.time()
             result = await backend.handle_chat_completion(payload)
+            end_time = time.time()
+            
+            wall_time = end_time - start_time
+            content = result["choices"][0]["message"]["content"]
+            completion_tokens = 0
+            if "usage" in result and "completion_tokens" in result["usage"]:
+                completion_tokens = result["usage"]["completion_tokens"]
+            else:
+                completion_tokens = max(1, len(content) // 4)
+                
+            tps = completion_tokens / wall_time if wall_time > 0 else 0.0
+            metrics = {
+                "model": target_model_id,
+                "wall_time_sec": wall_time,
+                "completion_tokens": completion_tokens,
+                "tokens_per_second": tps
+            }
+            result["metrics"] = metrics
             return JSONResponse(content=result)
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"Inference error: {str(e)}")
@@ -512,6 +634,56 @@ async def save_config(request: Request):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to save or reload config: {str(e)}")
 
+@app.get("/api/conversations")
+async def get_conversations_endpoint():
+    """List all stored conversations."""
+    from .conversations import list_conversations
+    try:
+        return JSONResponse(content=list_conversations())
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/conversations/{conv_id}")
+async def get_conversation_endpoint(conv_id: str):
+    """Retrieve full details of a specific conversation."""
+    from .conversations import get_conversation
+    conv = get_conversation(conv_id)
+    if not conv:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+    return JSONResponse(content=conv)
+
+@app.post("/api/conversations")
+async def create_conversation_endpoint(request: Request):
+    """Create a new conversation."""
+    from .conversations import create_conversation
+    try:
+        payload = await request.json()
+        title = payload.get("title", "New Chat")
+        conv = create_conversation(title)
+        return JSONResponse(content=conv)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/conversations/{conv_id}")
+async def update_conversation_endpoint(conv_id: str, request: Request):
+    """Update/save a conversation's messages and metadata."""
+    from .conversations import save_conversation
+    try:
+        data = await request.json()
+        if data.get("id") != conv_id:
+            raise HTTPException(status_code=400, detail="Conversation ID mismatch")
+        save_conversation(data)
+        return JSONResponse(content={"status": "success"})
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.delete("/api/conversations/{conv_id}")
+async def delete_conversation_endpoint(conv_id: str):
+    """Delete a conversation."""
+    from .conversations import delete_conversation
+    if delete_conversation(conv_id):
+        return JSONResponse(content={"status": "success"})
+    raise HTTPException(status_code=404, detail="Conversation not found")
 
 if __name__ == "__main__":
     uvicorn.run(
