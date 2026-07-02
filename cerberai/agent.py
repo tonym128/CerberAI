@@ -37,30 +37,92 @@ class AgentExecutor:
             "description": "web_search(query: str) - Search the web for information using DuckDuckGo.",
             "func": self.web_search_tool
         }
+        self.tools["web_fetch"] = {
+            "name": "web_fetch",
+            "description": "web_fetch(url: str) - Fetch the clean readable text content of a specific web page/URL.",
+            "func": self.web_fetch_tool
+        }
 
-    async def web_search_tool(self, query: str) -> str:
-        """Query Mojeek search page and parse top results."""
-        import html
-        url = f"https://www.mojeek.com/search?q={urllib.parse.quote(query)}"
+    async def web_fetch_tool(self, url: str) -> str:
+        """Fetch the content of a specific web page and return the stripped clean text."""
         headers = {
             "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36"
         }
         try:
-            async with httpx.AsyncClient(headers=headers, timeout=10.0, follow_redirects=True) as client:
+            # Add protocol prefix if missing
+            if not url.startswith("http://") and not url.startswith("https://"):
+                url = "https://" + url
+
+            async with httpx.AsyncClient(headers=headers, timeout=15.0, follow_redirects=True) as client:
+                response = await client.get(url)
+                if response.status_code != 200:
+                    return f"Error: Failed to fetch page. HTTP Status Code {response.status_code}"
+                
+                html_content = response.text
+                
+                # Strip style and script elements completely
+                html_content = re.sub(r'<style[^>]*>.*?</style>', '', html_content, flags=re.DOTALL | re.IGNORECASE)
+                html_content = re.sub(r'<script[^>]*>.*?</script>', '', html_content, flags=re.DOTALL | re.IGNORECASE)
+                
+                # Strip all other HTML tags
+                import html
+                text = re.sub(r'<[^>]+>', ' ', html_content)
+                
+                # Unescape HTML entities
+                text = html.unescape(text)
+                
+                # Normalize whitespace
+                lines = [line.strip() for line in text.splitlines()]
+                chunks = (phrase.strip() for line in lines for phrase in line.split("  "))
+                clean_text = "\n".join(chunk for chunk in chunks if chunk)
+                
+                # Truncate content to avoid exceeding context window
+                limit = 15000
+                if len(clean_text) > limit:
+                    return clean_text[:limit] + f"\n\n... (Content truncated: {len(clean_text) - limit} characters remaining)"
+                
+                if not clean_text.strip():
+                    return "Page fetched successfully, but no readable text content was found."
+                
+                return clean_text
+        except Exception as e:
+            return f"Fetch error: {e}"
+
+    async def web_search_tool(self, query: str) -> str:
+        """Query DuckDuckGo HTML search page and parse top results."""
+        import html
+        url = f"https://html.duckduckgo.com/html/?q={urllib.parse.quote(query)}"
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
+            "Accept-Language": "en-US,en;q=0.5"
+        }
+        try:
+            async with httpx.AsyncClient(headers=headers, timeout=12.0, follow_redirects=True) as client:
                 response = await client.get(url)
                 if response.status_code != 200:
                     return f"Error: Search returned HTTP {response.status_code}"
                 
                 html_content = response.text
-                # Extract titles and snippets using Mojeek class selectors
-                titles = re.findall(r'<a class="title"[^>]*>(.*?)</a>', html_content, re.DOTALL)
-                snippets = re.findall(r'<p class="s">(.*?)</p>', html_content, re.DOTALL)
+                
+                # Parse titles, snippets, and raw redirect links
+                titles = re.findall(r'<a[^>]*class="result__a"[^>]*>(.*?)</a>', html_content, re.DOTALL)
+                snippets = re.findall(r'<a[^>]*class="result__snippet"[^>]*>(.*?)</a>', html_content, re.DOTALL)
+                raw_links = re.findall(r'<a[^>]*class="result__a"[^>]*href="([^"]+)"', html_content, re.DOTALL)
                 
                 results = []
-                for i, (title, snippet) in enumerate(zip(titles[:5], snippets[:5])):
+                for i, (title, snippet, raw_link) in enumerate(zip(titles[:5], snippets[:5], raw_links[:5])):
                     clean_title = html.unescape(re.sub(r'<[^>]+>', '', title).strip())
                     clean_snippet = html.unescape(re.sub(r'<[^>]+>', '', snippet).strip())
-                    results.append(f"{i+1}. {clean_title}\nSnippet: {clean_snippet}\n")
+                    
+                    # Resolve actual URL from uddg param
+                    real_url = raw_link
+                    if "uddg=" in raw_link:
+                        match = re.search(r'uddg=([^&]+)', raw_link)
+                        if match:
+                            real_url = urllib.parse.unquote(match.group(1))
+                    
+                    results.append(f"{i+1}. {clean_title}\nSnippet: {clean_snippet}\nSource: {real_url}\n")
                     
                 if not results:
                     return "No search results found."
