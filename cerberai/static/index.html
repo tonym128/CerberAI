@@ -154,6 +154,103 @@
                     </div>
                 </div>
             </div>
+            
+            <!-- Deep Research Agent (Collapsible) -->
+            <div class="collapsible-header collapsed" onclick="toggleSection(this)">
+                <span>🔬 Deep Research Agent</span>
+                <span class="chevron">▶</span>
+            </div>
+            <div class="collapsible-content collapsed">
+                <div class="automation-card" style="margin-bottom: 12px;">
+                    <p class="auto-description" style="font-size: 11px;">Runs a recursive multi-step web search and fetching loop to synthesize an exhaustive, cited markdown research report and a formatted PDF.</p>
+                    
+                    <div style="margin-bottom: 12px; display: flex; flex-direction: column; gap: 8px;">
+                        <div style="display: flex; flex-direction: column; gap: 4px;">
+                            <label for="research-query" style="font-size: 10px; font-weight: 600; color: var(--text-secondary);">Research Query / Topic</label>
+                            <input type="text" id="research-query" placeholder="e.g. room-temperature superconductivity 2026" style="padding: 6px 10px; border-radius: 6px; border: 1px solid var(--border-color); background: rgba(0,0,0,0.2); color: var(--text-primary); font-size: 11px; outline: none; width: 100%;">
+                        </div>
+                    </div>
+                    
+                    <div style="display: flex; gap: 8px; width: 100%;">
+                        <button type="button" id="btn-start-research" class="btn btn-primary" style="flex-grow: 1; font-size: 11px; padding: 8px;">Start Research</button>
+                        <button type="button" id="btn-research-history" class="btn btn-secondary" style="padding: 0 10px; display: flex; align-items: center; justify-content: center; font-size: 11px;" title="View Report History">📋 History</button>
+                    </div>
+                    
+                    <div id="research-status-container" class="status-container hidden" style="margin-top: 10px;">
+                        <div class="progress-bar-bg">
+                            <div id="research-progress" class="progress-bar" style="width: 0%"></div>
+                        </div>
+                        <span id="research-status-msg" class="status-msg" style="font-size: 10px; color: var(--text-secondary); display: block; margin-top: 4px;">Starting...</span>
+                    </div>
+                    
+                    <div id="research-result-container" class="hidden" style="margin-top: 12px; border-top: 1px solid var(--border-color); padding-top: 10px; display: flex; flex-direction: column; gap: 8px;">
+                        <h4 style="font-size: 10px; font-weight: 600; color: var(--text-secondary); margin: 0; text-transform: uppercase;">Latest Research Report</h4>
+                        <div style="display: flex; gap: 6px;">
+                            <a id="link-research-md" href="#" target="_blank" class="btn btn-secondary" style="flex-grow: 1; font-size: 10px; padding: 6px; text-align: center; text-decoration: none;">📄 View Markdown</a>
+                            <a id="link-research-pdf" href="#" target="_blank" class="btn btn-primary" style="flex-grow: 1; font-size: 10px; padding: 6px; text-align: center; text-decoration: none;">📥 Download PDF</a>
+                        </div>
+                    </div>
+                    
+                    <div id="research-history-container" class="hidden" style="margin-top: 12px; border-top: 1px solid var(--border-color); padding-top: 12px;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                            <h4 style="font-size: 10px; font-weight: 600; color: var(--text-secondary); margin: 0; text-transform: uppercase; letter-spacing: 0.5px;">Report History</h4>
+                            <button type="button" id="btn-close-research-history" style="background: none; border: none; color: var(--text-secondary); cursor: pointer; font-size: 14px; padding: 0; line-height: 1;">&times;</button>
+                        </div>
+                        <div id="research-history-list" style="display: flex; flex-direction: column; gap: 6px; padding-right: 4px;">
+                            <!-- Populated dynamically -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Daily Podcast Briefing (Collapsible) -->
+            <div class="collapsible-header collapsed" onclick="toggleSection(this)">
+                <span>🎙️ Daily Podcast Briefing</span>
+                <span class="chevron">▶</span>
+            </div>
+            <div class="collapsible-content collapsed">
+                <div class="automation-card" style="margin-bottom: 12px;">
+                    <p class="auto-description" style="font-size: 11px;">Generates a multi-speaker audio news briefing (featuring Alex & Taylor) using local LLM scriptwriting and Kokoro TTS voice synthesis.</p>
+                    
+                    <div style="margin-bottom: 12px; display: flex; flex-direction: column; gap: 8px;">
+                        <div style="display: flex; flex-direction: column; gap: 4px;">
+                            <label for="podcast-topic" style="font-size: 10px; font-weight: 600; color: var(--text-secondary);">Custom Topic (Optional)</label>
+                            <input type="text" id="podcast-topic" placeholder="e.g. Technology" style="padding: 6px 10px; border-radius: 6px; border: 1px solid var(--border-color); background: rgba(0,0,0,0.2); color: var(--text-primary); font-size: 11px; outline: none; width: 100%;">
+                        </div>
+                        <div style="display: flex; flex-direction: column; gap: 4px;">
+                            <label for="podcast-date" style="font-size: 10px; font-weight: 600; color: var(--text-secondary);">Target Date (Optional)</label>
+                            <input type="date" id="podcast-date" style="padding: 6px 10px; border-radius: 6px; border: 1px solid var(--border-color); background: rgba(0,0,0,0.2); color: var(--text-primary); font-size: 11px; outline: none; width: 100%;">
+                        </div>
+                    </div>
+                    
+                    <div style="display: flex; gap: 8px; width: 100%;">
+                        <button type="button" id="btn-start-podcast" class="btn btn-primary" style="flex-grow: 1; font-size: 11px; padding: 8px;">Generate Podcast</button>
+                        <button type="button" id="btn-podcast-history" class="btn btn-secondary" style="padding: 0 10px; display: flex; align-items: center; justify-content: center; font-size: 11px;" title="View Podcast History">📋 History</button>
+                    </div>
+                    
+                    <div id="podcast-status-container" class="status-container hidden" style="margin-top: 10px;">
+                        <div class="progress-bar-bg">
+                            <div id="podcast-progress" class="progress-bar" style="width: 0%"></div>
+                        </div>
+                        <span id="podcast-status-msg" class="status-msg" style="font-size: 10px; color: var(--text-secondary); display: block; margin-top: 4px;">Starting...</span>
+                    </div>
+                    
+                    <div id="podcast-player-container" class="hidden" style="margin-top: 12px; border-top: 1px solid var(--border-color); padding-top: 10px; display: flex; flex-direction: column; gap: 6px;">
+                        <h4 style="font-size: 10px; font-weight: 600; color: var(--text-secondary); margin: 0; text-transform: uppercase;">Latest Briefing Audio</h4>
+                        <audio id="podcast-audio-player" controls class="w-full" style="margin-top: 4px; height: 36px;"></audio>
+                    </div>
+                    
+                    <div id="podcast-history-container" class="hidden" style="margin-top: 12px; border-top: 1px solid var(--border-color); padding-top: 12px;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                            <h4 style="font-size: 10px; font-weight: 600; color: var(--text-secondary); margin: 0; text-transform: uppercase; letter-spacing: 0.5px;">Podcast History</h4>
+                            <button type="button" id="btn-close-podcast-history" style="background: none; border: none; color: var(--text-secondary); cursor: pointer; font-size: 14px; padding: 0; line-height: 1;">&times;</button>
+                        </div>
+                        <div id="podcast-history-list" style="display: flex; flex-direction: column; gap: 6px; padding-right: 4px;">
+                            <!-- Populated dynamically -->
+                        </div>
+                    </div>
+                </div>
+            </div>
 
             <!-- Scheduled Automations (Collapsible) -->
             <div class="collapsible-header collapsed" onclick="toggleSection(this)">
@@ -415,6 +512,6 @@
 
     <!-- MarkDown and Code Highlight Plugins (Using public CDNs) -->
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
-    <script src="/static/app.js?v=2"></script>
+    <script src="/static/app.js?v=3"></script>
 </body>
 </html>

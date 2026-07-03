@@ -37,5 +37,7 @@ cerberai/static/telegram_history.json
 
 # Generated Frontend Assets / Images
 cerberai/static/generated/
-cerberai/static/videos
+cerberai/static/videos/
+cerberai/static/reports/
+cerberai/static/podcasts/
 

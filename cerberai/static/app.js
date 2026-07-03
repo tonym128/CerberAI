@@ -858,6 +858,366 @@ if (btnNewsVideo) {
     checkAutomationStatus();
 }
 
+// Deep Research Agent
+const btnStartResearch = document.getElementById("btn-start-research");
+const researchStatusContainer = document.getElementById("research-status-container");
+const researchProgress = document.getElementById("research-progress");
+const researchStatusMsg = document.getElementById("research-status-msg");
+const researchResultContainer = document.getElementById("research-result-container");
+const linkResearchMd = document.getElementById("link-research-md");
+const linkResearchPdf = document.getElementById("link-research-pdf");
+
+const btnResearchHistory = document.getElementById("btn-research-history");
+const researchHistoryContainer = document.getElementById("research-history-container");
+const researchHistoryList = document.getElementById("research-history-list");
+const btnCloseResearchHistory = document.getElementById("btn-close-research-history");
+
+if (btnStartResearch) {
+    let researchPollInterval = null;
+
+    const checkResearchStatus = async () => {
+        try {
+            const res = await fetch("/v1/automate/deep-research/status");
+            if (!res.ok) return;
+            const data = await res.json();
+
+            if (data.status === "running") {
+                btnStartResearch.disabled = true;
+                btnStartResearch.textContent = "Researching...";
+                researchStatusContainer.classList.remove("hidden");
+                researchProgress.style.width = `${data.progress}%`;
+                researchStatusMsg.textContent = data.message;
+                
+                // If pollInterval is not active, start it
+                if (!researchPollInterval) {
+                    researchPollInterval = setInterval(checkResearchStatus, 2500);
+                }
+            } else if (data.status === "success") {
+                if (researchPollInterval) {
+                    clearInterval(researchPollInterval);
+                    researchPollInterval = null;
+                }
+                btnStartResearch.disabled = false;
+                btnStartResearch.textContent = "Start Research";
+                researchStatusContainer.classList.add("hidden");
+                
+                linkResearchMd.href = data.report_url;
+                linkResearchPdf.href = data.pdf_url;
+                researchResultContainer.classList.remove("hidden");
+
+                // Refresh history list if it is currently open
+                if (researchHistoryContainer && !researchHistoryContainer.classList.contains("hidden")) {
+                    fetchResearchHistory();
+                }
+            } else if (data.status === "failed") {
+                if (researchPollInterval) {
+                    clearInterval(researchPollInterval);
+                    researchPollInterval = null;
+                }
+                btnStartResearch.disabled = false;
+                btnStartResearch.textContent = "Start Research";
+                researchStatusContainer.classList.add("hidden");
+                alert(`Research failed: ${data.message}`);
+            }
+        } catch (err) {
+            console.error("Research status check failed", err);
+        }
+    };
+
+    btnStartResearch.addEventListener("click", async () => {
+        console.log("Start Research button clicked!");
+        const queryInput = document.getElementById("research-query");
+        if (!queryInput || !queryInput.value || !queryInput.value.trim()) {
+            alert("Please enter a research topic or query first.");
+            return;
+        }
+
+        btnStartResearch.disabled = true;
+        btnStartResearch.textContent = "Initiating...";
+        researchStatusContainer.classList.remove("hidden");
+        researchResultContainer.classList.add("hidden");
+        researchProgress.style.width = "0%";
+        researchStatusMsg.textContent = "Starting deep research agent...";
+
+        try {
+            const res = await fetch("/v1/automate/deep-research", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify({ query: queryInput.value.trim() })
+            });
+            if (!res.ok) throw new Error("Could not start research task");
+            
+            // Start polling status
+            researchPollInterval = setInterval(checkResearchStatus, 2500);
+        } catch (err) {
+            alert(`Failed to start deep research: ${err.message}`);
+            btnStartResearch.disabled = false;
+            btnStartResearch.textContent = "Start Research";
+            researchStatusContainer.classList.add("hidden");
+        }
+    });
+
+    if (btnResearchHistory && researchHistoryContainer) {
+        btnResearchHistory.addEventListener("click", () => {
+            const isHidden = researchHistoryContainer.classList.toggle("hidden");
+            if (!isHidden) {
+                fetchResearchHistory();
+            }
+        });
+    }
+
+    if (btnCloseResearchHistory && researchHistoryContainer) {
+        btnCloseResearchHistory.addEventListener("click", () => {
+            researchHistoryContainer.classList.add("hidden");
+        });
+    }
+
+    async function fetchResearchHistory() {
+        if (!researchHistoryList) return;
+        try {
+            const res = await fetch("/v1/automate/deep-research/history");
+            if (!res.ok) throw new Error("Failed to fetch history");
+            const data = await res.json();
+            
+            researchHistoryList.innerHTML = "";
+            if (data.length === 0) {
+                researchHistoryList.innerHTML = `<div style="font-size: 11px; color: var(--text-secondary); text-align: center; padding: 10px 0;">No reports found.</div>`;
+                return;
+            }
+            
+            data.forEach(item => {
+                const el = document.createElement("div");
+                el.style.cssText = `
+                    background: rgba(255, 255, 255, 0.03);
+                    border: 1px solid var(--border-color);
+                    border-radius: 6px;
+                    padding: 8px;
+                    transition: background 0.2s, border-color 0.2s;
+                    display: flex;
+                    flex-direction: column;
+                    gap: 6px;
+                    margin-bottom: 2px;
+                `;
+                
+                el.innerHTML = `
+                    <div style="font-size: 11px; font-weight: 600; color: var(--text-primary); text-overflow: ellipsis; overflow: hidden; white-space: nowrap;" title="${item.query}">
+                        🔬 ${item.query}
+                    </div>
+                    <div style="display: flex; gap: 4px; align-items: center; justify-content: space-between;">
+                        <span style="font-size: 9px; color: var(--text-secondary);">${item.timestamp.split(" ")[0]}</span>
+                        <div style="display: flex; gap: 4px;">
+                            <a href="${item.report_url}" target="_blank" style="font-size: 9px; color: var(--text-secondary); text-decoration: none; padding: 2px 4px; background: rgba(255,255,255,0.05); border: 1px solid var(--border-color); border-radius: 4px;">MD</a>
+                            <a href="${item.pdf_url}" target="_blank" style="font-size: 9px; color: var(--primary); text-decoration: none; padding: 2px 4px; background: rgba(139, 92, 246, 0.1); border: 1px solid rgba(139, 92, 246, 0.3); border-radius: 4px; font-weight: 600;">PDF</a>
+                        </div>
+                    </div>
+                `;
+                
+                el.addEventListener("mouseenter", () => {
+                    el.style.background = "rgba(255, 255, 255, 0.08)";
+                    el.style.borderColor = "var(--primary)";
+                });
+                el.addEventListener("mouseleave", () => {
+                    el.style.background = "rgba(255, 255, 255, 0.03)";
+                    el.style.borderColor = "var(--border-color)";
+                });
+                
+                researchHistoryList.appendChild(el);
+            });
+        } catch (err) {
+            researchHistoryList.innerHTML = `<div style="font-size: 11px; color: var(--accent-red); text-align: center; padding: 10px 0;">Error: ${err.message}</div>`;
+        }
+    }
+
+    // Check status on load in case a task is already running
+    checkResearchStatus();
+}
+
+// Daily Podcast Briefing Agent
+const btnStartPodcast = document.getElementById("btn-start-podcast");
+const podcastStatusContainer = document.getElementById("podcast-status-container");
+const podcastProgress = document.getElementById("podcast-progress");
+const podcastStatusMsg = document.getElementById("podcast-status-msg");
+const podcastPlayerContainer = document.getElementById("podcast-player-container");
+const podcastAudioPlayer = document.getElementById("podcast-audio-player");
+
+const btnPodcastHistory = document.getElementById("btn-podcast-history");
+const podcastHistoryContainer = document.getElementById("podcast-history-container");
+const podcastHistoryList = document.getElementById("podcast-history-list");
+const btnClosePodcastHistory = document.getElementById("btn-close-podcast-history");
+
+if (btnStartPodcast) {
+    let podcastPollInterval = null;
+
+    const checkPodcastStatus = async () => {
+        try {
+            const res = await fetch("/v1/automate/podcast/status");
+            if (!res.ok) return;
+            const data = await res.json();
+
+            if (data.status === "running") {
+                btnStartPodcast.disabled = true;
+                btnStartPodcast.textContent = "Generating...";
+                podcastStatusContainer.classList.remove("hidden");
+                podcastProgress.style.width = `${data.progress}%`;
+                podcastStatusMsg.textContent = data.message;
+                
+                // If pollInterval is not active, start it
+                if (!podcastPollInterval) {
+                    podcastPollInterval = setInterval(checkPodcastStatus, 2500);
+                }
+            } else if (data.status === "success") {
+                if (podcastPollInterval) {
+                    clearInterval(podcastPollInterval);
+                    podcastPollInterval = null;
+                }
+                btnStartPodcast.disabled = false;
+                btnStartPodcast.textContent = "Generate Podcast";
+                podcastStatusContainer.classList.add("hidden");
+                
+                podcastAudioPlayer.src = `${data.podcast_url}?t=${Date.now()}`;
+                podcastPlayerContainer.classList.remove("hidden");
+                podcastAudioPlayer.load();
+
+                // Refresh history list if open
+                if (podcastHistoryContainer && !podcastHistoryContainer.classList.contains("hidden")) {
+                    fetchPodcastHistory();
+                }
+            } else if (data.status === "failed") {
+                if (podcastPollInterval) {
+                    clearInterval(podcastPollInterval);
+                    podcastPollInterval = null;
+                }
+                btnStartPodcast.disabled = false;
+                btnStartPodcast.textContent = "Generate Podcast";
+                podcastStatusContainer.classList.add("hidden");
+                alert(`Podcast briefing failed: ${data.message}`);
+            }
+        } catch (err) {
+            console.error("Podcast status check failed", err);
+        }
+    };
+
+    btnStartPodcast.addEventListener("click", async () => {
+        console.log("Start Podcast button clicked!");
+        btnStartPodcast.disabled = true;
+        btnStartPodcast.textContent = "Initiating...";
+        podcastStatusContainer.classList.remove("hidden");
+        podcastPlayerContainer.classList.add("hidden");
+        podcastProgress.style.width = "0%";
+        podcastStatusMsg.textContent = "Starting daily news podcast generator...";
+
+        const topicInput = document.getElementById("podcast-topic");
+        const dateInput = document.getElementById("podcast-date");
+        const payload = {};
+        if (topicInput && topicInput.value && topicInput.value.trim()) {
+            payload.topic = topicInput.value.trim();
+        }
+        if (dateInput && dateInput.value) {
+            payload.date = dateInput.value;
+        }
+
+        try {
+            const res = await fetch("/v1/automate/podcast", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify(payload)
+            });
+            if (!res.ok) throw new Error("Could not start podcast briefing");
+            
+            // Start polling status
+            podcastPollInterval = setInterval(checkPodcastStatus, 2500);
+        } catch (err) {
+            alert(`Failed to start podcast generation: ${err.message}`);
+            btnStartPodcast.disabled = false;
+            btnStartPodcast.textContent = "Generate Podcast";
+            podcastStatusContainer.classList.add("hidden");
+        }
+    });
+
+    if (btnPodcastHistory && podcastHistoryContainer) {
+        btnPodcastHistory.addEventListener("click", () => {
+            const isHidden = podcastHistoryContainer.classList.toggle("hidden");
+            if (!isHidden) {
+                fetchPodcastHistory();
+            }
+        });
+    }
+
+    if (btnClosePodcastHistory && podcastHistoryContainer) {
+        btnClosePodcastHistory.addEventListener("click", () => {
+            podcastHistoryContainer.classList.add("hidden");
+        });
+    }
+
+    async function fetchPodcastHistory() {
+        if (!podcastHistoryList) return;
+        try {
+            const res = await fetch("/v1/automate/podcast/history");
+            if (!res.ok) throw new Error("Failed to fetch history");
+            const data = await res.json();
+            
+            podcastHistoryList.innerHTML = "";
+            if (data.length === 0) {
+                podcastHistoryList.innerHTML = `<div style="font-size: 11px; color: var(--text-secondary); text-align: center; padding: 10px 0;">No podcasts found.</div>`;
+                return;
+            }
+            
+            data.forEach(item => {
+                const el = document.createElement("div");
+                el.style.cssText = `
+                    background: rgba(255, 255, 255, 0.03);
+                    border: 1px solid var(--border-color);
+                    border-radius: 6px;
+                    padding: 8px;
+                    cursor: pointer;
+                    transition: background 0.2s, border-color 0.2s;
+                    display: flex;
+                    flex-direction: column;
+                    gap: 4px;
+                    margin-bottom: 2px;
+                `;
+                
+                el.innerHTML = `
+                    <div style="font-size: 11px; font-weight: 600; color: var(--text-primary); text-overflow: ellipsis; overflow: hidden; white-space: nowrap;" title="${item.query}">
+                        🎙️ ${item.query}
+                    </div>
+                    <div style="font-size: 9px; color: var(--text-secondary); display: flex; justify-content: space-between;">
+                        <span>${item.timestamp.split(" ")[0]}</span>
+                        <span style="color: var(--primary); font-weight: 600;">Play Audio</span>
+                    </div>
+                `;
+                
+                el.addEventListener("mouseenter", () => {
+                    el.style.background = "rgba(255, 255, 255, 0.08)";
+                    el.style.borderColor = "var(--primary)";
+                });
+                el.addEventListener("mouseleave", () => {
+                    el.style.background = "rgba(255, 255, 255, 0.03)";
+                    el.style.borderColor = "var(--border-color)";
+                });
+                
+                el.addEventListener("click", () => {
+                    podcastAudioPlayer.src = `${item.podcast_url}?t=${Date.now()}`;
+                    podcastPlayerContainer.classList.remove("hidden");
+                    podcastAudioPlayer.load();
+                    podcastAudioPlayer.play().catch(err => console.log("Auto-play blocked:", err));
+                });
+                
+                podcastHistoryList.appendChild(el);
+            });
+        } catch (err) {
+            podcastHistoryList.innerHTML = `<div style="font-size: 11px; color: var(--accent-red); text-align: center; padding: 10px 0;">Error: ${err.message}</div>`;
+        }
+    }
+
+    // Check status on load in case a task is already running
+    checkPodcastStatus();
+}
+
 // ==========================================================================
 // SETUP MODAL OPERATIONS
 // ==========================================================================

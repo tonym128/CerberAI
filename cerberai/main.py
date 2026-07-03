@@ -667,6 +667,97 @@ async def get_news_video_history():
         return JSONResponse(content=data)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to read history: {str(e)}")
+
+
+@app.post("/v1/automate/deep-research")
+async def start_deep_research_automation(request: Request, background_tasks: BackgroundTasks):
+    """Trigger the recursive deep research report workflow in the background."""
+    from .automation import generate_deep_research_report, get_research_status, update_research_status
+    
+    current_status = get_research_status()
+    if current_status["status"] == "running":
+        return JSONResponse(content={"message": "Research task is already running.", "status": current_status})
+        
+    query = None
+    try:
+        payload = await request.json()
+        query = payload.get("query")
+    except Exception:
+        pass
+        
+    if not query:
+        raise HTTPException(status_code=400, detail="Query parameter is required.")
+        
+    update_research_status("running", 0, "Initializing deep research agent loop...", query=query)
+    background_tasks.add_task(generate_deep_research_report, manager, agent, query)
+    return JSONResponse(content={"message": "Deep Research automation started.", "status": get_research_status()})
+
+@app.get("/v1/automate/deep-research/status")
+async def get_deep_research_status_endpoint():
+    """Retrieve the real-time status of the deep research task."""
+    from .automation import get_research_status
+    return JSONResponse(content=get_research_status())
+
+@app.get("/v1/automate/deep-research/history")
+async def get_deep_research_history():
+    """Retrieve the history list of generated deep research reports."""
+    import json
+    from pathlib import Path
+    history_path = Path("cerberai/static/reports/history.json")
+    if not history_path.exists():
+        return JSONResponse(content=[])
+    try:
+        with open(history_path, "r") as f:
+            data = json.load(f)
+        return JSONResponse(content=data)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to read history: {str(e)}")
+
+
+@app.post("/v1/automate/podcast")
+async def start_podcast_automation(request: Request, background_tasks: BackgroundTasks):
+    """Trigger the daily podcast news briefing generation in the background."""
+    from .automation import generate_daily_podcast, get_podcast_status, update_podcast_status
+    
+    current_status = get_podcast_status()
+    if current_status["status"] == "running":
+        return JSONResponse(content={"message": "Podcast briefing task is already running.", "status": current_status})
+        
+    topic = None
+    date_str = None
+    try:
+        payload = await request.json()
+        topic = payload.get("topic")
+        date_str = payload.get("date")
+    except Exception:
+        pass
+        
+    update_podcast_status("running", 0, "Initializing multi-speaker podcast generation...", query=topic)
+    background_tasks.add_task(generate_daily_podcast, manager, agent, topic, date_str)
+    return JSONResponse(content={"message": "Podcast briefing automation started.", "status": get_podcast_status()})
+
+@app.get("/v1/automate/podcast/status")
+async def get_podcast_status_endpoint():
+    """Retrieve the real-time status of the podcast briefing generation."""
+    from .automation import get_podcast_status
+    return JSONResponse(content=get_podcast_status())
+
+@app.get("/v1/automate/podcast/history")
+async def get_podcast_history():
+    """Retrieve the history list of generated podcasts."""
+    import json
+    from pathlib import Path
+    history_path = Path("cerberai/static/podcasts/history.json")
+    if not history_path.exists():
+        return JSONResponse(content=[])
+    try:
+        with open(history_path, "r") as f:
+            data = json.load(f)
+        return JSONResponse(content=data)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to read history: {str(e)}")
+
+
 @app.get("/api/schedules")
 async def get_schedules_endpoint():
     """List all configured daily schedules."""

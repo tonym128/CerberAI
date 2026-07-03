@@ -89,7 +89,7 @@ class AgentExecutor:
             return f"Fetch error: {e}"
 
     async def web_search_tool(self, query: str) -> str:
-        """Query DuckDuckGo HTML search page and parse top results."""
+        """Query DuckDuckGo HTML search page and parse top results, falling back to Wikipedia if blocked."""
         import html
         url = f"https://html.duckduckgo.com/html/?q={urllib.parse.quote(query)}"
         headers = {
@@ -100,33 +100,85 @@ class AgentExecutor:
         try:
             async with httpx.AsyncClient(headers=headers, timeout=12.0, follow_redirects=True) as client:
                 response = await client.get(url)
-                if response.status_code != 200:
-                    return f"Error: Search returned HTTP {response.status_code}"
                 
-                html_content = response.text
-                
-                # Parse titles, snippets, and raw redirect links
-                titles = re.findall(r'<a[^>]*class="result__a"[^>]*>(.*?)</a>', html_content, re.DOTALL)
-                snippets = re.findall(r'<a[^>]*class="result__snippet"[^>]*>(.*?)</a>', html_content, re.DOTALL)
-                raw_links = re.findall(r'<a[^>]*class="result__a"[^>]*href="([^"]+)"', html_content, re.DOTALL)
-                
-                results = []
-                for i, (title, snippet, raw_link) in enumerate(zip(titles[:5], snippets[:5], raw_links[:5])):
-                    clean_title = html.unescape(re.sub(r'<[^>]+>', '', title).strip())
-                    clean_snippet = html.unescape(re.sub(r'<[^>]+>', '', snippet).strip())
+                # Check if we got a valid non-blocked page
+                if response.status_code == 200 and "anomaly-modal" not in response.text:
+                    html_content = response.text
                     
-                    # Resolve actual URL from uddg param
-                    real_url = raw_link
-                    if "uddg=" in raw_link:
-                        match = re.search(r'uddg=([^&]+)', raw_link)
-                        if match:
-                            real_url = urllib.parse.unquote(match.group(1))
+                    titles = re.findall(r'<a[^>]*class="result__a"[^>]*>(.*?)</a>', html_content, re.DOTALL)
+                    snippets = re.findall(r'<a[^>]*class="result__snippet"[^>]*>(.*?)</a>', html_content, re.DOTALL)
+                    raw_links = re.findall(r'<a[^>]*class="result__a"[^>]*href="([^"]+)"', html_content, re.DOTALL)
                     
-                    results.append(f"{i+1}. {clean_title}\nSnippet: {clean_snippet}\nSource: {real_url}\n")
-                    
-                if not results:
-                    return "No search results found."
-                return "\n".join(results)
+                    results = []
+                    for i, (title, snippet, raw_link) in enumerate(zip(titles[:5], snippets[:5], raw_links[:5])):
+                        clean_title = html.unescape(re.sub(r'<[^>]+>', '', title).strip())
+                        clean_snippet = html.unescape(re.sub(r'<[^>]+>', '', snippet).strip())
+                        
+                        # Resolve actual URL from uddg param
+                        real_url = raw_link
+                        if "uddg=" in raw_link:
+                            match = re.search(r'uddg=([^&]+)', raw_link)
+                            if match:
+                                real_url = urllib.parse.unquote(match.group(1))
+                        
+                        results.append(f"{i+1}. {clean_title}\nSnippet: {clean_snippet}\nSource: {real_url}\n")
+                        
+                    if results:
+                        return "\n".join(results)
+
+                # Fallback 1: Try DuckDuckGo Instant Answer API first (no CAPTCHA)
+                print("DuckDuckGo HTML search challenge encountered. Trying DuckDuckGo Instant Answer API...")
+                ddg_api_url = f"https://api.duckduckgo.com/?q={urllib.parse.quote(query)}&format=json"
+                try:
+                    async with httpx.AsyncClient(timeout=10.0) as api_client:
+                        api_res = await api_client.get(ddg_api_url)
+                        if api_res.status_code in (200, 202):
+                            api_data = api_res.json()
+                            api_results = []
+                            abstract = api_data.get("AbstractText", "")
+                            if abstract:
+                                source_name = api_data.get("AbstractSource", "DuckDuckGo")
+                                source_url = api_data.get("AbstractURL", "")
+                                api_results.append(f"1. Abstract Summary: {abstract}\nSource: {source_url} ({source_name})\n")
+                            
+                            # Append related topics
+                            related = api_data.get("RelatedTopics", [])
+                            count = 0
+                            for item in related:
+                                if count >= 4:
+                                    break
+                                text = item.get("Text")
+                                url = item.get("FirstURL")
+                                if text and url:
+                                    api_results.append(f"{len(api_results)+1}. {text}\nSource: {url}\n")
+                                    count += 1
+                                    
+                            if api_results:
+                                return "\n".join(api_results)
+                except Exception as api_err:
+                    print(f"DuckDuckGo Instant Answer API check failed: {api_err}")
+
+                # Fallback 2: Wikipedia API search if DuckDuckGo triggers CAPTCHA or errors
+                print("Falling back to Wikipedia API...")
+                wiki_api_url = f"https://en.wikipedia.org/w/api.php?action=query&list=search&srsearch={urllib.parse.quote(query)}&format=json"
+                wiki_headers = {
+                    "User-Agent": "CerberAI/1.0 (tonym@example.com)"
+                }
+                async with httpx.AsyncClient(headers=wiki_headers, timeout=10.0) as wiki_client:
+                    wiki_res = await wiki_client.get(wiki_api_url)
+                    if wiki_res.status_code == 200:
+                        data = wiki_res.json()
+                        search_results = data.get("query", {}).get("search", [])
+                        results = []
+                        for idx, r in enumerate(search_results[:5]):
+                            title = r.get("title", "")
+                            snippet = html.unescape(re.sub(r'<[^>]+>', '', r.get("snippet", "")).strip())
+                            page_url = f"https://en.wikipedia.org/wiki/{urllib.parse.quote(title)}"
+                            results.append(f"{idx+1}. {title}\nSnippet: {snippet}\nSource: {page_url}\n")
+                        if results:
+                            return "\n".join(results)
+                            
+                return "Error: Search challenge encountered and all fallbacks (DuckDuckGo Instant Answer & Wikipedia) returned no results."
         except Exception as e:
             return f"Search error: {e}"
 

@@ -437,3 +437,590 @@ async def generate_yesterday_news_video(manager, agent, topic: str = None, date_
     else:
         update_status("failed", 0, "Video stitch failed: output file was not created.")
         print("Breaking News video generation failed.")
+
+
+# ==========================================================================
+# RECURSIVE DEEP RESEARCH AGENT
+# ==========================================================================
+
+research_status = {
+    "status": "idle",
+    "progress": 0,
+    "message": "",
+    "report_url": None,
+    "pdf_url": None,
+    "query": ""
+}
+
+def get_research_status() -> Dict[str, Any]:
+    return research_status
+
+def update_research_status(state: str, progress: int, msg: str, report_url: str = None, pdf_url: str = None, query: str = None):
+    global research_status
+    research_status["status"] = state
+    research_status["progress"] = progress
+    research_status["message"] = msg
+    if report_url:
+        research_status["report_url"] = report_url
+    if pdf_url:
+        research_status["pdf_url"] = pdf_url
+    if query:
+        research_status["query"] = query
+
+def add_report_to_history(markdown_filename: str, pdf_filename: str, query: str):
+    import json
+    import datetime
+    
+    history_path = Path("cerberai/static/reports/history.json")
+    history = []
+    if history_path.exists():
+        try:
+            with open(history_path, "r") as f:
+                history = json.load(f)
+        except Exception:
+            pass
+            
+    new_entry = {
+        "id": markdown_filename.replace(".md", ""),
+        "timestamp": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "query": query,
+        "report_url": f"/static/reports/{markdown_filename}",
+        "pdf_url": f"/static/reports/{pdf_filename}"
+    }
+    
+    history.insert(0, new_entry)
+    history_path.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        with open(history_path, "w") as f:
+            json.dump(history, f, indent=2)
+    except Exception as e:
+        print(f"Failed to write report history: {e}")
+
+def convert_markdown_to_pdf(markdown_text: str, output_path: str, query: str, date_str: str):
+    """Convert raw Markdown text into a styled PDF report using fpdf2 write_html."""
+    from fpdf import FPDF, XPos, YPos
+    
+    class ResearchPDF(FPDF):
+        report_date = ""
+        def header(self):
+            self.set_font("helvetica", "B", 10)
+            self.set_text_color(128, 128, 128)
+            self.cell(0, 10, "CerberAI Deep Research Report", border=0, align="L")
+            self.cell(0, 10, f"Date: {self.report_date}", border=0, align="R")
+            self.ln(12)
+            self.set_draw_color(220, 220, 220)
+            self.line(10, 18, 200, 18)
+
+        def footer(self):
+            self.set_y(-15)
+            self.set_font("helvetica", "I", 8)
+            self.set_text_color(128, 128, 128)
+            self.cell(0, 10, f"Page {self.page_no()}/{{nb}}", border=0, align="C")
+
+    # Simple Markdown-to-HTML parser for FPDF2 compatibility
+    html_lines = []
+    lines = markdown_text.splitlines()
+    in_list = False
+    
+    for line in lines:
+        line_strip = line.strip()
+        
+        # Headers
+        if line_strip.startswith("### "):
+            if in_list:
+                html_lines.append("</ul>")
+                in_list = False
+            html_lines.append(f"<h3>{line_strip[4:]}</h3>")
+        elif line_strip.startswith("## "):
+            if in_list:
+                html_lines.append("</ul>")
+                in_list = False
+            html_lines.append(f"<h2>{line_strip[3:]}</h2>")
+        elif line_strip.startswith("# "):
+            if in_list:
+                html_lines.append("</ul>")
+                in_list = False
+            html_lines.append(f"<h1>{line_strip[2:]}</h1>")
+        # Lists
+        elif line_strip.startswith("* ") or line_strip.startswith("- "):
+            if not in_list:
+                html_lines.append("<ul>")
+                in_list = True
+            content = line_strip[2:]
+            content = re.sub(r'\*\*(.*?)\*\*', r'<b>\1</b>', content)
+            content = re.sub(r'\*(.*?)\*', r'<i>\1</i>', content)
+            content = re.sub(r'\[(.*?)\]\((.*?)\)', r'<a href="\2">\1</a>', content)
+            html_lines.append(f"<li>{content}</li>")
+        # Empty lines
+        elif not line_strip:
+            if in_list:
+                html_lines.append("</ul>")
+                in_list = False
+            html_lines.append("<br>")
+        # Normal text paragraph
+        else:
+            if in_list:
+                html_lines.append("</ul>")
+                in_list = False
+            content = line_strip
+            content = re.sub(r'\*\*(.*?)\*\*', r'<b>\1</b>', content)
+            content = re.sub(r'\*(.*?)\*', r'<i>\1</i>', content)
+            content = re.sub(r'\[(.*?)\]\((.*?)\)', r'<a href="\2">\1</a>', content)
+            html_lines.append(f"<p>{content}</p>")
+            
+    if in_list:
+        html_lines.append("</ul>")
+        
+    html_content = "".join(html_lines)
+    full_html = f"<html><body>{html_content}</body></html>"
+    
+    pdf = ResearchPDF()
+    pdf.report_date = date_str
+    pdf.alias_nb_pages()
+    pdf.add_page()
+    pdf.set_margins(15, 20, 15)
+    
+    # Report Header Page Title
+    pdf.set_font("helvetica", "B", 20)
+    pdf.set_text_color(139, 92, 246)  # Accent Purple
+    pdf.cell(0, 15, "DEEP RESEARCH REPORT", new_x=XPos.LMARGIN, new_y=YPos.NEXT, align="L")
+    
+    pdf.set_font("helvetica", "B", 12)
+    pdf.set_text_color(100, 100, 100)
+    pdf.cell(0, 8, f"Topic Search Query: {query}", new_x=XPos.LMARGIN, new_y=YPos.NEXT, align="L")
+    pdf.ln(5)
+    
+    pdf.set_text_color(20, 20, 20)
+    pdf.write_html(full_html)
+    pdf.output(output_path)
+
+async def generate_deep_research_report(manager, agent, query: str):
+    """
+    Background deep research loop:
+    1. Initial web search based on user query (0-20%).
+    2. Analyze snippets using LLM and recursively generate 2-3 follow-up sub-queries (20-40%).
+    3. Run follow-up searches and crawl the top 4-5 total articles (40-60%).
+    4. Compile text context and prompt LLM to structure a comprehensive report with citations (60-80%).
+    5. Convert markdown report to a formatted PDF using fpdf2 and save (80-100%).
+    """
+    import datetime
+    date_str = datetime.date.today().strftime("%Y-%m-%d")
+    update_research_status("running", 5, f"Analyzing search query and starting research: '{query}'...", query=query)
+    
+    # 1. Initial search
+    try:
+        raw_search = await agent.web_search_tool(query)
+    except Exception as e:
+        raw_search = f"Initial search failed: {e}"
+        
+    update_research_status("running", 20, "Analyzing initial results to identify information gaps...")
+    
+    # 2. Analyze snippets with LLM and recursively generate follow-up sub-queries
+    sub_queries_prompt = (
+        f"You are a lead researcher. We are investigating: '{query}'.\n"
+        f"Based on the following initial search results, identify key gaps in information "
+        f"and output exactly 2 highly specific follow-up search queries to research details or verify claims.\n\n"
+        f"Initial Search Snippets:\n{raw_search}\n\n"
+        "You MUST respond ONLY with a JSON array of strings containing the queries. Format:\n"
+        "[\n"
+        "  \"follow up query 1\",\n"
+        "  \"follow up query 2\"\n"
+        "]\n"
+        "Do not include any introduction or code block wrappers. Output valid raw JSON."
+    )
+    
+    sub_queries = []
+    try:
+        backend = await manager.get_model("general-llama3")
+        payload = {
+            "messages": [{"role": "user", "content": sub_queries_prompt}],
+            "temperature": 0.2
+        }
+        response = await backend.handle_chat_completion(payload)
+        content = response["choices"][0]["message"]["content"].strip()
+        
+        if content.startswith("```"):
+            content = re.sub(r"^```[a-zA-Z0-9]*\n", "", content)
+            content = re.sub(r"\n```$", "", content)
+        content = content.strip()
+        sub_queries = json.loads(content)
+    except Exception as e:
+        print(f"Failed to generate follow-up queries: {e}. Falling back to default search.")
+        sub_queries = [f"{query} details", f"{query} news"]
+
+    if not isinstance(sub_queries, list):
+        sub_queries = [f"{query} details"]
+    sub_queries = [str(q) for q in sub_queries[:2]]
+    
+    update_research_status("running", 35, f"Running recursive sub-queries: {', '.join([f'\"{q}\"' for q in sub_queries])}...")
+    
+    # 3. Fetch recursive search results
+    search_context_list = [f"Initial Search on '{query}':\n{raw_search}"]
+    all_urls = []
+    
+    def extract_urls(text):
+        return re.findall(r'Source:\s*(https?://\S+)', text)
+        
+    all_urls.extend(extract_urls(raw_search))
+    
+    for sub_q in sub_queries:
+        try:
+            sub_res = await agent.web_search_tool(sub_q)
+            search_context_list.append(f"Sub-query search on '{sub_q}':\n{sub_res}")
+            all_urls.extend(extract_urls(sub_res))
+        except Exception as e:
+            print(f"Sub-query failed: {sub_q}: {e}")
+            
+    # De-duplicate URLs
+    unique_urls = []
+    for u in all_urls:
+        if u not in unique_urls:
+            unique_urls.append(u)
+            
+    # Crawl top 4 URLs
+    target_urls = unique_urls[:4]
+    fetched_texts = []
+    
+    update_research_status("running", 50, f"Crawling and fetching detailed contents from top {len(target_urls)} sources...")
+    
+    for i, url in enumerate(target_urls):
+        try:
+            update_research_status("running", 50 + int(i * 3), f"Crawl: Reading detailed article ({i+1}/{len(target_urls)}): {url}...")
+            content_text = await agent.web_fetch_tool(url)
+            trimmed = content_text[:4000] if len(content_text) > 4000 else content_text
+            fetched_texts.append(f"Source URL: {url}\nArticle Content:\n{trimmed}\n---")
+        except Exception as e:
+            print(f"Failed to fetch {url}: {e}")
+            
+    compiled_research_context = (
+        "=== SEARCH SNIPPETS ===\n" + "\n\n".join(search_context_list) + "\n\n"
+        "=== DETAILED SOURCE ARTICLES ===\n" + "\n\n".join(fetched_texts)
+    )
+    
+    update_research_status("running", 65, "Synthesizing research data and writing Markdown report...")
+    
+    # 4. Generate report markdown
+    report_prompt = (
+        f"You are a senior research analyst. Write a comprehensive, high-quality, professional research report "
+        f"answering the user query: '{query}' based on the compiled search results and fetched articles below.\n\n"
+        f"CRITICAL COMPILATION RULES:\n"
+        f"1. Structure your output clearly using markdown headers: `# Title`, `## Executive Summary`, `## Key Findings`, `## Detailed Analysis`, `## References`.\n"
+        f"2. Incorporate explicit citations in the text linking to the source URLs (e.g. '[Source Title](url)' or '(Source: [Domain](url))'). Do NOT make up any source URLs.\n"
+        f"3. Make the report exhaustive, factual, and deeply analytical. Format bold text with `**` and bullet points with `*`.\n"
+        f"4. Do NOT output HTML or any surrounding code blocks. Output clean, raw markdown content only.\n\n"
+        f"Research Context:\n{compiled_research_context}"
+    )
+    
+    try:
+        backend = await manager.get_model("general-llama3")
+        payload = {
+            "messages": [{"role": "user", "content": report_prompt}],
+            "temperature": 0.4
+        }
+        response = await backend.handle_chat_completion(payload)
+        report_markdown = response["choices"][0]["message"]["content"].strip()
+    except Exception as e:
+        report_markdown = f"# Deep Research Report: {query}\n\nFailed to generate report using LLM: {e}"
+        
+    update_research_status("running", 80, "Compiling Markdown report into a formatted PDF document...")
+    
+    # Generate unique filenames
+    import time
+    timestamp = int(time.time())
+    sanitized_query = re.sub(r'[^a-zA-Z0-9]', '_', query)[:25].strip("_")
+    md_filename = f"report_{timestamp}_{sanitized_query}.md"
+    pdf_filename = f"report_{timestamp}_{sanitized_query}.pdf"
+    
+    reports_dir = Path("cerberai/static/reports")
+    reports_dir.mkdir(parents=True, exist_ok=True)
+    
+    md_path = reports_dir / md_filename
+    pdf_path = reports_dir / pdf_filename
+    
+    # Write markdown file
+    try:
+        with open(md_path, "w", encoding="utf-8") as f:
+            f.write(report_markdown)
+    except Exception as e:
+        print(f"Failed to write markdown file: {e}")
+        
+    # Write PDF file
+    try:
+        convert_markdown_to_pdf(report_markdown, str(pdf_path.resolve()), query, date_str)
+    except Exception as e:
+        print(f"Failed to compile PDF: {e}")
+        # Fallback PDF in case converter fails
+        try:
+            from fpdf import FPDF
+            fallback_pdf = FPDF()
+            fallback_pdf.add_page()
+            fallback_pdf.set_font("helvetica", "B", 16)
+            fallback_pdf.cell(0, 10, "CerberAI Research Report (Fallback Mode)", new_x="LMARGIN", new_y="NEXT")
+            fallback_pdf.set_font("helvetica", "", 12)
+            fallback_pdf.ln(10)
+            fallback_pdf.write(5, report_markdown[:2000] + "\n\n[Truncated due to compilation error]")
+            fallback_pdf.output(str(pdf_path.resolve()))
+        except Exception as fe:
+            print(f"Fallback PDF compilation also failed: {fe}")
+            
+    # Update status history and set completion
+    add_report_to_history(md_filename, pdf_filename, query)
+    update_research_status(
+        "success", 
+        100, 
+        f"Research report successfully generated!", 
+        report_url=f"/static/reports/{md_filename}", 
+        pdf_url=f"/static/reports/{pdf_filename}"
+    )
+    print("Deep Research report generation complete.")
+
+
+# ==========================================================================
+# MULTI-SPEAKER AUDIO PODCAST GENERATOR
+# ==========================================================================
+
+podcast_status = {
+    "status": "idle",
+    "progress": 0,
+    "message": "",
+    "podcast_url": None,
+    "query": ""
+}
+
+def get_podcast_status() -> Dict[str, Any]:
+    return podcast_status
+
+def update_podcast_status(state: str, progress: int, msg: str, podcast_url: str = None, query: str = None):
+    global podcast_status
+    podcast_status["status"] = state
+    podcast_status["progress"] = progress
+    podcast_status["message"] = msg
+    if podcast_url:
+        podcast_status["podcast_url"] = podcast_url
+    if query:
+        podcast_status["query"] = query
+
+def add_podcast_to_history(podcast_filename: str, query: str):
+    import json
+    import datetime
+    
+    history_path = Path("cerberai/static/podcasts/history.json")
+    history = []
+    if history_path.exists():
+        try:
+            with open(history_path, "r") as f:
+                history = json.load(f)
+        except Exception:
+            pass
+            
+    new_entry = {
+        "id": podcast_filename.replace(".mp3", ""),
+        "timestamp": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "query": query,
+        "podcast_url": f"/static/podcasts/{podcast_filename}"
+    }
+    
+    history.insert(0, new_entry)
+    history_path.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        with open(history_path, "w") as f:
+            json.dump(history, f, indent=2)
+    except Exception as e:
+        print(f"Failed to write podcast history: {e}")
+
+async def generate_daily_podcast(manager, agent, topic: str = None, date_str: str = None):
+    """
+    Background automation:
+    1. Search top news stories for target date and topic (0-20%).
+    2. Prompt LLM to draft a structured conversational script between Alex and Taylor (20-40%).
+    3. Generate on-the-fly WAV intro/outro jingle (40-50%).
+    4. Call local SOTA Kokoro TTS engine to synthesize alternating speaker turns (50-80%).
+    5. Concat all audio files using FFmpeg into a final MP3 podcast file (80-100%).
+    """
+    import datetime
+    import wave
+    import math
+    import struct
+    import tempfile
+    import shutil
+    
+    target_date = date_str if date_str else datetime.date.today().strftime("%Y-%m-%d")
+    
+    query = f"top major {topic} stories {target_date}" if topic else f"top major world news stories {target_date}"
+    update_podcast_status("running", 5, f"Searching news stories for podcast: '{query}'...", query=query)
+    
+    # 1. Search for news
+    try:
+        raw_search = await agent.web_search_tool(query)
+    except Exception as e:
+        raw_search = f"Failed to search: {e}"
+        
+    update_podcast_status("running", 15, "Fetching details from top news sources...")
+    
+    urls = re.findall(r'Source:\s*(https?://\S+)', raw_search)
+    fetched_contents = []
+    target_urls = urls[:3]
+    for i, url in enumerate(target_urls):
+        try:
+            print(f"Podcast crawl: fetching {url}")
+            page_text = await agent.web_fetch_tool(url)
+            fetched_contents.append(f"Source: {url}\nContent:\n{page_text[:2000]}\n---")
+        except Exception as e:
+            print(f"Podcast fetch failed: {url}: {e}")
+            
+    detailed_context = f"News Search Snippets:\n{raw_search}\n\n"
+    if fetched_contents:
+        detailed_context += "Detailed Source Article Texts:\n" + "\n".join(fetched_contents)
+        
+    update_podcast_status("running", 30, "Drafting conversational podcast script...")
+    
+    # 2. Draft script with LLM
+    script_prompt = (
+        f"You are a professional podcast script writer. Write a natural, highly engaging conversational dialogue "
+        f"for a daily briefing podcast called 'CerberAI News Briefing' hosted by Alex (male) and Taylor (female).\n"
+        f"Discuss the following news stories for {target_date}.\n\n"
+        "CRITICAL VERIFIABILITY & STYLE RULES:\n"
+        "1. Focus only on real, accurate stories from the provided data. Do not hallucinate any news details.\n"
+        "2. The dialogue must feel natural, friendly, and conversational (with host interactions, transitions, and expressions like 'That's fascinating, Taylor!', 'Indeed, Alex.').\n"
+        "3. Keep it brief. The entire podcast should have between 6 and 10 alternating speaker turns in total.\n"
+        "4. Do not output markdown, HTML, or conversational headers. Output ONLY a valid JSON array of objects format:\n"
+        "[\n"
+        "  { \"speaker\": \"Alex\", \"text\": \"spoken dialogue line 1...\" },\n"
+        "  { \"speaker\": \"Taylor\", \"text\": \"spoken dialogue line 2...\" }\n"
+        "]\n"
+        "Do not include any code block wrappers. Output valid raw JSON."
+    )
+    
+    script = []
+    try:
+        backend = await manager.get_model("general-llama3")
+        payload = {
+            "messages": [{"role": "user", "content": script_prompt}],
+            "temperature": 0.5
+        }
+        response = await backend.handle_chat_completion(payload)
+        content = response["choices"][0]["message"]["content"].strip()
+        
+        if content.startswith("```"):
+            content = re.sub(r"^```[a-zA-Z0-9]*\n", "", content)
+            content = re.sub(r"\n```$", "", content)
+        content = content.strip()
+        script = json.loads(content)
+    except Exception as e:
+        print(f"Failed to generate podcast script: {e}")
+        script = [
+            {"speaker": "Alex", "text": "Hello and welcome to CerberAI Daily Briefing. I'm Alex."},
+            {"speaker": "Taylor", "text": "And I'm Taylor. We had some difficulties retrieving the latest news, but we'll be back shortly."},
+            {"speaker": "Alex", "text": "That's right, Taylor. Thanks for listening!"}
+        ]
+        
+    update_podcast_status("running", 45, "Generating electronic intro/outro jingle...")
+    
+    # 3. Create temp dir and generate jingle WAV file
+    temp_dir = tempfile.mkdtemp()
+    jingle_path = os.path.join(temp_dir, "jingle.wav")
+    
+    try:
+        sample_rate = 22050
+        duration = 3.0
+        num_samples = int(sample_rate * duration)
+        with wave.open(jingle_path, "w") as wav_file:
+            wav_file.setparams((1, 2, sample_rate, num_samples, "NONE", "not compressed"))
+            for i in range(num_samples):
+                t = i / sample_rate
+                if t < 0.8:
+                    freq = 440.0
+                elif t < 1.6:
+                    freq = 554.37
+                else:
+                    freq = 659.25
+                envelope = max(0.0, 1.0 - (t / duration))
+                val = 0.5 * math.sin(2.0 * math.pi * freq * t) + 0.2 * math.sin(4.0 * math.pi * freq * t)
+                sample = int(val * envelope * 32767)
+                wav_file.writeframes(struct.pack("<h", sample))
+    except Exception as je:
+        print(f"Jingle generation failed: {je}")
+        
+    update_podcast_status("running", 50, "Synthesizing host voices turn-by-turn using SOTA Kokoro engine...")
+    
+    # 4. Synthesize speaker turns
+    turn_files = []
+    try:
+        tts_backend = await manager.get_model("tts-offline")
+        await tts_backend.load()
+        
+        for idx, turn in enumerate(script):
+            speaker = turn.get("speaker", "Alex")
+            text = turn.get("text", "")
+            
+            update_podcast_status("running", 50 + int((idx / len(script)) * 30), f"TTS: Synthesizing voice for turn {idx+1}/{len(script)} ({speaker})...")
+            
+            voice = "am_adam" if speaker == "Alex" else "af_sarah"
+            audio_bytes = await tts_backend.handle_audio_speech({"input": text, "voice": voice})
+            
+            turn_path = os.path.join(temp_dir, f"turn_{idx}.wav")
+            with open(turn_path, "wb") as f:
+                f.write(audio_bytes)
+                
+            turn_files.append(turn_path)
+            
+    except Exception as te:
+        print(f"TTS Synthesis error: {te}")
+        update_podcast_status("failed", 0, f"Audio synthesis failed: {te}")
+        try:
+            shutil.rmtree(temp_dir)
+        except Exception:
+            pass
+        return
+        
+    update_podcast_status("running", 80, "Assembling podcast tracks and encoding MP3...")
+    
+    # 5. Concat all audio files using FFmpeg
+    concat_txt_path = os.path.join(temp_dir, "concat.txt")
+    with open(concat_txt_path, "w") as f:
+        if os.path.exists(jingle_path):
+            f.write(f"file '{os.path.abspath(jingle_path)}'\n")
+        for p in turn_files:
+            f.write(f"file '{os.path.abspath(p)}'\n")
+        if os.path.exists(jingle_path):
+            f.write(f"file '{os.path.abspath(jingle_path)}'\n")
+            
+    timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+    topic_slug = re.sub(r'[^a-zA-Z0-9]', '_', topic)[:15] if topic else "world_news"
+    podcast_filename = f"podcast_{timestamp}_{topic_slug}.mp3"
+    
+    static_podcasts_dir = Path("cerberai/static/podcasts")
+    static_podcasts_dir.mkdir(parents=True, exist_ok=True)
+    
+    final_podcast_path = static_podcasts_dir / podcast_filename
+    
+    concat_cmd = [
+        "ffmpeg", "-y",
+        "-f", "concat", "-safe", "0",
+        "-i", concat_txt_path,
+        "-c:a", "libmp3lame",
+        "-b:a", "128k",
+        str(final_podcast_path.resolve())
+    ]
+    
+    proc = await asyncio.create_subprocess_exec(
+        *concat_cmd,
+        stdout=asyncio.subprocess.DEVNULL,
+        stderr=asyncio.subprocess.DEVNULL
+    )
+    await proc.wait()
+    
+    try:
+        shutil.rmtree(temp_dir)
+    except Exception:
+        pass
+        
+    if final_podcast_path.exists():
+        podcast_url = f"/static/podcasts/{podcast_filename}"
+        update_podcast_status("success", 100, "Podcast briefing successfully generated!", podcast_url)
+        add_podcast_to_history(podcast_filename, query)
+        print("Podcast briefing generation complete.")
+    else:
+        update_podcast_status("failed", 0, "Audio stitch failed: final MP3 was not created.")
+        print("Podcast briefing generation failed.")
+

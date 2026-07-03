@@ -161,6 +161,67 @@ async def send_telegram_video(config, video_path: str, caption: str):
     except Exception as e:
         print(f"Failed to send Telegram video: {e}")
 
+
+async def handle_telegram_multimodal(config, manager, agent, caption: str, mime_type: str, base64_data: str, reply_with_tts: bool = True):
+    """Processes an uploaded image along with text prompt (caption) using the local vision model."""
+    try:
+        from .router import IntentRouter
+        router = IntentRouter(config.router, config.models)
+        
+        messages = [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": caption},
+                    {
+                        "type": "image_url",
+                        "image_url": {
+                            "url": f"data:{mime_type};base64,{base64_data}"
+                        }
+                    }
+                ]
+            }
+        ]
+        
+        # Route to vision model
+        target_model_id = await router.route_chat(messages, "auto", manager)
+        model_cfg = next((m for m in config.models if m.id == target_model_id), None)
+        if not model_cfg:
+            await send_telegram_message(config, f"❌ Error: Model `{target_model_id}` is not configured.")
+            return
+            
+        backend = await manager.get_model(target_model_id)
+        if model_cfg.type != "vision":
+            await send_telegram_message(config, f"⚠️ Routed to `{target_model_id}` (type: {model_cfg.type}) but it is not a vision model.")
+            return
+            
+        payload = {
+            "messages": messages,
+            "temperature": 0.7
+        }
+        
+        await send_telegram_message(config, f"👁️ Analyzing image using `{target_model_id}`...")
+        response = await backend.handle_chat_completion(payload)
+        ans = response["choices"][0]["message"]["content"]
+        
+        # Send text response
+        await send_telegram_message(config, f"💬 **Analysis ({target_model_id}):**\n\n{ans}")
+        log_telegram_interaction("Bot", ans)
+        
+        if reply_with_tts:
+            try:
+                await send_telegram_message(config, "🎤 Synthesizing voice response...")
+                tts_backend = await manager.get_model("tts-offline")
+                wav_bytes = await tts_backend.handle_audio_speech({"input": ans})
+                ogg_bytes = await convert_wav_to_ogg(wav_bytes)
+                await send_telegram_voice(config, ogg_bytes, f"Voice analysis reply")
+            except Exception as ttse:
+                print(f"Failed to generate Telegram voice response for image: {ttse}")
+                await send_telegram_message(config, "⚠️ Failed to generate voice response.")
+    except Exception as e:
+        await send_telegram_message(config, f"❌ Error querying vision model: {e}")
+
+
 async def handle_telegram_message(text: str, config, manager, agent, reply_with_tts: bool = False):
     """Routing and command processing for incoming Telegram messages."""
     text_lower = text.lower()
@@ -476,6 +537,64 @@ async def start_telegram_loop(config, manager, agent):
                             except Exception as ex:
                                 print(f"Voice message handling exception: {ex}")
                                 await send_telegram_message(config, f"❌ Error processing voice note: {ex}")
+                            continue
+                            
+                        # Check for Photo Upload payload
+                        photo = message.get("photo")
+                        if photo:
+                            largest_photo = photo[-1]
+                            file_id = largest_photo["file_id"]
+                            caption = message.get("caption", "").strip() or "Describe this image."
+                            
+                            await send_telegram_message(config, "🖼️ Processing your image upload...")
+                            
+                            file_info_url = f"https://api.telegram.org/bot{config.telegram_bot_token}/getFile?file_id={file_id}"
+                            try:
+                                async with httpx.AsyncClient() as c_client:
+                                    info_res = await c_client.get(file_info_url)
+                                    if info_res.status_code == 200:
+                                        info_data = info_res.json()
+                                        file_path = info_data.get("result", {}).get("file_path")
+                                        if file_path:
+                                            file_dl_url = f"https://api.telegram.org/file/bot{config.telegram_bot_token}/{file_path}"
+                                            dl_res = await c_client.get(file_dl_url)
+                                            if dl_res.status_code == 200:
+                                                photo_bytes = dl_res.content
+                                                
+                                                import base64
+                                                base64_data = base64.b64encode(photo_bytes).decode("utf-8")
+                                                
+                                                ext = file_path.split(".")[-1].lower()
+                                                mime_type = f"image/{ext}"
+                                                if ext == "jpg" or ext == "jpeg":
+                                                    mime_type = "image/jpeg"
+                                                elif ext == "png":
+                                                    mime_type = "image/png"
+                                                elif ext == "gif":
+                                                    mime_type = "image/gif"
+                                                elif ext == "webp":
+                                                    mime_type = "image/webp"
+                                                    
+                                                log_telegram_interaction("User", f"[Photo Upload] {caption}")
+                                                
+                                                asyncio.create_task(handle_telegram_multimodal(
+                                                    config=config,
+                                                    manager=manager,
+                                                    agent=agent,
+                                                    caption=caption,
+                                                    mime_type=mime_type,
+                                                    base64_data=base64_data,
+                                                    reply_with_tts=True
+                                                ))
+                                            else:
+                                                await send_telegram_message(config, "❌ Failed to download photo file.")
+                                        else:
+                                            await send_telegram_message(config, "❌ Could not retrieve photo path.")
+                                    else:
+                                        await send_telegram_message(config, "❌ Failed to get photo file metadata.")
+                            except Exception as ex:
+                                print(f"Photo message handling exception: {ex}")
+                                await send_telegram_message(config, f"❌ Error processing photo: {ex}")
                             continue
                             
                         if not text:
