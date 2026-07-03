@@ -207,10 +207,13 @@ async def generate_yesterday_news_video(manager, agent, topic: str = None, date_
     prompt = (
         f"You are a news broadcast editor. Based on the following raw web search results and fetched articles for {target_date}, "
         f"identify exactly 10 distinct, major news stories {prompt_topic_desc}. "
-        "For each story, output a title, a 2-sentence narration summary, a descriptive image prompt for AI generation, "
-        "and the most relevant source URL from the provided search results/articles.\n\n"
+        "CRITICAL VERIFIABILITY RULES:\n"
+        "1. All stories MUST be real, accurate, and explicitly verifiable from the provided source articles/search results.\n"
+        "2. Do NOT invent, extrapolate, or hallucinate any story details, facts, or links. If a topic is not explicitly mentioned in the data, do not include it.\n"
+        "3. The `source_url` field MUST match a valid source HTTP/HTTPS URL from the text (do not hallucinate a URL).\n"
+        "4. If there are fewer than 10 real, verifiable stories in the data, output only the actual number of real stories (e.g. 4 or 6). Do not fill or pad the array with placeholder or mock stories.\n\n"
         f"Search and Article Data:\n{detailed_context}\n\n"
-        "You MUST respond ONLY with a JSON array of 10 objects. Format:\n"
+        "You MUST respond ONLY with a JSON array of objects. Format:\n"
         "[\n"
         "  {\n"
         "    \"title\": \"Story Title\",\n"
@@ -240,29 +243,38 @@ async def generate_yesterday_news_video(manager, agent, topic: str = None, date_
         
         stories = json.loads(content)
         if not isinstance(stories, list) or len(stories) == 0:
-            raise ValueError("LLM returned invalid stories array.")
+            raise ValueError("LLM returned invalid or empty stories array.")
             
-        # Ensure we have at most 10 stories
-        stories = stories[:10]
-        print(f"Structured {len(stories)} stories successfully.")
+        # Verify and validate that stories exist in the search/fetch source urls and are real
+        valid_stories = []
+        for story in stories:
+            if not isinstance(story, dict):
+                continue
+            title = story.get("title", "").strip()
+            summary = story.get("summary", "").strip()
+            image_prompt = story.get("image_prompt", "").strip()
+            source_url = story.get("source_url", "").strip()
+            
+            if not title or not summary or not image_prompt or not source_url:
+                continue
+                
+            if not (source_url.startswith("http://") or source_url.startswith("https://")):
+                continue
+                
+            # Verify the source URL belongs to the crawled/search data to prevent hallucinated sites
+            if source_url in raw_search or any(u in source_url for u in urls):
+                valid_stories.append(story)
+                
+        if not valid_stories:
+            raise ValueError("No verifiable news stories with valid source links were found in the context data.")
+            
+        stories = valid_stories[:10]
+        print(f"Validated and kept {len(stories)} real, verifiable stories.")
     except Exception as e:
-        print(f"Structuring error: {e}")
-        # Fallback hardcoded stories if JSON parsing fails to keep it robust
-        fallback_topic = topic if topic else "Global News"
-        stories = [
-            {
-                "title": f"Recent developments in {fallback_topic}",
-                "summary": f"Interesting events occurred regarding {fallback_topic} today. Industry leaders and researchers are closely monitoring these shifts.",
-                "image_prompt": f"Representational artistic conceptual image of {fallback_topic}, modern high tech illustration, professional photography",
-                "source_url": ""
-            },
-            {
-                "title": f"New milestones for {fallback_topic}",
-                "summary": f"Key analysts have reported new breakthroughs in the field of {fallback_topic}. The global community has reacted with strong interest.",
-                "image_prompt": f"Stunning professional photo visualizing progress in {fallback_topic}, highly detailed",
-                "source_url": ""
-            }
-        ]
+        print(f"News verification or parsing error: {e}")
+        update_status("failed", 0, f"Verification failed: {e}")
+        print("Breaking News video generation failed due to lack of verifiable sources.")
+        return
         
     # Get image and tts backends
     img_backend = await manager.get_model("image-lcm")
