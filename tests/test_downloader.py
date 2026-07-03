@@ -125,5 +125,25 @@ class TestDownloader(unittest.TestCase):
         self.assertTrue(os.access(expected_bin, os.X_OK))
 
 
+class TestExitCodeDescription(unittest.TestCase):
+    @patch("platform.system", return_value="Windows")
+    def test_windows_exit_codes(self, mock_system):
+        from cerberai.backends.llamacpp import get_exit_code_description
+        self.assertEqual(get_exit_code_description(0), "Success")
+        self.assertIn("Access Violation", get_exit_code_description(-1073741819))  # 0xC0000005
+        self.assertIn("Access Violation", get_exit_code_description(0xC0000005))
+        self.assertIn("Stack Overflow", get_exit_code_description(0xC00000FD))
+        self.assertIn("Windows Exit Code 0x12345678", get_exit_code_description(0x12345678))
+
+    @patch("platform.system", return_value="Linux")
+    def test_unix_exit_codes(self, mock_system):
+        from cerberai.backends.llamacpp import get_exit_code_description
+        self.assertEqual(get_exit_code_description(0), "Exit Code 0")
+        self.assertEqual(get_exit_code_description(1), "Exit Code 1")
+        self.assertEqual(get_exit_code_description(-11), "Killed by signal 11 (SIGSEGV)")
+        self.assertEqual(get_exit_code_description(-9), "Killed by signal 9 (SIGKILL)")
+        self.assertEqual(get_exit_code_description(None), "Still running")
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -95,70 +95,128 @@ async def get_latest_llama_tag() -> str:
 async def ensure_llama_server() -> str:
     """
     Check if llama-server is in path or cached.
-    If not, download precompiled binary package for Linux x64 from GitHub and extract all assets.
+    If not, download precompiled binary package for the current OS and architecture from GitHub and extract all assets.
     """
+    import platform
+    import zipfile
+
+    system = platform.system()
+    machine = platform.machine().lower()
+    
+    is_windows = (system == "Windows")
+    is_macos = (system == "Darwin")
+    
+    exec_name = "llama-server.exe" if is_windows else "llama-server"
+
     # 1. Check system path
-    system_path = shutil.which("llama-server")
+    system_path = shutil.which(exec_name)
     if system_path:
         return system_path
         
     # 2. Check local cache (recursively find it in case it's in a subdirectory like 'bin')
     if BIN_DIR.exists():
         for root, dirs, files in os.walk(BIN_DIR):
-            if "llama-server" in files:
-                # Verify that key shared libraries also exist, otherwise treat as corrupt cache and re-download
-                if "libllama-server-impl.so" in files:
-                    server_path = Path(root) / "llama-server"
-                    if os.access(server_path, os.X_OK):
-                        return str(server_path.resolve())
+            if exec_name in files:
+                server_path = Path(root) / exec_name
+                if is_windows:
+                    return str(server_path.resolve())
+                elif os.access(server_path, os.X_OK):
+                    return str(server_path.resolve())
 
 
     # 3. Not found, download it! Get tag dynamically to prevent 404 on expired tags
     tag = await get_latest_llama_tag()
-    url = f"https://github.com/ggml-org/llama.cpp/releases/download/{tag}/llama-{tag}-bin-ubuntu-x64.tar.gz"
+    
+    if is_windows:
+        archive_ext = ".zip"
+        system_root = os.environ.get("SystemRoot", r"C:\Windows")
+        nvcuda_path = os.path.join(system_root, "System32", "nvcuda.dll")
+        amdhip_path = os.path.join(system_root, "System32", "amdhip64.dll")
+        vulkan_path = os.path.join(system_root, "System32", "vulkan-1.dll")
+        
+        if os.path.exists(nvcuda_path):
+            print("NVIDIA CUDA detected. Downloading CUDA 12.4 accelerated binary...")
+            asset_name = f"llama-{tag}-bin-win-cuda-12.4-x64.zip"
+        elif os.path.exists(amdhip_path):
+            print("AMD Radeon HIP/ROCm detected. Downloading ROCm accelerated binary...")
+            asset_name = f"llama-{tag}-bin-win-hip-radeon-x64.zip"
+        elif os.path.exists(vulkan_path):
+            print("Vulkan support detected. Downloading Vulkan accelerated binary...")
+            asset_name = f"llama-{tag}-bin-win-vulkan-x64.zip"
+        else:
+            print("No discrete GPU runtime detected. Downloading CPU-only binary...")
+            asset_name = f"llama-{tag}-bin-win-cpu-x64.zip"
+    elif is_macos:
+        archive_ext = ".tar.gz"
+        if "arm" in machine or "aarch64" in machine:
+            asset_name = f"llama-{tag}-bin-macos-arm64.tar.gz"
+        else:
+            asset_name = f"llama-{tag}-bin-macos-x64.tar.gz"
+    else:  # Linux and other Unix-like systems
+        archive_ext = ".tar.gz"
+        if "arm" in machine or "aarch64" in machine:
+            asset_name = f"llama-{tag}-bin-ubuntu-arm64.tar.gz"
+        else:
+            asset_name = f"llama-{tag}-bin-ubuntu-x64.tar.gz"
+            
+    url = f"https://github.com/ggml-org/llama.cpp/releases/download/{tag}/{asset_name}"
     
     if BIN_DIR.exists():
         shutil.rmtree(BIN_DIR)
     BIN_DIR.mkdir(parents=True, exist_ok=True)
     
-    tar_path = BIN_DIR / f"llama-{tag}.tar.gz"
+    archive_path = BIN_DIR / f"llama-{tag}{archive_ext}"
     
     try:
 
         # Download archive
-        await download_file(url, tar_path)
+        await download_file(url, archive_path)
         
         # Extract archive
-        print("Extracting llama.cpp package (including dynamic libraries and symlinks)...")
-        with tarfile.open(tar_path, "r:gz") as tar:
-            for member in tar.getmembers():
-                # Preserve relative path but strip top-level directory prefix if there is one
-                parts = Path(member.name).parts
-                if len(parts) > 1:
-                    member.name = str(Path(*parts[1:]))
-                else:
-                    member.name = parts[0]
-                
-                # Extract file, directory, or symbolic link natively
-                tar.extract(member, path=BIN_DIR)
+        if archive_ext == ".zip":
+            print("Extracting llama.cpp zip package...")
+            with zipfile.ZipFile(archive_path, "r") as zip_ref:
+                for member in zip_ref.infolist():
+                    # Preserve relative path but strip top-level directory prefix if there is one
+                    parts = Path(member.filename).parts
+                    if len(parts) > 1:
+                        member.filename = str(Path(*parts[1:]))
+                    else:
+                        member.filename = parts[0]
+                    zip_ref.extract(member, path=BIN_DIR)
+        else:
+            print("Extracting llama.cpp tar.gz package (including dynamic libraries and symlinks)...")
+            with tarfile.open(archive_path, "r:gz") as tar:
+                for member in tar.getmembers():
+                    # Preserve relative path but strip top-level directory prefix if there is one
+                    parts = Path(member.name).parts
+                    if len(parts) > 1:
+                        member.name = str(Path(*parts[1:]))
+                    else:
+                        member.name = parts[0]
+                    tar.extract(member, path=BIN_DIR)
 
                             
         # Now find the extracted llama-server path
         for root, dirs, files in os.walk(BIN_DIR):
-            if "llama-server" in files:
-                server_path = Path(root) / "llama-server"
-                os.chmod(server_path, 0o755)
-                # Ensure dynamic libraries next to it are executable too
-                for f in files:
-                    if f.endswith(".so") or "libllama" in f:
-                        try:
-                            os.chmod(Path(root) / f, 0o755)
-                        except Exception:
-                            pass
+            if exec_name in files:
+                server_path = Path(root) / exec_name
+                if not is_windows:
+                    try:
+                        os.chmod(server_path, 0o755)
+                    except Exception:
+                        pass
+                    # Ensure dynamic libraries next to it are executable too
+                    for f in files:
+                        if f.endswith(".so") or f.endswith(".dylib") or "libllama" in f:
+                            try:
+                                os.chmod(Path(root) / f, 0o755)
+                            except Exception:
+                                pass
                 print(f"llama-server successfully installed to {server_path}")
                 return str(server_path.resolve())
                 
-        raise RuntimeError("Could not find 'llama-server' binary in the extracted files.")
+        raise RuntimeError(f"Could not find '{exec_name}' binary in the extracted files.")
         
     except Exception as e:
         # Clean up cache on failure
@@ -167,6 +225,6 @@ async def ensure_llama_server() -> str:
         raise RuntimeError(f"Failed to auto-download llama-server binary: {e}")
     finally:
         # Clean up archive
-        if tar_path.exists():
-            tar_path.unlink()
+        if archive_path.exists():
+            archive_path.unlink()
 

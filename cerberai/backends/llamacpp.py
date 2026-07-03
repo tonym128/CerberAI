@@ -5,6 +5,36 @@ import httpx
 from typing import Dict, Any, Optional, AsyncIterator
 from .base import BaseBackend
 
+def get_exit_code_description(code: int) -> str:
+    """Translates subprocess return codes to human-readable descriptions, handling platform differences."""
+    if code is None:
+        return "Still running"
+        
+    import platform
+    if platform.system() == "Windows":
+        unsigned_code = code & 0xFFFFFFFF
+        status_map = {
+            0x00000000: "Success",
+            0xC0000005: "Access Violation (Segmentation Fault / SIGSEGV)",
+            0xC00000FD: "Stack Overflow",
+            0xC0000094: "Integer Division by Zero",
+            0xC000001D: "Illegal Instruction (SIGILL)",
+            0xC000013A: "Ctrl+C / Interrupted",
+            0xC0000142: "DLL Initialization Failed",
+            0xC0000409: "Security Check Failure (Stack Buffer Overrun)",
+        }
+        return status_map.get(unsigned_code, f"Windows Exit Code 0x{unsigned_code:08X} ({code})")
+    else:
+        if code < 0:
+            sig = -code
+            import signal
+            try:
+                sig_name = signal.Signals(sig).name
+                return f"Killed by signal {sig} ({sig_name})"
+            except ValueError:
+                return f"Killed by signal {sig}"
+        return f"Exit Code {code}"
+
 class LlamaCppBackend(BaseBackend):
     def __init__(self, model_id: str, config: Dict[str, Any], vram_estimate_gb: float):
         super().__init__(model_id, config, vram_estimate_gb)
@@ -88,27 +118,47 @@ class LlamaCppBackend(BaseBackend):
             cmd.extend(self.additional_args)
             
         # Prepare environment variables to include the dynamic libraries next to llama-server
+        import platform
         env = os.environ.copy()
         server_dir = os.path.dirname(self.llama_server_path)
         if server_dir:
             server_dir_abs = os.path.abspath(server_dir)
-            current_ld = env.get("LD_LIBRARY_PATH", "")
-            if current_ld:
-                env["LD_LIBRARY_PATH"] = f"{server_dir_abs}:{current_ld}"
-            else:
-                env["LD_LIBRARY_PATH"] = server_dir_abs
+            system = platform.system()
+            if system == "Windows":
+                current_path = env.get("PATH", "")
+                if current_path:
+                    env["PATH"] = f"{server_dir_abs};{current_path}"
+                else:
+                    env["PATH"] = server_dir_abs
+            elif system == "Darwin":
+                current_dyld = env.get("DYLD_LIBRARY_PATH", "")
+                if current_dyld:
+                    env["DYLD_LIBRARY_PATH"] = f"{server_dir_abs}:{current_dyld}"
+                else:
+                    env["DYLD_LIBRARY_PATH"] = server_dir_abs
+            else:  # Linux and other Unix-like systems
+                current_ld = env.get("LD_LIBRARY_PATH", "")
+                if current_ld:
+                    env["LD_LIBRARY_PATH"] = f"{server_dir_abs}:{current_ld}"
+                else:
+                    env["LD_LIBRARY_PATH"] = server_dir_abs
 
         print(f"Starting llama.cpp server: {' '.join(cmd)}")
         try:
             # Run in a new process group to prevent zombie processes if the gateway crashes
-            self.process = subprocess.Popen(
-                cmd,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                text=True,
-                env=env,
-                preexec_fn=os.setsid
-            )
+            popen_args = {
+                "stdout": subprocess.PIPE,
+                "stderr": subprocess.PIPE,
+                "text": True,
+                "env": env
+            }
+            if platform.system() != "Windows":
+                popen_args["preexec_fn"] = os.setsid
+            else:
+                # CREATE_NEW_PROCESS_GROUP is 0x00000200
+                popen_args["creationflags"] = getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0x00000200)
+
+            self.process = subprocess.Popen(cmd, **popen_args)
 
             
             # Wait for the server to be healthy
@@ -119,7 +169,8 @@ class LlamaCppBackend(BaseBackend):
                     # Check if subprocess died early
                     if self.process.poll() is not None:
                         stdout, stderr = self.process.communicate()
-                        print(f"llama-server exited with code {self.process.returncode}. Stderr: {stderr}")
+                        exit_desc = get_exit_code_description(self.process.returncode)
+                        print(f"llama-server exited early. Reason: {exit_desc}. Stderr: {stderr}")
                         self.process = None
                         return False
                     
