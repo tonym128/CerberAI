@@ -36,3 +36,5 @@ config.yaml
 
 # Generated Frontend Assets / Images
 cerberai/static/generated/
+cerberai/static/videos
+
