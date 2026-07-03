@@ -33,6 +33,96 @@ def log_telegram_interaction(sender: str, message: str):
     except Exception as e:
         print(f"Failed to log Telegram interaction: {e}")
 
+async def send_telegram_voice(config, voice_bytes: bytes, caption: str = None):
+    """Upload and send a raw voice note (OGG/Opus) via Telegram Bot API."""
+    if not config.telegram_bot_token or not config.telegram_chat_id:
+        return
+    url = f"https://api.telegram.org/bot{config.telegram_bot_token}/sendVoice"
+    try:
+        log_telegram_interaction("Bot", f"[Voice note sent] {caption if caption else ''}")
+        async with httpx.AsyncClient(timeout=60.0) as client:
+            files = {"voice": ("voice.ogg", voice_bytes, "audio/ogg")}
+            data = {"chat_id": config.telegram_chat_id}
+            if caption:
+                data["caption"] = caption
+            response = await client.post(url, data=data, files=files)
+            if response.status_code != 200:
+                print(f"Failed to send Telegram voice: {response.text}")
+    except Exception as e:
+        print(f"Failed to send Telegram voice: {e}")
+
+async def convert_wav_to_ogg(wav_bytes: bytes) -> bytes:
+    """Convert raw WAV audio bytes to OGG/Opus using FFmpeg."""
+    import tempfile
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as f_in:
+        f_in.write(wav_bytes)
+        in_path = f_in.name
+        
+    out_path = in_path.replace(".wav", ".ogg")
+    try:
+        cmd = ["ffmpeg", "-y", "-i", in_path, "-c:a", "libopus", out_path]
+        proc = await asyncio.create_subprocess_exec(
+            *cmd,
+            stdout=asyncio.subprocess.DEVNULL,
+            stderr=asyncio.subprocess.DEVNULL
+        )
+        await proc.wait()
+        with open(out_path, "rb") as f_out:
+            return f_out.read()
+    finally:
+        for p in (in_path, out_path):
+            try:
+                os.unlink(p)
+            except Exception:
+                pass
+
+async def convert_ogg_to_wav(ogg_bytes: bytes) -> bytes:
+    """Convert raw OGG audio bytes to WAV (16kHz, mono) using FFmpeg for STT processing."""
+    import tempfile
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".ogg") as f_in:
+        f_in.write(ogg_bytes)
+        in_path = f_in.name
+        
+    out_path = in_path.replace(".ogg", ".wav")
+    try:
+        cmd = ["ffmpeg", "-y", "-i", in_path, "-ar", "16000", "-ac", "1", out_path]
+        proc = await asyncio.create_subprocess_exec(
+            *cmd,
+            stdout=asyncio.subprocess.DEVNULL,
+            stderr=asyncio.subprocess.DEVNULL
+        )
+        await proc.wait()
+        with open(out_path, "rb") as f_out:
+            return f_out.read()
+    finally:
+        for p in (in_path, out_path):
+            try:
+                os.unlink(p)
+            except Exception:
+                pass
+
+async def send_telegram_photo(config, photo_path: str, caption: str = None):
+    """Upload and send a local photo file via Telegram Bot API."""
+    if not config.telegram_bot_token or not config.telegram_chat_id:
+        return
+    url = f"https://api.telegram.org/bot{config.telegram_bot_token}/sendPhoto"
+    if not os.path.exists(photo_path):
+        print(f"Telegram photo upload failed: file does not exist at {photo_path}")
+        return
+    try:
+        log_telegram_interaction("Bot", f"[Photo sent] {caption if caption else ''}")
+        async with httpx.AsyncClient(timeout=60.0) as client:
+            with open(photo_path, "rb") as f:
+                files = {"photo": f}
+                data = {"chat_id": config.telegram_chat_id}
+                if caption:
+                    data["caption"] = caption
+                response = await client.post(url, data=data, files=files)
+                if response.status_code != 200:
+                    print(f"Failed to send Telegram photo: {response.text}")
+    except Exception as e:
+        print(f"Failed to send Telegram photo: {e}")
+
 async def send_telegram_message(config, text: str):
     """Send a markdown formatted text message via Telegram Bot API."""
     if not config.telegram_bot_token or not config.telegram_chat_id:
@@ -71,7 +161,7 @@ async def send_telegram_video(config, video_path: str, caption: str):
     except Exception as e:
         print(f"Failed to send Telegram video: {e}")
 
-async def handle_telegram_message(text: str, config, manager, agent):
+async def handle_telegram_message(text: str, config, manager, agent, reply_with_tts: bool = False):
     """Routing and command processing for incoming Telegram messages."""
     text_lower = text.lower()
     
@@ -88,7 +178,8 @@ async def handle_telegram_message(text: str, config, manager, agent):
             "• `/logs` - Read recent server logs (`llama.log`).\n"
             "• `/schedules` - List all configured daily schedules.\n"
             "• `/run [topic]` - Manually trigger a news video generation.\n\n"
-            "Or simply send a direct message, and I will route it and respond!"
+            "Or simply send a direct message, and I will route it and respond!\n"
+            "🎤 You can also send me a voice note to get voice and text answers!"
         )
         await send_telegram_message(config, help_msg)
         return
@@ -106,7 +197,38 @@ async def handle_telegram_message(text: str, config, manager, agent):
             router = IntentRouter(config.router, config.models)
             messages = [{"role": "user", "content": prompt}]
             target_model_id = await router.route_chat(messages, "auto", manager)
+            
+            # Verify model type and capabilities
+            model_cfg = next((m for m in config.models if m.id == target_model_id), None)
+            if not model_cfg:
+                await send_telegram_message(config, f"❌ Error: Model `{target_model_id}` is not configured.")
+                return
+                
             backend = await manager.get_model(target_model_id)
+            
+            # Special case for image generation
+            if model_cfg.type == "image":
+                await send_telegram_message(config, "🎨 Generating image...")
+                img_result = await backend.handle_image_generation({"prompt": prompt})
+                b64_data = img_result["data"][0]["b64_json"]
+                
+                import uuid
+                import base64
+                img_filename = f"image_{uuid.uuid4().hex}.png"
+                img_dir = os.path.join("cerberai", "static", "generated")
+                os.makedirs(img_dir, exist_ok=True)
+                img_path = os.path.join(img_dir, img_filename)
+                with open(img_path, "wb") as fh:
+                    fh.write(base64.b64decode(b64_data))
+                
+                await send_telegram_photo(config, img_path, f"🎨 Generated Image for: \"{prompt}\"")
+                return
+                
+            # STT and TTS models do not support chat completion
+            if model_cfg.type not in ("llm", "vision"):
+                await send_telegram_message(config, f"⚠️ The selected model `{target_model_id}` (type: {model_cfg.type}) does not support text chat completions.")
+                return
+                
             payload = {
                 "messages": messages,
                 "temperature": 0.7
@@ -115,6 +237,17 @@ async def handle_telegram_message(text: str, config, manager, agent):
             response = await backend.handle_chat_completion(payload)
             ans = response["choices"][0]["message"]["content"]
             await send_telegram_message(config, f"💬 **Response ({target_model_id}):**\n\n{ans}")
+            
+            if reply_with_tts:
+                try:
+                    await send_telegram_message(config, "🎤 Synthesizing voice response...")
+                    tts_backend = await manager.get_model("tts-offline")
+                    wav_bytes = await tts_backend.handle_audio_speech({"input": ans})
+                    ogg_bytes = await convert_wav_to_ogg(wav_bytes)
+                    await send_telegram_voice(config, ogg_bytes, f"Voice response ({target_model_id})")
+                except Exception as ttse:
+                    print(f"Failed to generate Telegram voice response: {ttse}")
+                    await send_telegram_message(config, "⚠️ Failed to generate voice response.")
         except Exception as e:
             await send_telegram_message(config, f"❌ Error querying model: {e}")
             
@@ -300,13 +433,58 @@ async def start_telegram_loop(config, manager, agent):
                             print(f"Ignored unauthorized message from chat_id {chat_id}")
                             continue
                             
+                        # Check for Voice Note payload
+                        voice = message.get("voice")
+                        if voice:
+                            file_id = voice["file_id"]
+                            await send_telegram_message(config, "🎙️ Processing your voice message...")
+                            
+                            file_info_url = f"https://api.telegram.org/bot{config.telegram_bot_token}/getFile?file_id={file_id}"
+                            try:
+                                async with httpx.AsyncClient() as c_client:
+                                    info_res = await c_client.get(file_info_url)
+                                    if info_res.status_code == 200:
+                                        info_data = info_res.json()
+                                        file_path = info_data.get("result", {}).get("file_path")
+                                        if file_path:
+                                            file_dl_url = f"https://api.telegram.org/file/bot{config.telegram_bot_token}/{file_path}"
+                                            dl_res = await c_client.get(file_dl_url)
+                                            if dl_res.status_code == 200:
+                                                ogg_bytes = dl_res.content
+                                                
+                                                # Convert OGG to WAV
+                                                wav_bytes = await convert_ogg_to_wav(ogg_bytes)
+                                                
+                                                # Transcribe WAV to text
+                                                whisper_backend = await manager.get_model("stt-whisper")
+                                                stt_res = await whisper_backend.handle_audio_transcription(wav_bytes, "voice.wav", {})
+                                                transcribed = stt_res.get("text", "").strip()
+                                                
+                                                if transcribed:
+                                                    log_telegram_interaction("User", f"[Voice Note] {transcribed}")
+                                                    await send_telegram_message(config, f"📝 **Transcribed:** \"{transcribed}\"")
+                                                    # Process normally, requesting tts reply
+                                                    asyncio.create_task(handle_telegram_message(transcribed, config, manager, agent, reply_with_tts=True))
+                                                else:
+                                                    await send_telegram_message(config, "⚠️ Could not understand the voice message.")
+                                            else:
+                                                await send_telegram_message(config, "❌ Failed to download voice file.")
+                                        else:
+                                            await send_telegram_message(config, "❌ Could not retrieve voice path.")
+                                    else:
+                                        await send_telegram_message(config, "❌ Failed to get voice file metadata.")
+                            except Exception as ex:
+                                print(f"Voice message handling exception: {ex}")
+                                await send_telegram_message(config, f"❌ Error processing voice note: {ex}")
+                            continue
+                            
                         if not text:
                             continue
                         
                         log_telegram_interaction("User", text)
                             
                         # Handle message asynchronously to avoid blocking the polling loop
-                        asyncio.create_task(handle_telegram_message(text, config, manager, agent))
+                        asyncio.create_task(handle_telegram_message(text, config, manager, agent, reply_with_tts=False))
             except asyncio.CancelledError:
                 break
             except Exception as e:

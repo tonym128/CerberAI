@@ -66,6 +66,24 @@ class DynamicModelManager:
         elif b_type == "llama.cpp" or b_type == "llamacpp":
             return LlamaCppBackend(model_cfg.id, backend_config, model_cfg.vram_estimate_gb)
         elif b_type == "whisper":
+            max_vram = self.config.resource_limits.max_vram_gb
+            if backend_config.get("model_name") == "auto":
+                if max_vram <= 4.0:
+                    backend_config["model_name"] = "tiny"
+                    model_cfg.vram_estimate_gb = 0.5
+                elif max_vram <= 6.0:
+                    backend_config["model_name"] = "base"
+                    model_cfg.vram_estimate_gb = 0.7
+                elif max_vram <= 8.0:
+                    backend_config["model_name"] = "small"
+                    model_cfg.vram_estimate_gb = 1.5
+                elif max_vram <= 12.0:
+                    backend_config["model_name"] = "medium"
+                    model_cfg.vram_estimate_gb = 4.0
+                else:
+                    backend_config["model_name"] = "large-v3"
+                    model_cfg.vram_estimate_gb = 4.8
+                print(f"Whisper auto-config selected size '{backend_config['model_name']}' for max VRAM {max_vram} GB.")
             return WhisperBackend(model_cfg.id, backend_config, model_cfg.vram_estimate_gb)
         elif b_type == "tts":
             return TTSBackend(model_cfg.id, backend_config, model_cfg.vram_estimate_gb)

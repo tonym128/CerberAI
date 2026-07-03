@@ -31,10 +31,11 @@ class IntentRouter:
         if requested_model in model_ids:
             return requested_model
 
-        # If the model matches a backend model name, map it
-        for m in self.models:
-            if m.backend_config.get("model_name") == requested_model:
-                return m.id
+        # If the model matches a backend model name, map it (skip control keywords like auto)
+        if requested_model not in ("auto", "default", "", None):
+            for m in self.models:
+                if m.backend_config.get("model_name") == requested_model:
+                    return m.id
 
         # If it's not "auto" or empty/none, and it doesn't match, we fallback or auto-route
         if requested_model not in ("auto", "", None, "default"):
@@ -226,7 +227,7 @@ class IntentRouter:
                 
                 # Check which model ID matches or is contained in result
                 for m in self.models:
-                    if m.id.lower() in result.lower():
+                    if m.type not in ("stt", "tts") and m.id.lower() in result.lower():
                         return m.id
             except Exception as e:
                 print(f"Routing via local manager failed ({e}). Falling back to Ollama API.")
@@ -250,7 +251,7 @@ class IntentRouter:
                     result = response.json().get("response", "").strip()
                     print(f"Router LLM (via Ollama) output: '{result}'")
                     for m in self.models:
-                        if m.id.lower() in result.lower():
+                        if m.type not in ("stt", "tts") and m.id.lower() in result.lower():
                             return m.id
         except Exception as e:
             print(f"Router LLM classification failed ({e}). Falling back to heuristics.")
