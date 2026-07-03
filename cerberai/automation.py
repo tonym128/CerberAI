@@ -13,21 +13,24 @@ status = {
     "status": "idle",
     "progress": 0,
     "message": "",
-    "video_url": None
+    "video_url": None,
+    "stories": []
 }
 
 def get_status() -> Dict[str, Any]:
     return status
 
-def update_status(state: str, progress: int, msg: str, video_url: str = None):
+def update_status(state: str, progress: int, msg: str, video_url: str = None, stories: list = None):
     global status
     status["status"] = state
     status["progress"] = progress
     status["message"] = msg
     if video_url:
         status["video_url"] = video_url
+    if stories is not None:
+        status["stories"] = stories
 
-def add_video_to_history(video_filename: str, topic: str, date_str: str):
+def add_video_to_history(video_filename: str, topic: str, date_str: str, stories: list):
     import json
     import datetime
     
@@ -45,7 +48,8 @@ def add_video_to_history(video_filename: str, topic: str, date_str: str):
         "timestamp": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         "topic": topic if topic else "World News",
         "date": date_str,
-        "video_url": f"/static/videos/{video_filename}"
+        "video_url": f"/static/videos/{video_filename}",
+        "stories": stories
     }
     
     # Prepend to keep newest at the top
@@ -80,7 +84,7 @@ def wrap_text(text: str, draw: ImageDraw.Draw, max_width: int, font) -> list:
         lines.append(" ".join(current_line))
     return lines
 
-def create_transparent_overlay(width: int, height: int, title: str, summary: str, output_path: str):
+def create_transparent_overlay(width: int, height: int, title: str, summary: str, source_url: str, output_path: str):
     """Create a transparent PNG containing the news broadcast template and text overlays."""
     # Create fully transparent RGBA canvas
     img = Image.new("RGBA", (width, height), (0, 0, 0, 0))
@@ -96,15 +100,52 @@ def create_transparent_overlay(width: int, height: int, title: str, summary: str
     try:
         font_title = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 20)
         font_text = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 15)
+        font_source = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 11)
     except Exception:
         font_title = ImageFont.load_default()
         font_text = ImageFont.load_default()
+        font_source = ImageFont.load_default()
         
     # Draw BREAKING NEWS text
     draw.text((15, 12), "BREAKING NEWS: " + title.upper(), fill=(255, 255, 255, 255), font=font_title)
     
-    # Draw wrapped summary text at the bottom
-    max_text_width = width - 40
+    has_qr = False
+    
+    # Generate and draw QR Code if source_url is available
+    if source_url:
+        try:
+            import qrcode
+            qr = qrcode.QRCode(
+                version=1,
+                error_correction=qrcode.constants.ERROR_CORRECT_L,
+                box_size=10,
+                border=1,
+            )
+            qr.add_data(source_url)
+            qr.make(fit=True)
+            qr_img = qr.make_image(fill_color="black", back_color="white").convert("RGBA")
+            qr_size = 70
+            qr_img = qr_img.resize((qr_size, qr_size), Image.Resampling.LANCZOS)
+            
+            # Draw white container box behind the QR Code for scannability
+            draw.rectangle([width - qr_size - 15, height - 105, width - 11, height - 21], fill=(255, 255, 255, 255))
+            
+            # Paste QR Code
+            img.paste(qr_img, (width - qr_size - 13, height - 103), qr_img)
+            has_qr = True
+        except Exception as qre:
+            print(f"Failed to generate QR Code for slide: {qre}")
+            
+    # Draw domain name and source citation
+    if source_url:
+        domain_match = re.search(r'https?://([^/]+)', source_url)
+        if domain_match:
+            domain = domain_match.group(1).replace("www.", "")
+            # Draw domain text at bottom left
+            draw.text((20, height - 25), f"Source: {domain}", fill=(160, 160, 160, 255), font=font_source)
+            
+    # Draw wrapped summary text at the bottom. Reduce width if QR code is present to avoid overlapping
+    max_text_width = width - 110 if has_qr else width - 40
     wrapped_lines = wrap_text(summary, draw, max_text_width, font_text)
     
     y_text = height - 105
@@ -166,14 +207,16 @@ async def generate_yesterday_news_video(manager, agent, topic: str = None, date_
     prompt = (
         f"You are a news broadcast editor. Based on the following raw web search results and fetched articles for {target_date}, "
         f"identify exactly 10 distinct, major news stories {prompt_topic_desc}. "
-        "For each story, output a title, a 2-sentence narration summary, and a descriptive image prompt for AI generation.\n\n"
+        "For each story, output a title, a 2-sentence narration summary, a descriptive image prompt for AI generation, "
+        "and the most relevant source URL from the provided search results/articles.\n\n"
         f"Search and Article Data:\n{detailed_context}\n\n"
         "You MUST respond ONLY with a JSON array of 10 objects. Format:\n"
         "[\n"
         "  {\n"
         "    \"title\": \"Story Title\",\n"
         "    \"summary\": \"Two sentence narration script.\",\n"
-        "    \"image_prompt\": \"Descriptive prompt for drawing image.\"\n"
+        "    \"image_prompt\": \"Descriptive prompt for drawing image.\",\n"
+        "    \"source_url\": \"The actual source HTTP/HTTPS URL of the article\"\n"
         "  }\n"
         "]\n"
         "Do not include any introduction or code block wrappers. Output valid raw JSON."
@@ -210,12 +253,14 @@ async def generate_yesterday_news_video(manager, agent, topic: str = None, date_
             {
                 "title": f"Recent developments in {fallback_topic}",
                 "summary": f"Interesting events occurred regarding {fallback_topic} today. Industry leaders and researchers are closely monitoring these shifts.",
-                "image_prompt": f"Representational artistic conceptual image of {fallback_topic}, modern high tech illustration, professional photography"
+                "image_prompt": f"Representational artistic conceptual image of {fallback_topic}, modern high tech illustration, professional photography",
+                "source_url": ""
             },
             {
                 "title": f"New milestones for {fallback_topic}",
                 "summary": f"Key analysts have reported new breakthroughs in the field of {fallback_topic}. The global community has reacted with strong interest.",
-                "image_prompt": f"Stunning professional photo visualizing progress in {fallback_topic}, highly detailed"
+                "image_prompt": f"Stunning professional photo visualizing progress in {fallback_topic}, highly detailed",
+                "source_url": ""
             }
         ]
         
@@ -246,9 +291,9 @@ async def generate_yesterday_news_video(manager, agent, topic: str = None, date_
             img_placeholder = Image.new("RGB", (512, 512), color=(40, 44, 52))
             img_placeholder.save(img_temp_raw)
             
-        # B. Create transparent overlay containing fixed text and news borders
+        # B. Create transparent overlay containing fixed text, news borders, and domain source
         overlay_temp = os.path.join(temp_dir, f"overlay_{idx}.png")
-        create_transparent_overlay(512, 512, story["title"], story["summary"], overlay_temp)
+        create_transparent_overlay(512, 512, story["title"], story["summary"], story.get("source_url", ""), overlay_temp)
         
         # C. Generate Speech Audio (WAV)
         audio_temp = os.path.join(temp_dir, f"speech_{idx}.wav")
@@ -374,8 +419,8 @@ async def generate_yesterday_news_video(manager, agent, topic: str = None, date_
     # Finalize status
     if final_video_path.exists():
         video_url = f"/static/videos/{video_filename}"
-        update_status("completed", 100, "Breaking News video generated successfully!", video_url)
-        add_video_to_history(video_filename, topic, target_date)
+        update_status("completed", 100, "Breaking News video generated successfully!", video_url, stories)
+        add_video_to_history(video_filename, topic, target_date, stories)
         print("Breaking News video generation complete.")
     else:
         update_status("failed", 0, "Video stitch failed: output file was not created.")

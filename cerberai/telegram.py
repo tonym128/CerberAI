@@ -166,8 +166,27 @@ async def handle_telegram_message(text: str, config, manager, agent):
         if not os.path.exists(video_path):
             await send_telegram_message(config, f"❌ Video file `{video_filename}` does not exist.")
             return
+            
+        # Try to extract stories from history to send as links in the caption
+        stories_caption = ""
+        try:
+            history_path = Path("cerberai/static/videos/history.json")
+            if history_path.exists():
+                with open(history_path, "r") as hf:
+                    h_data = json.load(hf)
+                matched = [x for x in h_data if x.get("id") == video_id]
+                if matched and "stories" in matched[0]:
+                    story_links = []
+                    for s in matched[0]["stories"]:
+                        if s.get("source_url") and s.get("title"):
+                            story_links.append(f"• [{s['title']}]({s['source_url']})")
+                    if story_links:
+                        stories_caption = "\n\n📰 **Featured Stories:**\n" + "\n".join(story_links[:5])
+        except Exception as ex:
+            print(f"Failed to lookup stories for Telegram caption: {ex}")
+            
         await send_telegram_message(config, f"📤 Sending video file `{video_filename}`...")
-        await send_telegram_video(config, video_path, f"Breaking News Video ID: {video_id}")
+        await send_telegram_video(config, video_path, f"🎬 **Breaking News Video**\nID: {video_id}{stories_caption}")
         
     # 6. LOGS RETRIEVAL Command
     elif text_lower == "/logs":
@@ -211,8 +230,18 @@ async def handle_telegram_message(text: str, config, manager, agent):
             if status_data["status"] == "completed":
                 video_url = status_data["video_url"]
                 video_path = video_url.replace("/static/videos/", "cerberai/static/videos/")
+                stories = status_data.get("stories", [])
+                
+                story_links = []
+                for s in stories:
+                    if s.get("source_url") and s.get("title"):
+                        story_links.append(f"• [{s['title']}]({s['source_url']})")
+                stories_caption = ""
+                if story_links:
+                    stories_caption = "\n\n📰 **Featured Stories:**\n" + "\n".join(story_links[:5])
+                    
                 await send_telegram_message(config, f"✅ Video generation complete for: `{topic if topic else 'World News'}`")
-                await send_telegram_video(config, video_path, f"Breaking News: {topic if topic else 'World News'}")
+                await send_telegram_video(config, video_path, f"🎬 **Breaking News:** {topic if topic else 'World News'}{stories_caption}")
             else:
                 await send_telegram_message(config, f"❌ Video generation failed: {status_data['message']}")
                 

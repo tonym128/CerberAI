@@ -679,6 +679,7 @@ if (btnNewsVideo) {
                 newsVideoPlayer.src = `${data.video_url}?t=${Date.now()}`;
                 newsVideoPlayerContainer.classList.remove("hidden");
                 newsVideoPlayer.load();
+                renderVideoStories(data.stories);
 
                 // Refresh history list if it is currently open
                 if (newsVideoHistoryContainer && !newsVideoHistoryContainer.classList.contains("hidden")) {
@@ -752,6 +753,46 @@ if (btnNewsVideo) {
         });
     }
 
+    function renderVideoStories(stories) {
+        const container = document.getElementById("news-video-sources");
+        const list = document.getElementById("news-video-sources-list");
+        if (!container || !list) return;
+        
+        if (!stories || stories.length === 0) {
+            container.classList.add("hidden");
+            return;
+        }
+        
+        list.innerHTML = "";
+        stories.forEach(story => {
+            const item = document.createElement("div");
+            item.style.cssText = "font-size: 11px; display: flex; flex-direction: column; gap: 2px; padding: 4px 6px; background: rgba(255,255,255,0.02); border: 1px solid var(--border-color); border-radius: 6px; margin-bottom: 2px;";
+            
+            let domain = "";
+            if (story.source_url) {
+                try {
+                    const urlObj = new URL(story.source_url);
+                    domain = urlObj.hostname.replace("www.", "");
+                } catch (e) {
+                    domain = "Source";
+                }
+            }
+            
+            const linkHtml = story.source_url 
+                ? `<a href="${story.source_url}" target="_blank" style="color: var(--primary); text-decoration: none; font-size: 10px; font-weight: 600; display: inline-flex; align-items: center; gap: 2px;">🔗 Read on ${domain}</a>`
+                : `<span style="color: var(--text-secondary); font-size: 10px; font-style: italic;">No source URL</span>`;
+                
+            item.innerHTML = `
+                <div style="font-weight: 600; color: var(--text-primary); text-overflow: ellipsis; overflow: hidden; white-space: nowrap;">${story.title}</div>
+                <div style="font-size: 10px; color: var(--text-secondary); line-height: 1.3;">${story.summary}</div>
+                <div style="margin-top: 2px;">${linkHtml}</div>
+            `;
+            list.appendChild(item);
+        });
+        
+        container.classList.remove("hidden");
+    }
+
     async function fetchVideoHistory() {
         if (!newsVideoHistoryList) return;
         try {
@@ -803,6 +844,7 @@ if (btnNewsVideo) {
                     newsVideoPlayerContainer.classList.remove("hidden");
                     newsVideoPlayer.load();
                     newsVideoPlayer.play().catch(err => console.log("Auto-play blocked:", err));
+                    renderVideoStories(item.stories);
                 });
                 
                 newsVideoHistoryList.appendChild(el);

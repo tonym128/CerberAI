@@ -70,6 +70,15 @@ async def run_scheduled_automation(target: str, params: dict, manager, agent, co
             if status_data["status"] == "completed":
                 video_url = status_data["video_url"]
                 video_path = video_url.replace("/static/videos/", "cerberai/static/videos/")
+                stories = status_data.get("stories", [])
+                
+                story_links = []
+                for s in stories:
+                    if s.get("source_url") and s.get("title"):
+                        story_links.append(f"• [{s['title']}]({s['source_url']})")
+                stories_caption = ""
+                if story_links:
+                    stories_caption = "\n\n📰 **Featured Stories:**\n" + "\n".join(story_links[:5])
                 
                 await send_telegram_message(
                     config, 
@@ -81,7 +90,7 @@ async def run_scheduled_automation(target: str, params: dict, manager, agent, co
                 await send_telegram_video(
                     config, 
                     video_path, 
-                    f"Breaking News: {topic if topic else 'World News'} ({status_data['message']})"
+                    f"🎬 **Breaking News:** {topic if topic else 'World News'}{stories_caption}"
                 )
             else:
                 await send_telegram_message(
