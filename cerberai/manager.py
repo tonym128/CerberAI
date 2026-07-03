@@ -83,7 +83,6 @@ class DynamicModelManager:
                 else:
                     backend_config["model_name"] = "large-v3"
                     model_cfg.vram_estimate_gb = 4.8
-                print(f"Whisper auto-config selected size '{backend_config['model_name']}' for max VRAM {max_vram} GB.")
             return WhisperBackend(model_cfg.id, backend_config, model_cfg.vram_estimate_gb)
         elif b_type == "tts":
             return TTSBackend(model_cfg.id, backend_config, model_cfg.vram_estimate_gb)
