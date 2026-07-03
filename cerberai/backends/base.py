@@ -1,5 +1,6 @@
 from abc import ABC, abstractmethod
 from typing import Dict, Any, AsyncIterator
+import asyncio
 
 class BaseBackend(ABC):
     def __init__(self, model_id: str, config: Dict[str, Any], vram_estimate_gb: float):
@@ -7,6 +8,7 @@ class BaseBackend(ABC):
         self.config = config
         self.vram_estimate_gb = vram_estimate_gb
         self._is_loaded = False
+        self.lock = asyncio.Lock()
 
     @abstractmethod
     async def load(self, progress_callback=None) -> bool:

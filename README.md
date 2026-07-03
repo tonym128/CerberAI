@@ -44,12 +44,25 @@ CerberAI is built on a modular, event-driven Python architecture:
 - **OpenAI-Compatible Endpoints**: Use with any tool that supports OpenAI's API (e.g. Open WebUI, LibreChat, Cursor, Cline).
 - **Dynamic Resource Loading/Unloading**: Keeps memory footprint low by loading models on-demand and unloading them when idle or to make room for other models.
 - **Dynamic Purpose-Based LLM Routing**: Introspects model definitions and matches them to incoming intents using custom descriptions.
-- **Interactive Setup Dashboard**: An inline WebUI configuration screen to add, remove, and update LLM/STT/Image models and hot-reload settings in memory.
+- **Interactive Setup Dashboard**: An inline WebUI configuration screen to add, remove, and update LLM/STT/Image models, configure integration parameters, and hot-reload settings in memory.
 - **Persistent Conversation Threads**: Track, review, and delete historical chats from a dynamic sidebar, with automatic session naming based on context.
 - **Inline Query Performance Metrics**: Real-time measurement and rendering of wall time, total completion tokens, and generation speed (tokens per second) for streaming and non-streaming prompts.
 - **Dynamic Context Size & KV Cache Allocator**: Auto-calculates model-level maximum supported KV cache size dynamically using the remaining VRAM budget, with optional custom token limit overrides.
 - **Real-Time Load & Download Indicators**: Dynamic polling updates the WebUI sidebar catalog and the active chat bubble with real-time model initialization and download progress percentages.
+- **Subprocess Isolation**: Background `llama-server` instances are launched inside isolated process groups (`os.setsid` on POSIX systems) to completely prevent lingering zombie processes in case the parent gateway crashes.
+- **Inference Queuing Locks**: Integrates thread-safe serialization locks (`asyncio.Lock`) inside backend adapters (Diffusers, Whisper, TTS) to queue overlapping inference passes, preventing concurrent device borrowing conflicts (such as PyTorch/ONNX "Already borrowed" or OOM crashes).
+- **Smooth Ken Burns News Video Pipeline**:
+  - Automatically identifies major news topics via local `web_search` and scrapes detailed source text via `web_fetch`.
+  - Animates generated graphics concurrently using FFmpeg `zoompan` filters scaled to high-resolution (`2048x2048`) to eliminate rendering coordinate jitter.
+  - Composites subtitle text and broadcast banners dynamically on top of the finished animation as transparent PNG overlays, keeping the text crisp, stable, and fixed on the screen (no zooming/pixelation).
+  - Utilizes standard H.264/AAC re-encoding on concatenation to ensure 100% compliant timeline playback on modern web browsers.
+- **Historical Video Archive**: Unique output naming conventions and metadata logging (`history.json`) let users view and reload previously generated news videos from an interactive dashboard drawer.
+- **Daily Scheduled Automations**: Configure daily timers to execute search queries or run automations (such as the News Video pipeline) at specified local times, saving execution history states.
+- **Telegram Bot Integration**: Connects your gateway to a Telegram Bot to query models via chat, trigger automations, download generated videos, view active daily schedules, and read server logs (`llama.log`) remotely.
+- **Collapsible Sidebar Panels**: Premium layout featuring collapsible sidebar sections (Chat History, Model Catalog, Automations, Scheduled Automations) that start collapsed by default. The VRAM Allocator is placed at the top for prominent resource tracking.
 - **Multiple Backends**: Integrates with Ollama, llama.cpp, Whisper, Diffusers, Kokoro, and others.
+
+---
 
 ## Directory Structure
 
@@ -62,18 +75,23 @@ cerberai/
 │   ├── manager.py       # Dynamic Model Manager (DMM)
 │   ├── router.py        # Intent Router (Classifier/LLM)
 │   ├── automation.py    # Automation pipelines (e.g., News Video Generator)
+│   ├── schedules.py     # Scheduled daily tasks manager
+│   ├── telegram.py      # Telegram Bot updates & command processor
 │   └── backends/        # Adapters for various execution backends
 │       ├── __init__.py
-│       ├── base.py      # Base backend adapter
-│       ├── llamacpp.py  # llama.cpp server subprocess manager
+│       ├── base.py      # Base backend adapter (holds serialization locks)
+│       ├── llamacpp.py  # llama.cpp server subprocess manager (os.setsid)
 │       ├── ollama.py    # Ollama integration
 │       ├── whisper.py   # Local OpenAI-Whisper STT
 │       ├── tts.py       # Local SOTA Kokoro / Pyttsx3 / gTTS
 │       └── diffusers.py # Diffusers LCM pipelines
 ├── config.yaml          # Configuration file
+├── schedules.json       # Scheduled tasks database
 ├── requirements.txt     # Python dependencies
 └── README.md            # This file
 ```
+
+---
 
 ## Quick Start
 
@@ -81,8 +99,8 @@ cerberai/
    ```bash
    pip install -r requirements.txt
    ```
-2. Configure your models in `config.yaml`.
-3. To run TTS completely offline, install the system text-to-speech engine:
+2. Configure your models in `config.yaml` or use the WebUI settings modal.
+3. Install system audio synthesis dependencies (e.g., if using Pyttsx3 TTS backends):
    ```bash
    # Ubuntu / Debian
    sudo apt-get install espeak -y
@@ -91,6 +109,45 @@ cerberai/
    ```bash
    python -m cerberai.main
    ```
+
+---
+
+## Scheduled Automations Setup
+
+Scheduled tasks can be configured directly from the sidebar. 
+- **Daily Query**: Executes a specific search or question daily at a set local time (e.g., `08:00`) and posts the LLM response directly to your Telegram Bot.
+- **Daily News Video**: Automatically compiles the top 10 news stories, renders the smooth Ken Burns animation, speaks the voice narration, and sends the final `.mp4` video file directly to your Telegram app.
+
+Schedules are persisted inside `schedules.json` in the root folder.
+
+---
+
+## Telegram Bot Integration Setup
+
+CerberAI can run a background bot thread to let you manage your local assistant and monitor server status remotely.
+
+### 1. Registering your Bot
+1. Open Telegram and search for [@BotFather](https://t.me/BotFather).
+2. Send `/newbot` and follow the instructions to choose a name and username.
+3. Copy the generated **HTTP API Token** (e.g., `123456789:ABCdefGhIJKlmNoPQRsTUVwxyZ`).
+
+### 2. Connection Settings
+1. Open the CerberAI settings modal (Gear icon ⚙️ at the top right of the WebUI).
+2. Under **Global & Integration Settings**, paste your **Telegram Bot Token**.
+3. *Optional*: If you know your personal Telegram User Chat ID, enter it into **Telegram Chat ID**. Otherwise, leave it empty.
+4. Save and Hot-Reload.
+
+### 3. Binding & Commands
+* If you left the Chat ID empty, open your newly created bot in Telegram and send `/start`. The bot will automatically capture your Chat ID, bind to your account, and write it to `config.yaml` for permanent locking.
+* **Available Commands**:
+  - `/help` or `/start` - Show the interactive instructions panel.
+  - `/chat <prompt>` (or sending plain text) - Query the LLM gateway.
+  - `/history` - List WebUI conversation history threads.
+  - `/videos` - Catalog generated video files.
+  - `/sendvideo <video_id>` - Download and watch the video directly inside Telegram.
+  - `/logs` - View the last 25 lines of your gateway log (`llama.log`).
+  - `/schedules` - List configured daily scheduled jobs.
+  - `/run [topic]` - Manually compile and upload a Yesterday's News Video.
 
 ---
 
@@ -231,4 +288,5 @@ Intel Arc and Xe graphics cards are supported natively in recent PyTorch release
     ```bash
     python -c "import torch; print('XPU Available:', torch.xpu.is_available() if hasattr(torch, 'xpu') else False)"
     ```
+
 

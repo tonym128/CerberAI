@@ -1115,4 +1115,41 @@ select option {
     color: #f3f4f6 !important;
 }
 
+/* Collapsible sections styling */
+.collapsible-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    cursor: pointer;
+    padding: 10px 14px;
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    margin-top: 16px;
+    margin-bottom: 4px;
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--text-secondary);
+    transition: all 0.2s ease;
+}
+.collapsible-header:hover {
+    background: rgba(255, 255, 255, 0.07);
+    border-color: var(--primary);
+    color: var(--text-main);
+}
+.collapsible-content {
+    display: block;
+    overflow: hidden;
+}
+.collapsible-content.collapsed {
+    display: none;
+}
+.collapsible-header .chevron {
+    font-size: 10px;
+    color: var(--text-secondary);
+    transition: transform 0.2s;
+}
+
 

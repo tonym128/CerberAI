@@ -50,36 +50,37 @@ class WhisperBackend(BaseBackend):
 
     async def handle_audio_transcription(self, file_bytes: bytes, filename: str, payload: Dict[str, Any]) -> Dict[str, Any]:
         """Save upload bytes to temp file, transcribe, and clean up."""
-        if not self.model:
-            await self.load()
-            
-        # Get temp file suffix
-        suffix = os.path.splitext(filename)[1] if filename else ".wav"
-        
-        with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as temp_file:
-            temp_file.write(file_bytes)
-            temp_path = temp_file.name
-
-        try:
-            # Run inference (blocking call, so run in executor to prevent freezing loop)
-            import asyncio
-            loop = asyncio.get_running_loop()
-            
-            # Options
-            temperature = payload.get("temperature", 0.0)
-            language = payload.get("language")
-            
-            options = {}
-            if language:
-                options["language"] = language
+        async with self.lock:
+            if not self.model:
+                await self.load()
                 
-            print(f"Transcribing audio file {filename}...")
-            result = await loop.run_in_executor(
-                None,
-                lambda: self.model.transcribe(temp_path, temperature=temperature, **options)
-            )
-            return {"text": result.get("text", "").strip()}
-        finally:
-            # Clean up temp file
-            if os.path.exists(temp_path):
-                os.unlink(temp_path)
+            # Get temp file suffix
+            suffix = os.path.splitext(filename)[1] if filename else ".wav"
+            
+            with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as temp_file:
+                temp_file.write(file_bytes)
+                temp_path = temp_file.name
+    
+            try:
+                # Run inference (blocking call, so run in executor to prevent freezing loop)
+                import asyncio
+                loop = asyncio.get_running_loop()
+                
+                # Options
+                temperature = payload.get("temperature", 0.0)
+                language = payload.get("language")
+                
+                options = {}
+                if language:
+                    options["language"] = language
+                    
+                print(f"Transcribing audio file {filename}...")
+                result = await loop.run_in_executor(
+                    None,
+                    lambda: self.model.transcribe(temp_path, temperature=temperature, **options)
+                )
+                return {"text": result.get("text", "").strip()}
+            finally:
+                # Clean up temp file
+                if os.path.exists(temp_path):
+                    os.unlink(temp_path)

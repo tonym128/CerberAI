@@ -100,13 +100,14 @@ class LlamaCppBackend(BaseBackend):
 
         print(f"Starting llama.cpp server: {' '.join(cmd)}")
         try:
-            # Run in a new process group or ignore stdin/stdout to avoid locking
+            # Run in a new process group to prevent zombie processes if the gateway crashes
             self.process = subprocess.Popen(
                 cmd,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 text=True,
-                env=env
+                env=env,
+                preexec_fn=os.setsid
             )
 
             

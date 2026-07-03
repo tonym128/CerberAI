@@ -127,5 +127,78 @@ class TestAPI(unittest.TestCase):
         response = self.client.get(f"/api/conversations/{conv_id}")
         self.assertEqual(response.status_code, 404)
 
+    @patch("cerberai.automation.generate_yesterday_news_video")
+    def test_news_video_automation_endpoint(self, mock_generate):
+        from cerberai.automation import update_status, get_status
+        update_status("idle", 0, "")
+        
+        # 1. Trigger POST without payload
+        response = self.client.post("/v1/automate/news-video")
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertEqual(data["message"], "Automation started successfully.")
+        self.assertEqual(data["status"]["status"], "running")
+        
+        # Reset to idle to test payload parsing
+        update_status("idle", 0, "")
+        
+        # 2. Trigger POST with custom payload
+        payload = {"topic": "Tech & AI", "date": "2026-07-02"}
+        response = self.client.post("/v1/automate/news-video", json=payload)
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertEqual(data["message"], "Automation started successfully.")
+
+    def test_news_video_history_endpoint(self):
+        response = self.client.get("/v1/automate/news-video/history")
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertTrue(isinstance(data, list))
+
+    def test_schedules_endpoints(self):
+        # 1. GET schedules (starts empty or with initial mock config)
+        response = self.client.get("/api/schedules")
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(isinstance(response.json(), list))
+        
+        # 2. POST to create a schedule
+        payload = {
+            "type": "query",
+            "time": "08:30",
+            "target": "Explain daily AI advancements"
+        }
+        response = self.client.post("/api/schedules", json=payload)
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertEqual(data["type"], "query")
+        self.assertEqual(data["time"], "08:30")
+        self.assertEqual(data["target"], "Explain daily AI advancements")
+        self.assertTrue("id" in data)
+        schedule_id = data["id"]
+        
+        # 3. GET schedules again (must contain the created one)
+        response = self.client.get("/api/schedules")
+        self.assertEqual(response.status_code, 200)
+        schedules = response.json()
+        matching = [s for s in schedules if s["id"] == schedule_id]
+        self.assertEqual(len(matching), 1)
+        
+        # 4. DELETE the schedule
+        response = self.client.delete(f"/api/schedules/{schedule_id}")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["status"], "success")
+        
+        # 5. Verify deleted
+        response = self.client.get("/api/schedules")
+        schedules = response.json()
+        matching = [s for s in schedules if s["id"] == schedule_id]
+        self.assertEqual(len(matching), 0)
+
+    def test_telegram_history_endpoint(self):
+        response = self.client.get("/api/telegram/history")
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertTrue(isinstance(data, list))
+
 if __name__ == "__main__":
     unittest.main()

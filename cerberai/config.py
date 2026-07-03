@@ -35,6 +35,8 @@ class AppConfig(BaseModel):
     router: RouterConfig
     models: List[ModelConfig] = Field(default_factory=list)
     hf_token: Optional[str] = None
+    telegram_bot_token: Optional[str] = None
+    telegram_chat_id: Optional[str] = None
 
 def load_config(config_path: str = "config.yaml") -> AppConfig:
     if not os.path.exists(config_path):

@@ -88,66 +88,67 @@ class TTSBackend(BaseBackend):
 
     async def handle_audio_speech(self, payload: Dict[str, Any]) -> bytes:
         """Synthesize text to speech bytes using Kokoro, pyttsx3, or gTTS."""
-        text = payload.get("input", "")
-        if not text:
-            raise ValueError("Input text is required for text-to-speech.")
-
-        # Ensure correct engine is loaded
-        if self.engine_type == "kokoro" and not self.kokoro:
-            await self.load()
-        elif self.engine_type == "pyttsx3" and not self.engine:
-            await self.load()
-
-        # 1. Kokoro Local SOTA TTS
-        if self.engine_type == "kokoro" and self.kokoro:
-            try:
-                voice = payload.get("voice", self.voice)
-                # Sarah is default, but bella or sarah are excellent female voices
-                if voice == "alloy" or voice == "echo":
-                    voice = "af_sarah" # Map OpenAI voices to Kokoro
+        async with self.lock:
+            text = payload.get("input", "")
+            if not text:
+                raise ValueError("Input text is required for text-to-speech.")
+    
+            # Ensure correct engine is loaded
+            if self.engine_type == "kokoro" and not self.kokoro:
+                await self.load()
+            elif self.engine_type == "pyttsx3" and not self.engine:
+                await self.load()
+    
+            # 1. Kokoro Local SOTA TTS
+            if self.engine_type == "kokoro" and self.kokoro:
+                try:
+                    voice = payload.get("voice", self.voice)
+                    # Sarah is default, but bella or sarah are excellent female voices
+                    if voice == "alloy" or voice == "echo":
+                        voice = "af_sarah" # Map OpenAI voices to Kokoro
+                        
+                    print(f"Synthesizing text using Kokoro ONNX (voice: {voice})...")
                     
-                print(f"Synthesizing text using Kokoro ONNX (voice: {voice})...")
-                
-                # Create audio samples
-                loop = asyncio.get_running_loop()
-                samples, sample_rate = await loop.run_in_executor(
-                    None,
-                    lambda: self.kokoro.create(text, voice=voice, speed=1.0, lang="en-us")
-                )
-                
-                # Write to WAV bytes in memory
-                import soundfile as sf
+                    # Create audio samples
+                    loop = asyncio.get_running_loop()
+                    samples, sample_rate = await loop.run_in_executor(
+                        None,
+                        lambda: self.kokoro.create(text, voice=voice, speed=1.0, lang="en-us")
+                    )
+                    
+                    # Write to WAV bytes in memory
+                    import soundfile as sf
+                    fp = io.BytesIO()
+                    sf.write(fp, samples, sample_rate, format='WAV')
+                    return fp.getvalue()
+                except Exception as e:
+                    print(f"Warning: Kokoro synthesis failed ({e}). Falling back to gTTS (online).")
+                    self.engine_type = "gtts"
+                    # Fall through to gTTS
+    
+            # 2. gTTS Online Fallback
+            if self.engine_type == "gtts":
+                from gtts import gTTS
+                tts = gTTS(text=text, lang=payload.get("language", "en"))
                 fp = io.BytesIO()
-                sf.write(fp, samples, sample_rate, format='WAV')
+                tts.write_to_fp(fp)
                 return fp.getvalue()
-            except Exception as e:
-                print(f"Warning: Kokoro synthesis failed ({e}). Falling back to gTTS (online).")
-                self.engine_type = "gtts"
-                # Fall through to gTTS
-
-        # 2. gTTS Online Fallback
-        if self.engine_type == "gtts":
-            from gtts import gTTS
-            tts = gTTS(text=text, lang=payload.get("language", "en"))
-            fp = io.BytesIO()
-            tts.write_to_fp(fp)
-            return fp.getvalue()
-
-        # 3. Offline synthesis using pyttsx3
-        with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as temp_file:
-            temp_path = temp_file.name
-
-        try:
-            loop = asyncio.get_running_loop()
-            
-            def run_synthesis():
-                self.engine.save_to_file(text, temp_path)
-                self.engine.runAndWait()
-
-            await loop.run_in_executor(None, run_synthesis)
-            
-            with open(temp_path, "rb") as f:
-                return f.read()
-        finally:
-            if os.path.exists(temp_path):
-                os.unlink(temp_path)
+    
+            # 3. Offline synthesis using pyttsx3
+            with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as temp_file:
+                temp_path = temp_file.name
+    
+            try:
+                loop = asyncio.get_running_loop()
+                
+                def run_synthesis():
+                    self.engine.save_to_file(text, temp_path)
+                    self.engine.runAndWait()
+    
+                await loop.run_in_executor(None, run_synthesis)
+                
+                with open(temp_path, "rb") as f:
+                    return f.read()
+            finally:
+                if os.path.exists(temp_path):
+                    os.unlink(temp_path)

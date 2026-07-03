@@ -20,15 +20,11 @@
                 <span class="badge">v0.1.0</span>
             </div>
 
-            <!-- New Chat & Chat History -->
-            <button id="btn-new-chat" class="btn btn-primary w-full" style="margin-bottom: 16px; font-weight: 600;">💬 New Chat</button>
-            <div class="section-title">Chat History</div>
-            <div id="conversations-list" class="conversations-history" style="max-height: 200px; overflow-y: auto; margin-bottom: 20px; padding-right: 4px;">
-                <!-- Populated dynamically -->
-            </div>
+            <!-- New Chat & VRAM Monitor -->
+            <button id="btn-new-chat" class="btn btn-primary w-full" style="margin-bottom: 12px; font-weight: 600;">💬 New Chat</button>
 
             <!-- VRAM Monitor -->
-            <div class="monitor-card">
+            <div class="monitor-card" style="margin-bottom: 16px;">
                 <h3>VRAM Allocator</h3>
                 <div class="progress-container">
                     <div class="progress-bar-bg">
@@ -48,6 +44,17 @@
                         <span class="metric-label">Eviction</span>
                         <span id="eviction-strategy" class="metric-val">LRU</span>
                     </div>
+                </div>
+            </div>
+
+            <!-- Chat History (Collapsible) -->
+            <div class="collapsible-header collapsed" onclick="toggleSection(this)">
+                <span>💬 Chat History</span>
+                <span class="chevron">▶</span>
+            </div>
+            <div class="collapsible-content collapsed">
+                <div id="conversations-list" class="conversations-history" style="max-height: 180px; overflow-y: auto; margin-bottom: 12px; padding-right: 4px;">
+                    <!-- Populated dynamically -->
                 </div>
             </div>
 
@@ -83,28 +90,130 @@
                 </select>
             </div>
 
-            <!-- Configured Models List -->
-            <div class="section-title">Model Catalog</div>
-            <div id="models-list" class="models-catalog">
-                <!-- Populated dynamically -->
+            <!-- Model Catalog (Collapsible) -->
+            <div class="collapsible-header collapsed" onclick="toggleSection(this)">
+                <span>📦 Model Catalog</span>
+                <span class="chevron">▶</span>
+            </div>
+            <div class="collapsible-content collapsed">
+                <div id="models-list" class="models-catalog" style="margin-bottom: 12px;">
+                    <!-- Populated dynamically -->
+                </div>
             </div>
             
-            <!-- Automations Section -->
-            <div class="section-title">Automations</div>
-            <div class="automation-card">
-                <div class="auto-header">Yesterday's News Video</div>
-                <p class="auto-description">Generates the top 10 news stories of yesterday, writes summaries, draws graphics, synthesizes voice tracks, and stitches them into a final broadcast video.</p>
-                <button id="btn-news-video" class="btn btn-primary w-full">Generate Video</button>
-                <div id="news-video-status-container" class="status-container hidden">
-                    <div class="progress-bar-bg">
-                        <div id="news-video-progress" class="progress-bar" style="width: 0%"></div>
+            <!-- Automations (Collapsible) -->
+            <div class="collapsible-header collapsed" onclick="toggleSection(this)">
+                <span>⚙️ Automations</span>
+                <span class="chevron">▶</span>
+            </div>
+            <div class="collapsible-content collapsed">
+                <div class="automation-card" style="margin-bottom: 12px;">
+                    <div class="auto-header">Yesterday's News Video</div>
+                    <p class="auto-description" style="font-size: 11px;">Generates the top 10 news stories of yesterday, writes summaries, draws graphics, synthesizes voice tracks, and stitches them into a final broadcast video.</p>
+                    
+                    <div style="margin-bottom: 12px; display: flex; flex-direction: column; gap: 8px;">
+                        <div style="display: flex; flex-direction: column; gap: 4px;">
+                            <label for="auto-topic" style="font-size: 10px; font-weight: 600; color: var(--text-secondary);">Custom Topic (Optional)</label>
+                            <input type="text" id="auto-topic" placeholder="e.g. Space & Physics" style="padding: 6px 10px; border-radius: 6px; border: 1px solid var(--border-color); background: rgba(0,0,0,0.2); color: var(--text-primary); font-size: 11px; outline: none; width: 100%;">
+                        </div>
+                        <div style="display: flex; flex-direction: column; gap: 4px;">
+                            <label for="auto-date" style="font-size: 10px; font-weight: 600; color: var(--text-secondary);">Target Date (Optional)</label>
+                            <input type="date" id="auto-date" style="padding: 6px 10px; border-radius: 6px; border: 1px solid var(--border-color); background: rgba(0,0,0,0.2); color: var(--text-primary); font-size: 11px; outline: none; width: 100%;">
+                        </div>
                     </div>
-                    <span id="news-video-status-msg" class="status-msg">Starting...</span>
-                </div>
-                <div id="news-video-player-container" class="player-container hidden">
-                    <video id="news-video-player" controls class="w-full" style="border-radius: 8px; margin-top: 10px; max-height: 200px; border: 1px solid var(--border-color);"></video>
+                    
+                    <div style="display: flex; gap: 8px; width: 100%;">
+                        <button id="btn-news-video" class="btn btn-primary" style="flex-grow: 1; font-size: 11px; padding: 8px;">Generate Video</button>
+                        <button type="button" id="btn-news-history" class="btn btn-secondary" style="padding: 0 10px; display: flex; align-items: center; justify-content: center; font-size: 11px;" title="View Video History">📋 History</button>
+                    </div>
+                    <div id="news-video-status-container" class="status-container hidden">
+                        <div class="progress-bar-bg">
+                            <div id="news-video-progress" class="progress-bar" style="width: 0%"></div>
+                        </div>
+                        <span id="news-video-status-msg" class="status-msg">Starting...</span>
+                    </div>
+                    <div id="news-video-player-container" class="player-container hidden">
+                        <video id="news-video-player" controls class="w-full" style="border-radius: 8px; margin-top: 10px; max-height: 200px; border: 1px solid var(--border-color);"></video>
+                    </div>
+                    
+                    <div id="news-video-history-container" class="hidden" style="margin-top: 12px; border-top: 1px solid var(--border-color); padding-top: 12px;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                            <h4 style="font-size: 10px; font-weight: 600; color: var(--text-secondary); margin: 0; text-transform: uppercase; letter-spacing: 0.5px;">Video History</h4>
+                            <button type="button" id="btn-close-history" style="background: none; border: none; color: var(--text-secondary); cursor: pointer; font-size: 14px; padding: 0; line-height: 1;">&times;</button>
+                        </div>
+                        <div id="news-video-history-list" style="max-height: 140px; overflow-y: auto; display: flex; flex-direction: column; gap: 6px; padding-right: 4px;">
+                            <!-- Populated dynamically -->
+                        </div>
+                    </div>
                 </div>
             </div>
+
+            <!-- Scheduled Automations (Collapsible) -->
+            <div class="collapsible-header collapsed" onclick="toggleSection(this)">
+                <span>⏰ Scheduled Automations</span>
+                <span class="chevron">▶</span>
+            </div>
+            <div class="collapsible-content collapsed">
+                <div class="automation-card" style="margin-bottom: 12px;">
+                    <p class="auto-description" style="font-size: 11px;">Configure daily triggers to run search queries or automations automatically and send results to Telegram.</p>
+                    
+                    <div style="margin-bottom: 12px; display: flex; flex-direction: column; gap: 8px;">
+                        <div style="display: flex; gap: 6px;">
+                            <select id="sch-type" style="padding: 6px 10px; border-radius: 6px; border: 1px solid var(--border-color); background: rgba(0,0,0,0.2); color: var(--text-primary); font-size: 11px; outline: none; width: 45%;">
+                                <option value="query">Daily Query</option>
+                                <option value="automation">Daily News Video</option>
+                            </select>
+                            <input type="time" id="sch-time" value="09:00" style="padding: 6px 10px; border-radius: 6px; border: 1px solid var(--border-color); background: rgba(0,0,0,0.2); color: var(--text-primary); font-size: 11px; outline: none; width: 55%;">
+                        </div>
+                        <div style="display: flex; flex-direction: column; gap: 4px;">
+                            <label for="sch-target" id="sch-target-label" style="font-size: 10px; font-weight: 600; color: var(--text-secondary);">Query Prompt</label>
+                            <input type="text" id="sch-target" placeholder="e.g. Explain LLMs..." style="padding: 6px 10px; border-radius: 6px; border: 1px solid var(--border-color); background: rgba(0,0,0,0.2); color: var(--text-primary); font-size: 11px; outline: none; width: 100%;">
+                        </div>
+                        <div id="sch-params-group" style="display: none; flex-direction: column; gap: 4px;">
+                            <label for="sch-params-topic" style="font-size: 10px; font-weight: 600; color: var(--text-secondary);">Custom Topic (Optional)</label>
+                            <input type="text" id="sch-params-topic" placeholder="e.g. AI News" style="padding: 6px 10px; border-radius: 6px; border: 1px solid var(--border-color); background: rgba(0,0,0,0.2); color: var(--text-primary); font-size: 11px; outline: none; width: 100%;">
+                        </div>
+                    </div>
+                    
+                    <button id="btn-add-schedule" class="btn btn-primary w-full" style="font-size: 11px; padding: 8px;">+ Add Daily Schedule</button>
+                    
+                    <!-- Schedules List Container -->
+                    <div id="schedules-list-container" style="margin-top: 12px; border-top: 1px solid var(--border-color); padding-top: 12px; max-height: 150px; overflow-y: auto; display: flex; flex-direction: column; gap: 6px;">
+                        <!-- Populated dynamically -->
+                    </div>
+                </div>
+            </div>
+
+            <!-- Telegram History (Collapsible) -->
+            <div class="collapsible-header collapsed" id="header-tg-history" onclick="toggleSection(this)">
+                <span>💬 Telegram Bot Log</span>
+                <span class="chevron">▶</span>
+            </div>
+            <div class="collapsible-content collapsed">
+                <div class="automation-card" style="margin-bottom: 12px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                        <span style="font-size: 10px; color: var(--text-secondary); text-transform: uppercase; font-weight: 600; letter-spacing: 0.5px;">Message History</span>
+                        <button type="button" id="btn-refresh-tg-history" style="background: none; border: none; color: var(--primary); cursor: pointer; font-size: 10px; font-weight: 600; padding: 0;">🔄 Refresh</button>
+                    </div>
+                    <div id="telegram-history-list" style="max-height: 150px; overflow-y: auto; display: flex; flex-direction: column; gap: 6px; padding-right: 4px;">
+                        <!-- Populated dynamically -->
+                    </div>
+                </div>
+            </div>
+            
+            <script>
+                function toggleSection(header) {
+                    header.classList.toggle("collapsed");
+                    const content = header.nextElementSibling;
+                    if (content) {
+                        content.classList.toggle("collapsed");
+                    }
+                    const chevron = header.querySelector(".chevron");
+                    if (chevron) {
+                        chevron.textContent = header.classList.contains("collapsed") ? "▶" : "▼";
+                    }
+                }
+            </script>
             
             <div class="sidebar-footer">
 
@@ -234,13 +343,23 @@
                             </div>
                     </div>
 
-                    <!-- Global Settings -->
+                    <!-- Global & Integration Settings -->
                     <div class="form-section">
-                        <h3>Global Settings</h3>
+                        <h3>Global & Integration Settings</h3>
                         <div class="form-row">
                             <div class="form-group">
                                 <label for="setup-hf-token">Hugging Face API Token (HF_TOKEN)</label>
                                 <input type="password" id="setup-hf-token" placeholder="hf_...">
+                            </div>
+                        </div>
+                        <div class="form-row" style="margin-top: 10px;">
+                            <div class="form-group">
+                                <label for="setup-tg-token">Telegram Bot Token</label>
+                                <input type="password" id="setup-tg-token" placeholder="token from @BotFather">
+                            </div>
+                            <div class="form-group">
+                                <label for="setup-tg-chat">Telegram Chat ID (Auto-binds if left empty)</label>
+                                <input type="text" id="setup-tg-chat" placeholder="e.g. 123456789">
                             </div>
                         </div>
                     </div>

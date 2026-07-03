@@ -641,6 +641,11 @@ const newsVideoStatusMsg = document.getElementById("news-video-status-msg");
 const newsVideoPlayerContainer = document.getElementById("news-video-player-container");
 const newsVideoPlayer = document.getElementById("news-video-player");
 
+const btnNewsHistory = document.getElementById("btn-news-history");
+const newsVideoHistoryContainer = document.getElementById("news-video-history-container");
+const newsVideoHistoryList = document.getElementById("news-video-history-list");
+const btnCloseHistory = document.getElementById("btn-close-history");
+
 if (btnNewsVideo) {
     let pollInterval = null;
 
@@ -670,9 +675,15 @@ if (btnNewsVideo) {
                 btnNewsVideo.textContent = "Generate Video";
                 newsVideoStatusContainer.classList.add("hidden");
                 
-                // Load and play video
-                newsVideoPlayer.src = data.video_url;
+                // Load and play video with cache buster
+                newsVideoPlayer.src = `${data.video_url}?t=${Date.now()}`;
                 newsVideoPlayerContainer.classList.remove("hidden");
+                newsVideoPlayer.load();
+
+                // Refresh history list if it is currently open
+                if (newsVideoHistoryContainer && !newsVideoHistoryContainer.classList.contains("hidden")) {
+                    fetchVideoHistory();
+                }
             } else if (data.status === "failed") {
                 if (pollInterval) {
                     clearInterval(pollInterval);
@@ -696,8 +707,24 @@ if (btnNewsVideo) {
         newsVideoProgress.style.width = "0%";
         newsVideoStatusMsg.textContent = "Starting automation task...";
 
+        const topicInput = document.getElementById("auto-topic");
+        const dateInput = document.getElementById("auto-date");
+        const payload = {};
+        if (topicInput && topicInput.value && topicInput.value.trim()) {
+            payload.topic = topicInput.value.trim();
+        }
+        if (dateInput && dateInput.value) {
+            payload.date = dateInput.value;
+        }
+
         try {
-            const res = await fetch("/v1/automate/news-video", { method: "POST" });
+            const res = await fetch("/v1/automate/news-video", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify(payload)
+            });
             if (!res.ok) throw new Error("Could not start automation");
             
             // Start polling status
@@ -709,6 +736,81 @@ if (btnNewsVideo) {
             newsVideoStatusContainer.classList.add("hidden");
         }
     });
+
+    if (btnNewsHistory && newsVideoHistoryContainer) {
+        btnNewsHistory.addEventListener("click", () => {
+            const isHidden = newsVideoHistoryContainer.classList.toggle("hidden");
+            if (!isHidden) {
+                fetchVideoHistory();
+            }
+        });
+    }
+
+    if (btnCloseHistory && newsVideoHistoryContainer) {
+        btnCloseHistory.addEventListener("click", () => {
+            newsVideoHistoryContainer.classList.add("hidden");
+        });
+    }
+
+    async function fetchVideoHistory() {
+        if (!newsVideoHistoryList) return;
+        try {
+            const res = await fetch("/v1/automate/news-video/history");
+            if (!res.ok) throw new Error("Failed to fetch history");
+            const data = await res.json();
+            
+            newsVideoHistoryList.innerHTML = "";
+            if (data.length === 0) {
+                newsVideoHistoryList.innerHTML = `<div style="font-size: 11px; color: var(--text-secondary); text-align: center; padding: 10px 0;">No generated videos found.</div>`;
+                return;
+            }
+            
+            data.forEach(item => {
+                const el = document.createElement("div");
+                el.style.cssText = `
+                    background: rgba(255, 255, 255, 0.03);
+                    border: 1px solid var(--border-color);
+                    border-radius: 6px;
+                    padding: 8px;
+                    cursor: pointer;
+                    transition: background 0.2s, border-color 0.2s;
+                    display: flex;
+                    flex-direction: column;
+                    gap: 2px;
+                    margin-bottom: 2px;
+                `;
+                el.innerHTML = `
+                    <div style="font-size: 11px; font-weight: 600; color: var(--text-primary); text-overflow: ellipsis; overflow: hidden; white-space: nowrap;">
+                        🎬 ${item.topic}
+                    </div>
+                    <div style="font-size: 9px; color: var(--text-secondary); display: flex; justify-content: space-between;">
+                        <span>Date: ${item.date}</span>
+                        <span>${item.timestamp.split(" ")[0]}</span>
+                    </div>
+                `;
+                
+                el.addEventListener("mouseenter", () => {
+                    el.style.background = "rgba(255, 255, 255, 0.08)";
+                    el.style.borderColor = "var(--primary)";
+                });
+                el.addEventListener("mouseleave", () => {
+                    el.style.background = "rgba(255, 255, 255, 0.03)";
+                    el.style.borderColor = "var(--border-color)";
+                });
+                
+                el.addEventListener("click", () => {
+                    newsVideoPlayer.src = `${item.video_url}?t=${Date.now()}`;
+                    newsVideoPlayerContainer.classList.remove("hidden");
+                    newsVideoPlayer.load();
+                    newsVideoPlayer.play().catch(err => console.log("Auto-play blocked:", err));
+                });
+                
+                newsVideoHistoryList.appendChild(el);
+            });
+        } catch (err) {
+            newsVideoHistoryList.innerHTML = `<div style="font-size: 11px; color: var(--accent-red); text-align: center; padding: 10px 0;">Error: ${err.message}</div>`;
+        }
+    }
 
     // Check status on load in case a task is already running
     checkAutomationStatus();
@@ -1002,6 +1104,8 @@ if (openSetupBtn && setupModal) {
             document.getElementById("setup-vram").value = config.resource_limits.max_vram_gb;
             document.getElementById("setup-ram").value = config.resource_limits.max_ram_gb;
             document.getElementById("setup-hf-token").value = config.hf_token || "";
+            document.getElementById("setup-tg-token").value = config.telegram_bot_token || "";
+            document.getElementById("setup-tg-chat").value = config.telegram_chat_id || "";
 
             // Populate router settings
             const routerTypeSelect = document.getElementById("setup-router-type");
@@ -1140,6 +1244,8 @@ if (openSetupBtn && setupModal) {
 
         // Reconstruct the exact AppConfig structure
         const hfTokenVal = document.getElementById("setup-hf-token").value.trim();
+        const tgTokenVal = document.getElementById("setup-tg-token").value.trim();
+        const tgChatVal = document.getElementById("setup-tg-chat").value.trim();
         const payload = {
             server: {
                 host: "127.0.0.1",
@@ -1157,7 +1263,9 @@ if (openSetupBtn && setupModal) {
                 fallback_model: "general-llama3"
             },
             models: modelPayloads,
-            hf_token: hfTokenVal || null
+            hf_token: hfTokenVal || null,
+            telegram_bot_token: tgTokenVal || null,
+            telegram_chat_id: tgChatVal || null
         };
 
         try {
@@ -1404,6 +1512,206 @@ function escapeHtml(text) {
         .replace(/"/g, "&quot;")
         .replace(/'/g, "&#039;");
 }
+
+// ==========================================================================
+// SCHEDULES MANAGEMENT (DAILY TRIGGERS & BOT WORKFLOWS)
+// ==========================================================================
+(function() {
+    const schTypeSelect = document.getElementById("sch-type");
+    const schTimeInput = document.getElementById("sch-time");
+    const schTargetInput = document.getElementById("sch-target");
+    const schTargetLabel = document.getElementById("sch-target-label");
+    const schParamsGroup = document.getElementById("sch-params-group");
+    const schParamsTopic = document.getElementById("sch-params-topic");
+    const btnAddSchedule = document.getElementById("btn-add-schedule");
+    const schedulesListContainer = document.getElementById("schedules-list-container");
+
+    if (schTypeSelect) {
+        // Toggle parameter fields depending on schedule type choice
+        schTypeSelect.addEventListener("change", () => {
+            if (schTypeSelect.value === "query") {
+                schTargetLabel.textContent = "Query Prompt";
+                schTargetInput.placeholder = "e.g. Explain quantum computing...";
+                schParamsGroup.style.display = "none";
+            } else {
+                schTargetLabel.textContent = "Automation Target";
+                schTargetInput.placeholder = "e.g. news-video";
+                schTargetInput.value = "news-video";
+                schParamsGroup.style.display = "flex";
+            }
+        });
+
+        // Add daily schedule to API config
+        btnAddSchedule.addEventListener("click", async () => {
+            const targetVal = schTargetInput.value.trim();
+            if (!targetVal) {
+                alert("Please enter a query prompt or automation target name.");
+                return;
+            }
+
+            const payload = {
+                type: schTypeSelect.value,
+                time: schTimeInput.value,
+                target: targetVal
+            };
+
+            if (payload.type === "automation") {
+                payload.parameters = {
+                    topic: schParamsTopic.value.trim() || ""
+                };
+            }
+
+            btnAddSchedule.disabled = true;
+            try {
+                const res = await fetch("/api/schedules", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify(payload)
+                });
+                if (!res.ok) throw new Error("Failed to save schedule.");
+                
+                schTargetInput.value = "";
+                schParamsTopic.value = "";
+                
+                fetchSchedules();
+            } catch (err) {
+                alert(`Error adding schedule: ${err.message}`);
+            } finally {
+                btnAddSchedule.disabled = false;
+            }
+        });
+
+        // Load schedule list catalog from endpoints
+        async function fetchSchedules() {
+            if (!schedulesListContainer) return;
+            try {
+                const res = await fetch("/api/schedules");
+                if (!res.ok) throw new Error("Could not list schedules.");
+                const data = await res.json();
+
+                schedulesListContainer.innerHTML = "";
+                if (data.length === 0) {
+                    schedulesListContainer.innerHTML = `<div style="font-size: 11px; color: var(--text-secondary); text-align: center; padding: 10px 0;">No active schedules.</div>`;
+                    return;
+                }
+
+                data.forEach(item => {
+                    const el = document.createElement("div");
+                    el.style.cssText = `
+                        background: rgba(255, 255, 255, 0.03);
+                        border: 1px solid var(--border-color);
+                        border-radius: 6px;
+                        padding: 8px;
+                        display: flex;
+                        justify-content: space-between;
+                        align-items: center;
+                        gap: 8px;
+                        margin-bottom: 4px;
+                    `;
+                    
+                    const desc = item.type === "query" 
+                        ? `💬 Prompt: "${item.target.length > 25 ? item.target.slice(0, 22) + '...' : item.target}"`
+                        : `⚙️ Auto: "${item.target}"${item.parameters?.topic ? ' (' + item.parameters.topic + ')' : ''}`;
+
+                    el.innerHTML = `
+                        <div style="flex-grow: 1; min-width: 0;">
+                            <div style="font-size: 11px; font-weight: 600; color: var(--text-primary); text-overflow: ellipsis; overflow: hidden; white-space: nowrap;">
+                                ${desc}
+                            </div>
+                            <div style="font-size: 9px; color: var(--text-secondary); margin-top: 2px;">
+                                Time: ${item.time} (Daily)
+                            </div>
+                        </div>
+                        <button type="button" class="btn-del-schedule" data-id="${item.id}" style="background: none; border: none; color: var(--accent-red); cursor: pointer; font-size: 14px; padding: 0 4px;">🗑️</button>
+                    `;
+
+                    // Bind delete listener
+                    el.querySelector(".btn-del-schedule").addEventListener("click", async (e) => {
+                        const id = e.target.dataset.id;
+                        if (confirm("Are you sure you want to delete this schedule?")) {
+                            try {
+                                const delRes = await fetch(`/api/schedules/${id}`, { method: "DELETE" });
+                                if (!delRes.ok) throw new Error("Could not delete.");
+                                fetchSchedules();
+                            } catch (err) {
+                                alert(`Error deleting: ${err.message}`);
+                            }
+                        }
+                    });
+
+                    schedulesListContainer.appendChild(el);
+                });
+            } catch (err) {
+                schedulesListContainer.innerHTML = `<div style="font-size: 11px; color: var(--accent-red); text-align: center; padding: 10px 0;">Error listing: ${err.message}</div>`;
+            }
+        }
+
+        fetchSchedules();
+    }
+
+    // Telegram Bot Log history logic
+    const headerTgHistory = document.getElementById("header-tg-history");
+    const btnRefreshTgHistory = document.getElementById("btn-refresh-tg-history");
+    const telegramHistoryList = document.getElementById("telegram-history-list");
+
+    if (headerTgHistory) {
+        headerTgHistory.addEventListener("click", () => {
+            const isHidden = headerTgHistory.classList.contains("collapsed");
+            if (!isHidden) {
+                fetchTelegramHistory();
+            }
+        });
+    }
+
+    if (btnRefreshTgHistory) {
+        btnRefreshTgHistory.addEventListener("click", (e) => {
+            e.stopPropagation(); // Prevent toggling the collapsible header
+            fetchTelegramHistory();
+        });
+    }
+
+    async function fetchTelegramHistory() {
+        if (!telegramHistoryList) return;
+        try {
+            const res = await fetch("/api/telegram/history");
+            if (!res.ok) throw new Error("Failed to load Telegram log.");
+            const data = await res.json();
+            
+            telegramHistoryList.innerHTML = "";
+            if (data.length === 0) {
+                telegramHistoryList.innerHTML = `<div style="font-size: 10px; color: var(--text-secondary); text-align: center; padding: 10px 0;">No messages logged yet.</div>`;
+                return;
+            }
+            
+            data.forEach(item => {
+                const el = document.createElement("div");
+                el.style.cssText = `
+                    font-size: 11px;
+                    padding: 6px 8px;
+                    border-radius: 6px;
+                    background: ${item.sender === 'User' ? 'rgba(139, 92, 246, 0.08)' : 'rgba(255, 255, 255, 0.02)'};
+                    border-left: 3px solid ${item.sender === 'User' ? 'var(--primary)' : 'var(--text-secondary)'};
+                    margin-bottom: 2px;
+                `;
+                
+                const timeStr = item.timestamp ? item.timestamp.split(" ")[1] : "";
+                
+                el.innerHTML = `
+                    <div style="display: flex; justify-content: space-between; font-size: 9px; color: var(--text-secondary); margin-bottom: 2px; font-weight: 600;">
+                        <span>${item.sender === 'User' ? '👤 User' : '🤖 Bot'}</span>
+                        <span>${timeStr}</span>
+                    </div>
+                    <div style="word-break: break-word; line-height: 1.3; white-space: pre-wrap; font-family: var(--font-main); color: var(--text-primary);">
+                        ${escapeHtml(item.message)}
+                    </div>
+                `;
+                telegramHistoryList.appendChild(el);
+            });
+        } catch (err) {
+            telegramHistoryList.innerHTML = `<div style="font-size: 10px; color: var(--accent-red); text-align: center; padding: 10px 0;">Error: ${err.message}</div>`;
+        }
+    }
+})();
 
 
 

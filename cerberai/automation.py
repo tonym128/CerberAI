@@ -27,6 +27,38 @@ def update_status(state: str, progress: int, msg: str, video_url: str = None):
     if video_url:
         status["video_url"] = video_url
 
+def add_video_to_history(video_filename: str, topic: str, date_str: str):
+    import json
+    import datetime
+    
+    history_path = Path("cerberai/static/videos/history.json")
+    history = []
+    if history_path.exists():
+        try:
+            with open(history_path, "r") as f:
+                history = json.load(f)
+        except Exception:
+            pass
+            
+    new_entry = {
+        "id": video_filename.replace(".mp4", ""),
+        "timestamp": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "topic": topic if topic else "World News",
+        "date": date_str,
+        "video_url": f"/static/videos/{video_filename}"
+    }
+    
+    # Prepend to keep newest at the top
+    history.insert(0, new_entry)
+    
+    # Ensure directory exists and write
+    history_path.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        with open(history_path, "w") as f:
+            json.dump(history, f, indent=2)
+    except Exception as e:
+        print(f"Failed to write video history: {e}")
+
 def wrap_text(text: str, draw: ImageDraw.Draw, max_width: int, font) -> list:
     """Wrap text to fit inside max_width."""
     words = text.split()
@@ -48,73 +80,94 @@ def wrap_text(text: str, draw: ImageDraw.Draw, max_width: int, font) -> list:
         lines.append(" ".join(current_line))
     return lines
 
-def create_captioned_image(img_path: str, title: str, summary: str, output_path: str):
-    """Draw a news-style broadcast template overlay on top of the generated image."""
-    with Image.open(img_path) as img:
-        # Convert to RGBA for transparent overlay drawing
-        img = img.convert("RGBA")
-        width, height = img.size
+def create_transparent_overlay(width: int, height: int, title: str, summary: str, output_path: str):
+    """Create a transparent PNG containing the news broadcast template and text overlays."""
+    # Create fully transparent RGBA canvas
+    img = Image.new("RGBA", (width, height), (0, 0, 0, 0))
+    draw = ImageDraw.Draw(img)
+    
+    # Draw red "BREAKING NEWS" banner at the top
+    draw.rectangle([0, 0, width, 50], fill=(200, 16, 16, 220))
+    
+    # Draw semi-transparent black banner at the bottom for subtitles
+    draw.rectangle([0, height - 120, width, height], fill=(0, 0, 0, 180))
+    
+    # Load a default font or fallback
+    try:
+        font_title = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 20)
+        font_text = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 15)
+    except Exception:
+        font_title = ImageFont.load_default()
+        font_text = ImageFont.load_default()
         
-        # Create overlay canvas
-        overlay = Image.new("RGBA", img.size, (0, 0, 0, 0))
-        draw = ImageDraw.Draw(overlay)
+    # Draw BREAKING NEWS text
+    draw.text((15, 12), "BREAKING NEWS: " + title.upper(), fill=(255, 255, 255, 255), font=font_title)
+    
+    # Draw wrapped summary text at the bottom
+    max_text_width = width - 40
+    wrapped_lines = wrap_text(summary, draw, max_text_width, font_text)
+    
+    y_text = height - 105
+    for line in wrapped_lines[:4]: # Cap at 4 lines to fit inside bottom banner
+        draw.text((20, y_text), line, fill=(240, 240, 240, 255), font=font_text)
+        y_text += 22
         
-        # Draw red "BREAKING NEWS" banner at the top
-        draw.rectangle([0, 0, width, 50], fill=(200, 16, 16, 220))
-        
-        # Draw semi-transparent black banner at the bottom for subtitles
-        draw.rectangle([0, height - 120, width, height], fill=(0, 0, 0, 180))
-        
-        # Load a default font or fallback
-        try:
-            # Try loading a standard font
-            font_title = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 20)
-            font_text = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 15)
-        except Exception:
-            font_title = ImageFont.load_default()
-            font_text = ImageFont.load_default()
-            
-        # Draw BREAKING NEWS text
-        draw.text((15, 12), "BREAKING NEWS: " + title.upper(), fill=(255, 255, 255, 255), font=font_title)
-        
-        # Draw wrapped summary text at the bottom
-        max_text_width = width - 40
-        wrapped_lines = wrap_text(summary, draw, max_text_width, font_text)
-        
-        y_text = height - 105
-        for line in wrapped_lines[:4]: # Cap at 4 lines to fit inside bottom banner
-            draw.text((20, y_text), line, fill=(240, 240, 240, 255), font=font_text)
-            y_text += 22
-            
-        # Composite overlay onto original image
-        combined = Image.alpha_composite(img, overlay)
-        combined.convert("RGB").save(output_path, "JPEG")
+    img.save(output_path, "PNG")
 
-async def generate_yesterday_news_video(manager, agent):
+async def generate_yesterday_news_video(manager, agent, topic: str = None, date_str: str = None):
     """
     Background automation runner:
-    1. Search for yesterday's top news stories.
+    1. Search for news stories based on target date and topic.
     2. Extract 10 distinct stories using LLM.
-    3. Generate image overlays, audio clips, and compile segment videos using ffmpeg.
+    3. Generate image overlays, audio clips, and compile segment videos concurrently with Ken Burns camera effects.
     4. Concat video clips and output final file.
     """
-    update_status("running", 5, "Searching yesterday's top news stories...")
-    
-    # 1. Fetch news from yesterday using our web search tool
     import datetime
-    yesterday = (datetime.date.today() - datetime.timedelta(days=1)).strftime("%Y-%m-%d")
-    query = f"top major world news stories {yesterday}"
+    target_date = date_str if date_str else (datetime.date.today() - datetime.timedelta(days=1)).strftime("%Y-%m-%d")
     
+    if topic:
+        query = f"top major {topic} stories {target_date}"
+        search_msg = f"Searching for '{topic}' stories from {target_date}..."
+    else:
+        query = f"top major world news stories {target_date}"
+        search_msg = f"Searching world news stories from {target_date}..."
+        
+    update_status("running", 5, search_msg)
+    
+    # 1. Fetch news using our web search tool
     raw_search = await agent.web_search_tool(query)
+    
+    # 2. Extract links and fetch actual content from the top search results using web_fetch_tool
+    urls = re.findall(r'Source:\s*(https?://\S+)', raw_search)
+    fetched_contents = []
+    
+    # Limit to top 3 links to keep execution fast and prevent context overflow
+    target_urls = urls[:3]
+    if target_urls:
+        update_status("running", 10, f"Fetching details from top {len(target_urls)} news sources...")
+        for i, url in enumerate(target_urls):
+            try:
+                print(f"Fetching story details from: {url}")
+                page_text = await agent.web_fetch_tool(url)
+                # Keep first 3000 chars of each page to keep prompt context clean
+                trimmed_text = page_text[:3000] if len(page_text) > 3000 else page_text
+                fetched_contents.append(f"Source URL: {url}\nContent:\n{trimmed_text}\n---")
+            except Exception as e:
+                print(f"Failed to fetch content from {url}: {e}")
+                
+    detailed_context = f"Search Results Snippets:\n{raw_search}\n\n"
+    if fetched_contents:
+        detailed_context += "Fetched Detailed Article Texts:\n" + "\n".join(fetched_contents)
     
     update_status("running", 15, "Structuring stories and scripts using LLM...")
     
-    # 2. Structure stories with LLM
+    # 3. Structure stories with LLM
+    prompt_topic_desc = f"relating to '{topic}'" if topic else "world"
     prompt = (
-        f"You are a news broadcast editor. Based on the following raw web search results for yesterday ({yesterday}), "
-        "identify exactly 10 distinct, major news stories. "
+        f"You are a news broadcast editor. Based on the following raw web search results and fetched articles for {target_date}, "
+        f"identify exactly 10 distinct, major news stories {prompt_topic_desc}. "
         "For each story, output a title, a 2-sentence narration summary, and a descriptive image prompt for AI generation.\n\n"
-        f"Search Results:\n{raw_search}\n\n"
+        f"Search and Article Data:\n{detailed_context}\n\n"
         "You MUST respond ONLY with a JSON array of 10 objects. Format:\n"
         "[\n"
         "  {\n"
@@ -152,16 +205,17 @@ async def generate_yesterday_news_video(manager, agent):
     except Exception as e:
         print(f"Structuring error: {e}")
         # Fallback hardcoded stories if JSON parsing fails to keep it robust
+        fallback_topic = topic if topic else "Global News"
         stories = [
             {
-                "title": "Global Tech Advancements",
-                "summary": "Major technology companies rolled out breakthrough local AI systems. Experts believe these models will significantly change consumer hardware.",
-                "image_prompt": "Futuristic clean laboratory with high tech servers and glowing blue neural networks, photo"
+                "title": f"Recent developments in {fallback_topic}",
+                "summary": f"Interesting events occurred regarding {fallback_topic} today. Industry leaders and researchers are closely monitoring these shifts.",
+                "image_prompt": f"Representational artistic conceptual image of {fallback_topic}, modern high tech illustration, professional photography"
             },
             {
-                "title": "Global Climate Accord Progress",
-                "summary": "Nations across the globe convened to review emissions reductions. Key resolutions were adopted to accelerate clean solar infrastructure.",
-                "image_prompt": "Beautiful clean solar farm in a lush green valley with blue skies, professional photography"
+                "title": f"New milestones for {fallback_topic}",
+                "summary": f"Key analysts have reported new breakthroughs in the field of {fallback_topic}. The global community has reacted with strong interest.",
+                "image_prompt": f"Stunning professional photo visualizing progress in {fallback_topic}, highly detailed"
             }
         ]
         
@@ -170,13 +224,14 @@ async def generate_yesterday_news_video(manager, agent):
     tts_backend = await manager.get_model("tts-offline")
     
     temp_dir = tempfile.mkdtemp()
-    segment_paths = []
-    
-    # 3. Process each story
     total_stories = len(stories)
-    for idx, story in enumerate(stories):
-        progress_val = 20 + int((idx / total_stories) * 60)
-        update_status("running", progress_val, f"Generating slide {idx+1}/{total_stories}: {story['title']}")
+    segment_paths = [None] * total_stories
+    
+    completed_count = 0
+    status_lock = asyncio.Lock()
+    
+    async def process_slide(idx, story):
+        nonlocal completed_count
         
         # A. Generate Image
         img_temp_raw = os.path.join(temp_dir, f"raw_{idx}.png")
@@ -191,9 +246,9 @@ async def generate_yesterday_news_video(manager, agent):
             img_placeholder = Image.new("RGB", (512, 512), color=(40, 44, 52))
             img_placeholder.save(img_temp_raw)
             
-        # B. Apply template text overlay on image
-        img_temp_captioned = os.path.join(temp_dir, f"slide_{idx}.jpg")
-        create_captioned_image(img_temp_raw, story["title"], story["summary"], img_temp_captioned)
+        # B. Create transparent overlay containing fixed text and news borders
+        overlay_temp = os.path.join(temp_dir, f"overlay_{idx}.png")
+        create_transparent_overlay(512, 512, story["title"], story["summary"], overlay_temp)
         
         # C. Generate Speech Audio (WAV)
         audio_temp = os.path.join(temp_dir, f"speech_{idx}.wav")
@@ -211,18 +266,46 @@ async def generate_yesterday_news_video(manager, agent):
                 w.setframerate(24000)
                 w.writeframes(b'\x00' * 48000 * 3) # 3 seconds of silence
                 
-        # D. Convert Slide + Audio to Video Segment using ffmpeg
+        # Calculate exact audio duration using Python's standard wave library
+        duration = 5.0
+        try:
+            import wave
+            with wave.open(audio_temp, 'rb') as r:
+                frames = r.getnframes()
+                rate = r.getframerate()
+                if rate > 0:
+                    duration = frames / float(rate)
+        except Exception as ex:
+            print(f"Failed to read WAV duration for slide {idx}: {ex}")
+            
+        # Add a tiny padding to avoid clipping the end of audio
+        duration = max(2.0, duration + 0.2)
+        total_frames = int(duration * 25) # 25 FPS target for zoompan
+        
+        # D. Convert Slide + Audio to Video Segment using ffmpeg with Ken Burns effect
         segment_path = os.path.join(temp_dir, f"segment_{idx}.mp4")
         
-        # Command builds a video clip stretching exactly to audio length
+        # Alternating zoom-in and zoom-out Ken Burns expressions, scaled up to 2048 to prevent pixel jitter
+        if idx % 2 == 0:
+            # Zoom-in: starting at 1.0, zooming in towards 1.3
+            zoom_filter = f"[0:v]scale=2048:2048,zoompan=z='min(zoom+0.0015,1.3)':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d={total_frames}:s=2048x2048,scale=512:512[bg];[bg][1:v]overlay=x=0:y=0[out]"
+        else:
+            # Zoom-out: starting at 1.3, zooming out towards 1.0
+            zoom_filter = f"[0:v]scale=2048:2048,zoompan=z='max(1.3-0.001*on,1.0)':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d={total_frames}:s=2048x2048,scale=512:512[bg];[bg][1:v]overlay=x=0:y=0[out]"
+        
+        # Command builds a video clip with smooth zoom and static text overlay
         cmd = [
             "ffmpeg", "-y",
-            "-loop", "1", "-i", img_temp_captioned,
+            "-i", img_temp_raw,
+            "-i", overlay_temp,
             "-i", audio_temp,
-            "-c:v", "libx264", "-tune", "stillimage",
+            "-filter_complex", zoom_filter,
+            "-map", "[out]",
+            "-map", "2:a",
+            "-c:v", "libx264",
             "-c:a", "aac", "-b:a", "192k",
             "-pix_fmt", "yuv420p",
-            "-shortest",
+            "-t", f"{duration:.3f}",
             segment_path
         ]
         
@@ -232,28 +315,45 @@ async def generate_yesterday_news_video(manager, agent):
             stderr=asyncio.subprocess.DEVNULL
         )
         await proc.wait()
-        segment_paths.append(segment_path)
+        segment_paths[idx] = segment_path
+        
+        async with status_lock:
+            completed_count += 1
+            progress_val = 20 + int((completed_count / total_stories) * 60)
+            update_status("running", progress_val, f"Generated slide {completed_count}/{total_stories}: {story['title']}")
+
+    # Run slide generation tasks concurrently
+    await asyncio.gather(*[process_slide(i, story) for i, story in enumerate(stories)])
         
     # 4. Concatenate all segment videos into final video
     update_status("running", 85, "Stitching all stories into the final broadcast video...")
     
     concat_txt_path = os.path.join(temp_dir, "concat.txt")
     with open(concat_txt_path, "w") as f:
-        for p in segment_paths:
+        # filter out any None segments just in case
+        for p in [p for p in segment_paths if p]:
             f.write(f"file '{p}'\n")
             
     # Ensure static directory exists
     static_videos_dir = Path("cerberai/static/videos")
     static_videos_dir.mkdir(parents=True, exist_ok=True)
     
-    final_video_path = static_videos_dir / "news_yesterday.mp4"
+    # Create a unique filename using timestamp and sanitized topic
+    import datetime
+    timestamp_str = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+    topic_slug = re.sub(r'[^a-zA-Z0-9]', '_', topic)[:20] if topic else "world_news"
+    video_filename = f"news_{timestamp_str}_{topic_slug}.mp4"
+    final_video_path = static_videos_dir / video_filename
     
     # Run concatenation command
     concat_cmd = [
         "ffmpeg", "-y",
         "-f", "concat", "-safe", "0",
         "-i", concat_txt_path,
-        "-c", "copy",
+        "-c:v", "libx264",
+        "-preset", "superfast",
+        "-pix_fmt", "yuv420p",
+        "-c:a", "aac",
         str(final_video_path.resolve())
     ]
     
@@ -273,7 +373,9 @@ async def generate_yesterday_news_video(manager, agent):
         
     # Finalize status
     if final_video_path.exists():
-        update_status("completed", 100, "Breaking News video generated successfully!", "/static/videos/news_yesterday.mp4")
+        video_url = f"/static/videos/{video_filename}"
+        update_status("completed", 100, "Breaking News video generated successfully!", video_url)
+        add_video_to_history(video_filename, topic, target_date)
         print("Breaking News video generation complete.")
     else:
         update_status("failed", 0, "Video stitch failed: output file was not created.")

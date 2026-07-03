@@ -32,22 +32,32 @@ manager = DynamicModelManager(config)
 router = IntentRouter(config.router, config.models)
 agent = AgentExecutor(config)
 cleanup_task = None
+scheduler_task = None
+telegram_task = None
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Startup: launch the DMM cleanup background task
-    global cleanup_task
+    # Startup: launch background tasks
+    global cleanup_task, scheduler_task, telegram_task
     cleanup_task = asyncio.create_task(manager.start_cleanup_loop())
-    print("CerberAI Started. Dynamic Model Manager cleanup loop active.")
+    
+    from .schedules import start_scheduler_loop
+    scheduler_task = asyncio.create_task(start_scheduler_loop(config, manager, agent))
+    
+    from .telegram import start_telegram_loop
+    telegram_task = asyncio.create_task(start_telegram_loop(config, manager, agent))
+    
+    print("CerberAI Started. Cleanup, Scheduler, and Telegram loops active.")
     yield
-    # Shutdown: cancel background task and unload all active models
-    if cleanup_task:
-        cleanup_task.cancel()
-        try:
-            await cleanup_task
-        except asyncio.CancelledError:
-            pass
+    # Shutdown: cancel background tasks and unload all active models
+    for task in (cleanup_task, scheduler_task, telegram_task):
+        if task:
+            task.cancel()
+            try:
+                await task
+            except asyncio.CancelledError:
+                pass
             
     print("Unloading all models for shutdown...")
     for model_id, backend in manager.backends.items():
@@ -616,7 +626,7 @@ async def image_generations(request: Request):
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/v1/automate/news-video")
-async def start_news_video_automation(background_tasks: BackgroundTasks):
+async def start_news_video_automation(request: Request, background_tasks: BackgroundTasks):
     """Trigger the news video generation workflow in the background."""
     from .automation import generate_yesterday_news_video, get_status, update_status
     
@@ -624,8 +634,17 @@ async def start_news_video_automation(background_tasks: BackgroundTasks):
     if current_status["status"] == "running":
         return JSONResponse(content={"message": "Automation is already running.", "status": current_status})
         
+    topic = None
+    date_str = None
+    try:
+        payload = await request.json()
+        topic = payload.get("topic")
+        date_str = payload.get("date")
+    except Exception:
+        pass
+        
     update_status("running", 0, "Starting automation task...")
-    background_tasks.add_task(generate_yesterday_news_video, manager, agent)
+    background_tasks.add_task(generate_yesterday_news_video, manager, agent, topic, date_str)
     return JSONResponse(content={"message": "Automation started successfully.", "status": get_status()})
 
 @app.get("/v1/automate/news-video/status")
@@ -634,6 +653,89 @@ async def get_news_video_automation_status():
     from .automation import get_status
     return JSONResponse(content=get_status())
 
+@app.get("/v1/automate/news-video/history")
+async def get_news_video_history():
+    """Retrieve the history list of generated news videos."""
+    import json
+    from pathlib import Path
+    history_path = Path("cerberai/static/videos/history.json")
+    if not history_path.exists():
+        return JSONResponse(content=[])
+    try:
+        with open(history_path, "r") as f:
+            data = json.load(f)
+        return JSONResponse(content=data)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to read history: {str(e)}")
+@app.get("/api/schedules")
+async def get_schedules_endpoint():
+    """List all configured daily schedules."""
+    from .schedules import load_schedules
+    try:
+        return JSONResponse(content=load_schedules())
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/schedules")
+async def create_schedule_endpoint(request: Request):
+    """Create or update a schedule entry."""
+    from .schedules import load_schedules, save_schedules
+    import uuid
+    try:
+        data = await request.json()
+        
+        # Validation
+        if not data.get("type") or not data.get("target") or not data.get("time"):
+            raise HTTPException(status_code=400, detail="Missing required schedule fields: 'type', 'target', or 'time'.")
+            
+        schedules = load_schedules()
+        
+        # Check if updating or creating
+        schedule_id = data.get("id")
+        if schedule_id:
+            idx = next((i for i, s in enumerate(schedules) if s["id"] == schedule_id), -1)
+            if idx != -1:
+                schedules[idx] = data
+            else:
+                schedules.append(data)
+        else:
+            data["id"] = f"sch_{uuid.uuid4().hex[:8]}"
+            data["last_run"] = None
+            schedules.append(data)
+            
+        save_schedules(schedules)
+        return JSONResponse(content=data)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.delete("/api/schedules/{schedule_id}")
+async def delete_schedule_endpoint(schedule_id: str):
+    """Delete a schedule entry by ID."""
+    from .schedules import load_schedules, save_schedules
+    try:
+        schedules = load_schedules()
+        new_schedules = [s for s in schedules if s["id"] != schedule_id]
+        if len(schedules) == len(new_schedules):
+            raise HTTPException(status_code=404, detail="Schedule not found.")
+        save_schedules(new_schedules)
+        return JSONResponse(content={"status": "success"})
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/telegram/history")
+async def get_telegram_history_endpoint():
+    """Retrieve the Telegram message history logs."""
+    import json
+    from pathlib import Path
+    log_path = Path("cerberai/static/telegram_history.json")
+    if not log_path.exists():
+        return JSONResponse(content=[])
+    try:
+        with open(log_path, "r") as f:
+            data = json.load(f)
+        return JSONResponse(content=data)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 @app.get("/api/config")
 async def get_current_config():
     """Retrieve the raw configuration values directly from config.yaml."""
