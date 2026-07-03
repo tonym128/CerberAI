@@ -33,6 +33,7 @@ test_bin_cache/
 # Local Configurations & API Secrets
 config.yaml
 .env
+cerberai/static/telegram_history.json
 
 # Generated Frontend Assets / Images
 cerberai/static/generated/
