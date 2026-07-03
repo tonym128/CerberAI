@@ -43,12 +43,14 @@ body {
    ========================================================================== */
 .sidebar {
     width: 320px;
+    height: 100vh;
     background-color: var(--bg-sidebar);
     border-right: 1px solid var(--border-color);
     display: flex;
     flex-direction: column;
     padding: 24px;
     flex-shrink: 0;
+    overflow-y: auto;
 }
 
 .logo-area {
@@ -200,8 +202,6 @@ body {
 }
 
 .models-catalog {
-    flex: 1;
-    overflow-y: auto;
     display: flex;
     flex-direction: column;
     gap: 8px;
@@ -210,17 +210,18 @@ body {
 
 /* Custom Scrollbar for Catalog & Messages */
 ::-webkit-scrollbar {
-    width: 6px;
+    width: 8px;
 }
 ::-webkit-scrollbar-track {
-    background: transparent;
+    background: rgba(255, 255, 255, 0.02);
+    border-radius: 999px;
 }
 ::-webkit-scrollbar-thumb {
-    background: rgba(255, 255, 255, 0.1);
+    background: rgba(255, 255, 255, 0.2);
     border-radius: 999px;
 }
 ::-webkit-scrollbar-thumb:hover {
-    background: rgba(255, 255, 255, 0.25);
+    background: rgba(255, 255, 255, 0.35);
 }
 
 .catalog-item {
@@ -305,8 +306,10 @@ body {
 
 .sidebar-footer {
     padding-top: 16px;
+    padding-bottom: 24px;
     border-top: 1px solid rgba(255, 255, 255, 0.05);
     margin-top: auto;
+    margin-bottom: 8px;
 }
 
 .connection-status {
