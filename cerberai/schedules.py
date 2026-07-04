@@ -57,13 +57,14 @@ async def run_scheduled_automation(target: str, params: dict, manager, agent, co
             from .automation import generate_yesterday_news_video, get_status
             topic = params.get("topic")
             date_str = params.get("date")
+            video_mode = params.get("video_mode", "image")
             
             await send_telegram_message(
                 config, 
-                f"🔔 **Scheduled News Video Triggered**\nTopic: `{topic if topic else 'World News'}`\nDate: `{date_str if date_str else 'Yesterday'}`\nGenerating video in background..."
+                f"🔔 **Scheduled News Video Triggered**\nTopic: `{topic if topic else 'World News'}`\nDate: `{date_str if date_str else 'Yesterday'}`\nMode: `{video_mode}`\nGenerating video in background..."
             )
             
-            await generate_yesterday_news_video(manager, agent, topic, date_str)
+            await generate_yesterday_news_video(manager, agent, topic, date_str, video_mode)
             
             status_data = get_status()
             if status_data["status"] == "completed":

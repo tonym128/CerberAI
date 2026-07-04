@@ -122,6 +122,14 @@
                     
                     <div style="margin-bottom: 12px; display: flex; flex-direction: column; gap: 8px;">
                         <div style="display: flex; flex-direction: column; gap: 4px;">
+                            <label for="auto-video-mode" style="font-size: 10px; font-weight: 600; color: var(--text-secondary);">Visual Generation Mode</label>
+                            <select id="auto-video-mode" style="padding: 6px 10px; border-radius: 6px; border: 1px solid var(--border-color); background: rgba(0,0,0,0.2); color: var(--text-primary); font-size: 11px; outline: none; width: 100%;">
+                                <option value="image">Static Image (Ken Burns Zoom)</option>
+                                <option value="image_to_video">Image-to-Video Animation</option>
+                                <option value="text_to_video">Text-to-Video Generation</option>
+                            </select>
+                        </div>
+                        <div style="display: flex; flex-direction: column; gap: 4px;">
                             <label for="auto-topic" style="font-size: 10px; font-weight: 600; color: var(--text-secondary);">Custom Topic (Optional)</label>
                             <input type="text" id="auto-topic" placeholder="e.g. Space & Physics" style="padding: 6px 10px; border-radius: 6px; border: 1px solid var(--border-color); background: rgba(0,0,0,0.2); color: var(--text-primary); font-size: 11px; outline: none; width: 100%;">
                         </div>
@@ -296,6 +304,14 @@
                         <div id="sch-params-group" style="display: none; flex-direction: column; gap: 4px;">
                             <label for="sch-params-topic" style="font-size: 10px; font-weight: 600; color: var(--text-secondary);">Custom Topic (Optional)</label>
                             <input type="text" id="sch-params-topic" placeholder="e.g. AI News" style="padding: 6px 10px; border-radius: 6px; border: 1px solid var(--border-color); background: rgba(0,0,0,0.2); color: var(--text-primary); font-size: 11px; outline: none; width: 100%;">
+                        </div>
+                        <div id="sch-video-mode-group" style="display: none; flex-direction: column; gap: 4px;">
+                            <label for="sch-video-mode" style="font-size: 10px; font-weight: 600; color: var(--text-secondary);">Video Generation Mode</label>
+                            <select id="sch-video-mode" style="padding: 6px 10px; border-radius: 6px; border: 1px solid var(--border-color); background: rgba(0,0,0,0.2); color: var(--text-primary); font-size: 11px; outline: none; width: 100%;">
+                                <option value="image">Static Image (Ken Burns Zoom)</option>
+                                <option value="image_to_video">Image-to-Video Animation</option>
+                                <option value="text_to_video">Text-to-Video Generation</option>
+                            </select>
                         </div>
                     </div>
                     
@@ -535,6 +551,6 @@
 
     <!-- MarkDown and Code Highlight Plugins (Using public CDNs) -->
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
-    <script src="/static/app.js?v=5"></script>
+    <script src="/static/app.js?v=6"></script>
 </body>
 </html>

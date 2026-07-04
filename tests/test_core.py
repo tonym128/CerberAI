@@ -21,7 +21,8 @@ class TestRouter(unittest.TestCase):
         self.router_cfg = RouterConfig(model_type="heuristics", fallback_model="general-model")
         self.models = [
             ModelConfig(id="general-model", type="llm", backend="ollama", vram_estimate_gb=4.0),
-            ModelConfig(id="coding-model", type="llm", backend="ollama", vram_estimate_gb=4.0)
+            ModelConfig(id="coding-model", type="llm", backend="ollama", vram_estimate_gb=4.0),
+            ModelConfig(id="video-model", type="video", backend="video", vram_estimate_gb=8.0)
         ]
         self.router = IntentRouter(self.router_cfg, self.models)
 
@@ -41,6 +42,17 @@ class TestRouter(unittest.TestCase):
         messages = [{"role": "user", "content": "Hello, how is the weather?"}]
         res = asyncio.run(self.router.route_chat(messages, "auto"))
         self.assertEqual(res, "general-model")
+
+    def test_heuristics_video_route(self):
+        # Message prompting video generation
+        messages = [{"role": "user", "content": "Create a video of a futuristic city in the rain."}]
+        res = asyncio.run(self.router.route_chat(messages, "auto"))
+        self.assertEqual(res, "video-model")
+
+    def test_requested_video_route(self):
+        # Override with video keyword
+        res = asyncio.run(self.router.route_chat([], "video"))
+        self.assertEqual(res, "video-model")
 
 class MockBackend(BaseBackend):
     def __init__(self, model_id: str, config: Dict[str, Any], vram_estimate_gb: float):

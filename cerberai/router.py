@@ -14,12 +14,14 @@ class IntentRouter:
         self.general_models = [m.id for m in models if m.type == "llm" and "general" in m.id]
         self.image_models = [m.id for m in models if m.type == "image"]
         self.vision_models = [m.id for m in models if m.type == "vision"]
+        self.video_models = [m.id for m in models if m.type == "video"]
         
         # Default choices if lists are empty
         self.default_coding = self.coding_models[0] if self.coding_models else self.fallback_model
         self.default_general = self.general_models[0] if self.general_models else self.fallback_model
         self.default_image = self.image_models[0] if self.image_models else None
         self.default_vision = self.vision_models[0] if self.vision_models else None
+        self.default_video = self.video_models[0] if self.video_models else None
 
     async def route_chat(self, messages: List[Dict[str, str]], requested_model: str, manager=None) -> str:
         """
@@ -48,6 +50,8 @@ class IntentRouter:
                 return self.default_image or self.fallback_model
             if "vision" in requested_model.lower() or "describe" in requested_model.lower() or "caption" in requested_model.lower():
                 return self.default_vision or self.fallback_model
+            if "video" in requested_model.lower() or "animate" in requested_model.lower():
+                return self.default_video or self.fallback_model
 
         # Auto-routing logic
         if not messages:
@@ -124,6 +128,18 @@ class IntentRouter:
                 print(f"Strict heuristics routed to Image model (matches: {image_matches})")
                 return self.default_image
 
+        # 4. Video generation patterns
+        video_patterns = [
+            r"\bgenerate\s+(a\s+)?video\b", r"\bcreate\s+(a\s+)?video\b",
+            r"\bmake\s+(a\s+)?video\b", r"\banimate\s+a\b", r"\banimate\s+this\b",
+            r"\bvideo\s+of\b", r"\banimation\s+of\b"
+        ]
+        if self.default_video:
+            video_matches = sum(1 for pat in video_patterns if re.search(pat, prompt_lower))
+            if video_matches > 0:
+                print(f"Strict heuristics routed to Video model (matches: {video_matches})")
+                return self.default_video
+
         return None
 
     def _route_with_heuristics(self, prompt: str) -> str:
@@ -176,6 +192,18 @@ class IntentRouter:
             if image_matches > 0:
                 print(f"Heuristics routed to Image model (matches: {image_matches})")
                 return self.default_image
+
+        # Video generation patterns
+        video_patterns = [
+            r"\bgenerate\s+(a\s+)?video\b", r"\bcreate\s+(a\s+)?video\b",
+            r"\bmake\s+(a\s+)?video\b", r"\banimate\s+a\b", r"\banimate\s+this\b",
+            r"\bvideo\s+of\b", r"\banimation\s+of\b"
+        ]
+        if self.default_video:
+            video_matches = sum(1 for pat in video_patterns if re.search(pat, prompt_lower))
+            if video_matches > 0:
+                print(f"Heuristics routed to Video model (matches: {video_matches})")
+                return self.default_video
             
         print("Heuristics routed to General model (fallback)")
         return self.default_general
@@ -195,6 +223,8 @@ class IntentRouter:
                 options.append(f"- Model ID: '{m.id}' | Purpose: {purpose}")
         if self.default_image:
             options.append(f"- Model ID: '{self.default_image}' | Purpose: ONLY use if the user is asking to generate, draw, paint, create, or render a new image/picture/graphic")
+        if self.default_video:
+            options.append(f"- Model ID: '{self.default_video}' | Purpose: ONLY use if the user is asking to generate, create, make, or render a video or animation")
         if self.default_vision:
             options.append(f"- Model ID: '{self.default_vision}' | Purpose: ONLY use if the user is asking to describe, analyze, OCR, caption, or read an image they have provided")
             

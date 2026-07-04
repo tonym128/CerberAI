@@ -710,12 +710,16 @@ if (btnNewsVideo) {
 
         const topicInput = document.getElementById("auto-topic");
         const dateInput = document.getElementById("auto-date");
+        const videoModeSelect = document.getElementById("auto-video-mode");
         const payload = {};
         if (topicInput && topicInput.value && topicInput.value.trim()) {
             payload.topic = topicInput.value.trim();
         }
         if (dateInput && dateInput.value) {
             payload.date = dateInput.value;
+        }
+        if (videoModeSelect) {
+            payload.video_mode = videoModeSelect.value;
         }
 
         try {
@@ -1931,18 +1935,27 @@ function escapeHtml(text) {
     if (schTypeSelect) {
         schTypeSelect.addEventListener("change", () => {
             const schTargetGroup = document.getElementById("sch-target-group");
+            const schVideoModeGroup = document.getElementById("sch-video-mode-group");
             if (schTypeSelect.value === "query") {
                 schTargetLabel.textContent = "Query Prompt";
                 schTargetInput.placeholder = "e.g. Explain quantum computing...";
                 schTargetInput.value = "";
                 if (schTargetGroup) schTargetGroup.style.display = "flex";
                 schParamsGroup.style.display = "none";
+                if (schVideoModeGroup) schVideoModeGroup.style.display = "none";
             } else {
                 schTargetLabel.textContent = "Automation Target";
                 schTargetInput.placeholder = "e.g. news-video";
                 schTargetInput.value = schTypeSelect.value;
                 if (schTargetGroup) schTargetGroup.style.display = "none";
                 schParamsGroup.style.display = "flex";
+                
+                // Show video mode dropdown only if scheduling Daily Video Briefing
+                if (schTypeSelect.value === "news-video") {
+                    if (schVideoModeGroup) schVideoModeGroup.style.display = "flex";
+                } else {
+                    if (schVideoModeGroup) schVideoModeGroup.style.display = "none";
+                }
             }
         });
 
@@ -1969,6 +1982,12 @@ function escapeHtml(text) {
                 payload.parameters = {
                     topic: schParamsTopic.value.trim() || ""
                 };
+                if (targetVal === "news-video") {
+                    const schVideoModeSelect = document.getElementById("sch-video-mode");
+                    if (schVideoModeSelect) {
+                        payload.parameters.video_mode = schVideoModeSelect.value;
+                    }
+                }
             }
 
             btnAddSchedule.disabled = true;
@@ -2020,13 +2039,18 @@ function escapeHtml(text) {
                     `;
                     
                     let displayName = item.target;
-                    if (item.target === "news-video") displayName = "Video Briefing";
+                    let extraDesc = "";
+                    if (item.target === "news-video") {
+                        displayName = "Video Briefing";
+                        const modeLabel = item.parameters?.video_mode === "text_to_video" ? "Text2Vid" : (item.parameters?.video_mode === "image_to_video" ? "Img2Vid" : "Static");
+                        extraDesc = ` (${modeLabel})`;
+                    }
                     else if (item.target === "deep-research") displayName = "Deep Research";
                     else if (item.target === "podcast") displayName = "Podcast Briefing";
                     
                     const desc = item.type === "query" 
                         ? `💬 Prompt: "${item.target.length > 25 ? item.target.slice(0, 22) + '...' : item.target}"`
-                        : `⚙️ Auto: "${displayName}"${item.parameters?.topic ? ' (' + item.parameters.topic + ')' : ''}`;
+                        : `⚙️ Auto: "${displayName}"${extraDesc}${item.parameters?.topic ? ' (' + item.parameters.topic + ')' : ''}`;
 
                     el.innerHTML = `
                         <div style="flex-grow: 1; min-width: 0;">

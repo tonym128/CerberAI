@@ -167,12 +167,12 @@ def create_transparent_overlay(width: int, height: int, title: str, summary: str
         
     img.save(output_path, "PNG")
 
-async def generate_yesterday_news_video(manager, agent, topic: str = None, date_str: str = None):
+async def generate_yesterday_news_video(manager, agent, topic: str = None, date_str: str = None, video_mode: str = "image"):
     """
     Background automation runner:
     1. Search for news stories based on target date and topic.
     2. Extract 10 distinct stories using LLM.
-    3. Generate image overlays, audio clips, and compile segment videos concurrently with Ken Burns camera effects.
+    3. Generate image overlays, audio clips, and compile segment videos concurrently.
     4. Concat video clips and output final file.
     """
     import datetime
@@ -230,47 +230,44 @@ async def generate_yesterday_news_video(manager, agent, topic: str = None, date_
         "  {\n"
         "    \"title\": \"Story Title\",\n"
         "    \"summary\": \"Two sentence narration script.\",\n"
-        "    \"image_prompt\": \"Descriptive prompt for drawing image.\",\n"
-        "    \"source_url\": \"The actual source HTTP/HTTPS URL of the article\"\n"
+        "    \"image_prompt\": \"Descriptive, detailed photorealistic prompt for generating a visual scene matching the news narrative.\",\n"
+        "    \"source_url\": \"Direct HTTP/HTTPS link to one of the raw source articles.\"\n"
         "  }\n"
         "]\n"
-        "Do not include any introduction or code block wrappers. Output valid raw JSON."
     )
     
     try:
-        # Route to LLM backend
-        backend = await manager.get_model("general-llama3")
+        from .router import IntentRouter
+        router = IntentRouter(manager.config.router, manager.config.models)
+        target_model_id = await router.route_chat([{"role": "user", "content": prompt}], "auto", manager)
+        backend = await manager.get_model(target_model_id)
+        
         payload = {
             "messages": [{"role": "user", "content": prompt}],
-            "temperature": 0.3
+            "temperature": 0.2
         }
-        response = await backend.handle_chat_completion(payload)
-        content = response["choices"][0]["message"]["content"].strip()
+        res = await backend.handle_chat_completion(payload)
+        ans = res["choices"][0]["message"]["content"]
         
-        # Clean potential markdown wrappers
-        if content.startswith("```"):
-            content = re.sub(r"^```[a-zA-Z0-9]*\n", "", content)
-            content = re.sub(r"\n```$", "", content)
-        content = content.strip()
-        
-        stories = json.loads(content)
-        if not isinstance(stories, list) or len(stories) == 0:
-            raise ValueError("LLM returned invalid or empty stories array.")
+        # Clean JSON markdown if returned
+        if "```json" in ans:
+            ans = ans.split("```json")[1].split("```")[0].strip()
+        elif "```" in ans:
+            ans = ans.split("```")[1].split("```")[0].strip()
             
-        # Verify and validate that stories exist in the search/fetch source urls and are real
+        data = json.loads(ans.strip())
+        if not isinstance(data, list):
+            raise ValueError("LLM response is not a JSON list.")
+            
+        # Verify stories are supported by raw search details to protect verifiability
         valid_stories = []
-        for story in stories:
-            if not isinstance(story, dict):
-                continue
-            title = story.get("title", "").strip()
-            summary = story.get("summary", "").strip()
-            image_prompt = story.get("image_prompt", "").strip()
-            source_url = story.get("source_url", "").strip()
+        for story in data:
+            title = story.get("title", "")
+            summary = story.get("summary", "")
+            image_prompt = story.get("image_prompt", "")
+            source_url = story.get("source_url", "")
             
             if not title or not summary or not image_prompt or not source_url:
-                continue
-                
-            if not (source_url.startswith("http://") or source_url.startswith("https://")):
                 continue
                 
             # Verify the source URL belongs to the crawled/search data to prevent hallucinated sites
@@ -290,14 +287,13 @@ async def generate_yesterday_news_video(manager, agent, topic: str = None, date_
         
     # Check VRAM limits to disable video generation for low VRAM systems (< 8GB)
     max_vram = manager.config.resource_limits.max_vram_gb
-    if max_vram < 8.0:
-        msg = f"Video generation disabled: Requires at least 8.0 GB VRAM (system has {max_vram} GB VRAM)."
+    if video_mode != "image" and max_vram < 8.0:
+        msg = f"Video generation models disabled: Requires at least 8.0 GB VRAM (system has {max_vram} GB VRAM) for {video_mode} mode."
         print(msg)
         update_status("failed", 0, msg)
         return
 
-    # Get image and tts backends
-    img_backend = await manager.get_model("image-lcm")
+    # Get tts backend (image/video models loaded lazily to save memory)
     tts_backend = await manager.get_model("tts-offline")
     
     temp_dir = tempfile.mkdtemp()
@@ -310,41 +306,83 @@ async def generate_yesterday_news_video(manager, agent, topic: str = None, date_
     async def process_slide(idx, story):
         nonlocal completed_count
         
-        # A. Generate Image or Video segment depending on VRAM and model availability
+        # A. Generate Image or Video segment depending on VRAM and selected mode
         video_temp_raw = os.path.join(temp_dir, f"video_raw_{idx}.mp4")
         img_temp_raw = os.path.join(temp_dir, f"raw_{idx}.png")
-        use_video_model = False
         
         has_video_model = any(m.id == "video-generation" for m in manager.config.models)
-        if has_video_model and max_vram >= 8.0:
-            use_video_model = True
-            
-        if use_video_model:
+        
+        # Determine actual routing
+        do_text_to_video = (video_mode == "text_to_video" and has_video_model and max_vram >= 8.0)
+        do_image_to_video = (video_mode == "image_to_video" and has_video_model and max_vram >= 8.0)
+        
+        use_video_stream = False
+        
+        # 1. Text-to-Video Mode
+        if do_text_to_video:
             try:
                 # Load video model
                 video_backend = await manager.get_model("video-generation")
-                # Generate video frames
+                # Generate video frames directly from text prompt
                 video_res = await video_backend.handle_video_generation({
                     "prompt": story["image_prompt"],
-                    "num_frames": 16, # ~2 seconds
+                    "num_frames": 16,
                     "num_inference_steps": 20
                 })
                 b64_video = video_res["b64_json"]
                 with open(video_temp_raw, "wb") as f:
                     f.write(base64.b64decode(b64_video))
+                use_video_stream = True
             except Exception as e:
-                print(f"Failed to generate AI video segment for slide {idx}: {e}. Falling back to image...")
-                use_video_model = False
-
-        if not use_video_model:
-            # Fallback to image generation
+                print(f"Failed to generate text-to-video for slide {idx}: {e}. Falling back to image slideshow...")
+                do_text_to_video = False
+                do_image_to_video = False
+                
+        # 2. Image-to-Video Mode
+        if do_image_to_video or (not do_text_to_video and video_mode != "image"):
             try:
+                # First generate the static image as the input
+                img_backend = await manager.get_model("image-lcm")
+                img_res = await img_backend.handle_image_generation({"prompt": story["image_prompt"]})
+                b64_data = img_res["data"][0]["b64_json"]
+                with open(img_temp_raw, "wb") as f:
+                    f.write(base64.b64decode(b64_data))
+                
+                # If we are in image_to_video mode, now animate it!
+                if do_image_to_video:
+                    try:
+                        # Load video model
+                        video_backend = await manager.get_model("video-generation")
+                        # Pass the base64 image to get animated!
+                        video_res = await video_backend.handle_video_generation({
+                            "image": b64_data,
+                            "num_frames": 14,
+                            "num_inference_steps": 20
+                        })
+                        b64_video = video_res["b64_json"]
+                        with open(video_temp_raw, "wb") as f:
+                            f.write(base64.b64decode(b64_video))
+                        use_video_stream = True
+                    except Exception as e:
+                        print(f"Failed to generate image-to-video animation for slide {idx}: {e}. Falling back to static image slideshow...")
+                        use_video_stream = False
+            except Exception as img_err:
+                print(f"Failed to generate static image for slide {idx}: {img_err}")
+                # Fallback placeholder image
+                img_placeholder = Image.new("RGB", (512, 512), color=(40, 44, 52))
+                img_placeholder.save(img_temp_raw)
+                use_video_stream = False
+                
+        # 3. Traditional static image generation
+        if video_mode == "image" and not use_video_stream:
+            try:
+                img_backend = await manager.get_model("image-lcm")
                 img_res = await img_backend.handle_image_generation({"prompt": story["image_prompt"]})
                 b64_data = img_res["data"][0]["b64_json"]
                 with open(img_temp_raw, "wb") as f:
                     f.write(base64.b64decode(b64_data))
             except Exception as e:
-                print(f"Failed to generate image for slide {idx}: {e}")
+                print(f"Failed to generate static image for slide {idx}: {e}")
                 # Fallback placeholder image
                 img_placeholder = Image.new("RGB", (512, 512), color=(40, 44, 52))
                 img_placeholder.save(img_temp_raw)
@@ -388,7 +426,7 @@ async def generate_yesterday_news_video(manager, agent, topic: str = None, date_
         # D. Convert Slide + Audio to Video Segment using ffmpeg
         segment_path = os.path.join(temp_dir, f"segment_{idx}.mp4")
         
-        if use_video_model:
+        if use_video_stream:
             # Loop the generated video file to match the narration duration
             cmd = [
                 "ffmpeg", "-y",
