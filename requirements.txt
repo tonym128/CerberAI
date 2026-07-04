@@ -17,5 +17,5 @@ onnxruntime>=1.15.0
 soundfile>=0.12.0
 fpdf2>=2.8.0
 qrcode>=7.4.2
-
-
+sentencepiece>=0.1.99
+protobuf>=3.20.0

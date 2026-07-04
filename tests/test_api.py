@@ -81,6 +81,36 @@ class TestAPI(unittest.TestCase):
         mock_route_chat.assert_called_once_with([{"role": "user", "content": "Hello!"}], "auto", unittest.mock.ANY)
         mock_get_model.assert_called_once_with("general-llama3")
 
+    @patch("cerberai.main.manager.get_model")
+    @patch("cerberai.main.router.route_chat")
+    def test_chat_completions_video_route(self, mock_route_chat, mock_get_model):
+        mock_route_chat.return_value = "video-generation"
+        mock_backend = AsyncMock()
+        mock_backend.handle_video_generation.return_value = {
+            "b64_json": "bW9jay12aWRlbw=="
+        }
+        mock_get_model.return_value = mock_backend
+        
+        # Inject video-generation into config models
+        from cerberai.main import config
+        from cerberai.config import ModelConfig
+        config.models.append(ModelConfig(id="video-generation", type="video", backend="video"))
+
+        payload = {
+            "model": "auto",
+            "messages": [{"role": "user", "content": "create a video of space"}],
+            "stream": False
+        }
+        
+        with patch("builtins.open", unittest.mock.mock_open()) as mock_file, \
+             patch("os.makedirs") as mock_makedirs:
+            response = self.client.post("/v1/chat/completions", json=payload)
+            
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertEqual(data["model"], "video-generation")
+        self.assertIn("video", data["choices"][0]["message"]["content"])
+
     def test_conversations_flow(self):
         # 1. Create a new conversation
         response = self.client.post("/api/conversations", json={"title": "Test Chat"})

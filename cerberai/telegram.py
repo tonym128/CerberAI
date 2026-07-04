@@ -260,7 +260,7 @@ async def handle_telegram_message(text: str, config, manager, agent, reply_with_
             "• `/sendvideo <video_id>` - Download a video from history.\n"
             "• `/logs` - Read recent server logs (`llama.log`).\n"
             "• `/schedules` - List all configured daily schedules.\n"
-            "• `/run [topic]` - Manually trigger a news video generation.\n\n"
+            "• `/run [topic] [--mode image/image_to_video/text_to_video]` - Trigger news video generation.\n\n"
             "Or simply send a direct message, and I will route it and respond!\n"
             "🎤 You can also send me a voice note to get voice and text answers!"
         )
@@ -305,6 +305,28 @@ async def handle_telegram_message(text: str, config, manager, agent, reply_with_
                     fh.write(base64.b64decode(b64_data))
                 
                 await send_telegram_photo(config, img_path, f"🎨 Generated Image for: \"{prompt}\"")
+                return
+                
+            # Special case for video generation
+            if model_cfg.type == "video":
+                await send_telegram_message(config, "🎬 Generating video...")
+                vid_result = await backend.handle_video_generation({
+                    "prompt": prompt,
+                    "num_frames": 16,
+                    "num_inference_steps": 20
+                })
+                b64_video = vid_result["b64_json"]
+                
+                import uuid
+                import base64
+                vid_filename = f"video_{uuid.uuid4().hex}.mp4"
+                vid_dir = os.path.join("cerberai", "static", "generated")
+                os.makedirs(vid_dir, exist_ok=True)
+                vid_path = os.path.join(vid_dir, vid_filename)
+                with open(vid_path, "wb") as fh:
+                    fh.write(base64.b64decode(b64_video))
+                
+                await send_telegram_video(config, vid_path, f"🎬 Generated Video for: \"{prompt}\"")
                 return
                 
             # STT and TTS models do not support chat completion
@@ -434,14 +456,33 @@ async def handle_telegram_message(text: str, config, manager, agent, reply_with_
             await send_telegram_message(config, f"Error listing schedules: {e}")
             
     # 8. RUN AUTOMATION Command
-    elif text_lower.startswith("/run"):
-        topic = text[4:].strip() if len(text) > 4 else None
-        await send_telegram_message(config, f"🚀 Initiating video generation task (Topic: `{topic if topic else 'World News'}`)...")
+        # Parse topic and optional --mode
+        cmd_text = text[4:].strip()
+        topic = None
+        video_mode = "image"
+        
+        # Simple parsing for --mode
+        mode_match = re.search(r'--mode\s+(\S+)', cmd_text, re.IGNORECASE)
+        if mode_match:
+            video_mode = mode_match.group(1).lower()
+            cmd_text = cmd_text.replace(mode_match.group(0), "").strip()
+            
+        if cmd_text:
+            topic = cmd_text
+            
+        # Ensure mode is valid
+        if video_mode not in ("image", "image_to_video", "text_to_video"):
+            video_mode = "image"
+            
+        await send_telegram_message(
+            config, 
+            f"🚀 Initiating video generation task (Topic: `{topic if topic else 'World News'}`, Mode: `{video_mode}`)..."
+        )
         
         # We start the news video generation in the background
         async def run_and_notify():
             from .automation import generate_yesterday_news_video, get_status
-            await generate_yesterday_news_video(manager, agent, topic)
+            await generate_yesterday_news_video(manager, agent, topic, video_mode=video_mode)
             status_data = get_status()
             if status_data["status"] == "completed":
                 video_url = status_data["video_url"]

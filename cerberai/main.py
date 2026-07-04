@@ -306,6 +306,55 @@ async def chat_completions(request: Request):
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"Image generation error: {str(e)}")
 
+    # If the routed model is a video generation model, generate the video inline and return a Markdown video player
+    if model_cfg and model_cfg.type == "video":
+        try:
+            last_message_content = messages[-1].get("content", "") if messages else ""
+            vid_result = await backend.handle_video_generation({"prompt": last_message_content})
+            b64_data = vid_result["b64_json"]
+            
+            # Save the video to the static generated assets folder
+            import uuid
+            vid_filename = f"video_{uuid.uuid4().hex}.mp4"
+            vid_dir = os.path.join("cerberai", "static", "generated")
+            os.makedirs(vid_dir, exist_ok=True)
+            vid_path = os.path.join(vid_dir, vid_filename)
+            with open(vid_path, "wb") as fh:
+                fh.write(base64.b64decode(b64_data))
+            
+            static_url = f"/static/generated/{vid_filename}"
+            markdown_content = f"Here is the video you requested for **\"{last_message_content}\"**:\n\n<video src=\"{static_url}\" controls style=\"width: 100%; max-width: 512px; border-radius: 8px;\"></video>\n\n[Download Video]({static_url})"
+            
+            chat_response = {
+                "id": f"chatcmpl-video-{int(time.time())}",
+                "object": "chat.completion",
+                "created": int(time.time()),
+                "model": target_model_id,
+                "choices": [{
+                    "index": 0,
+                    "message": {
+                        "role": "assistant",
+                        "content": markdown_content
+                    },
+                    "finish_reason": "stop"
+                }]
+            }
+            
+            if stream:
+                async def stream_video_markdown():
+                    # Stream role and empty block first
+                    yield f"data: {json.dumps({'choices': [{'delta': {'role': 'assistant', 'content': ''}, 'index': 0, 'finish_reason': None}]})}\n\n"
+                    # Stream the full markdown video block
+                    yield f"data: {json.dumps({'choices': [{'delta': {'content': markdown_content}, 'index': 0, 'finish_reason': None}]})}\n\n"
+                    # Stream stop indicator
+                    yield f"data: {json.dumps({'choices': [{'delta': {}, 'index': 0, 'finish_reason': 'stop'}]})}\n\n"
+                    yield "data: [DONE]\n\n"
+                return StreamingResponse(stream_video_markdown(), media_type="text/event-stream")
+            else:
+                return JSONResponse(content=chat_response)
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Video generation error: {str(e)}")
+
     # If the routed model is a vision model, forward the request directly (llama-server handles multimodal input natively)
     if model_cfg and model_cfg.type == "vision":
         if stream:
