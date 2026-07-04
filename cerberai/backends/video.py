@@ -64,13 +64,15 @@ class VideoBackend(BaseBackend):
                     self.pipeline.to(device)
 
                 # Prevent GPU scheduling timeouts (TDR resets) by splitting VAE operations
-                try:
-                    if hasattr(self.pipeline, "vae") and self.pipeline.vae is not None:
-                        print("Enabling VAE tiling and slicing to prevent GPU timeouts/resets...")
+                if hasattr(self.pipeline, "vae") and self.pipeline.vae is not None:
+                    try:
                         self.pipeline.vae.enable_tiling()
+                    except Exception as ex:
+                        print(f"Warning: Could not enable VAE tiling: {ex}")
+                    try:
                         self.pipeline.vae.enable_slicing()
-                except Exception as ex:
-                    print(f"Warning: Could not enable VAE tiling/slicing: {ex}")
+                    except Exception as ex:
+                        print(f"Warning: Could not enable VAE slicing: {ex}")
             else:
                 self.pipeline.to(device)
                 
@@ -105,11 +107,23 @@ class VideoBackend(BaseBackend):
             pass
         return True
 
-    async def handle_video_generation(self, payload: Dict[str, Any]) -> Dict[str, Any]:
+    async def handle_video_generation(self, payload: Dict[str, Any], progress_callback=None) -> Dict[str, Any]:
         """Generate video from text or image input, returning base64 encoded mp4 file."""
         async with self.lock:
             image_b64 = payload.get("image")
             
+            # Helper to run callback in correct thread context
+            import inspect
+            async def run_callback(msg: str):
+                if progress_callback:
+                    try:
+                        if inspect.iscoroutinefunction(progress_callback):
+                            await progress_callback(msg)
+                        else:
+                            progress_callback(msg)
+                    except Exception as ex:
+                        print(f"Warning: Failed calling video progress callback: {ex}")
+
             if image_b64:
                 # Image-to-Video (Stable Video Diffusion)
                 model_to_load = "stabilityai/stable-video-diffusion-img2vid-xt"
@@ -123,6 +137,8 @@ class VideoBackend(BaseBackend):
                 num_frames = payload.get("num_frames", 14)
                 num_steps = payload.get("num_inference_steps", 20)
                 
+                await run_callback("⏳ Step 1: Running image-to-video denoising steps on GPU... Once denoising finishes, 3D VAE decoding will process spatial-temporal frames (runs silently and may take 1-2 minutes).\n")
+
                 import asyncio
                 loop = asyncio.get_running_loop()
                 
@@ -148,6 +164,8 @@ class VideoBackend(BaseBackend):
                 num_frames = payload.get("num_frames", 16)
                 num_steps = payload.get("num_inference_steps", 20)
                 
+                await run_callback("⏳ Step 1: Running text-to-video denoising steps on GPU... Once denoising finishes, 3D VAE decoding will process spatial-temporal frames (runs silently and may take 1-2 minutes).\n")
+
                 import asyncio
                 loop = asyncio.get_running_loop()
                 
@@ -162,6 +180,8 @@ class VideoBackend(BaseBackend):
 
                 video_frames = await loop.run_in_executor(None, run_cogvideo)
             
+            await run_callback("⚙️ Step 2: Denoising and VAE decoding complete! Compiling frames to MP4 video file...\n")
+
             # Export frames to a temporary MP4 file
             from diffusers.utils import export_to_video
             with tempfile.NamedTemporaryFile(suffix=".mp4", delete=False) as tmp_file:

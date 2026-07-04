@@ -309,48 +309,124 @@ async def chat_completions(request: Request):
     # If the routed model is a video generation model, generate the video inline and return a Markdown video player
     if model_cfg and model_cfg.type == "video":
         try:
-            last_message_content = messages[-1].get("content", "") if messages else ""
-            vid_result = await backend.handle_video_generation({"prompt": last_message_content})
-            b64_data = vid_result["b64_json"]
+            last_msg = messages[-1] if messages else {}
+            content = last_msg.get("content", "")
             
-            # Save the video to the static generated assets folder
-            import uuid
-            vid_filename = f"video_{uuid.uuid4().hex}.mp4"
-            vid_dir = os.path.join("cerberai", "static", "generated")
-            os.makedirs(vid_dir, exist_ok=True)
-            vid_path = os.path.join(vid_dir, vid_filename)
-            with open(vid_path, "wb") as fh:
-                fh.write(base64.b64decode(b64_data))
+            prompt = ""
+            image_b64 = None
             
-            static_url = f"/static/generated/{vid_filename}"
-            markdown_content = f"Here is the video you requested for **\"{last_message_content}\"**:\n\n<video src=\"{static_url}\" controls style=\"width: 100%; max-width: 512px; border-radius: 8px;\"></video>\n\n[Download Video]({static_url})"
+            if isinstance(content, str):
+                prompt = content
+            elif isinstance(content, list):
+                for item in content:
+                    if isinstance(item, dict):
+                        item_type = item.get("type", "")
+                        if item_type == "text":
+                            prompt = item.get("text", "")
+                        elif item_type == "image_url":
+                            img_url = item.get("image_url", {}).get("url", "")
+                            if img_url.startswith("data:image/"):
+                                if "," in img_url:
+                                    image_b64 = img_url.split(",", 1)[1]
+                                else:
+                                    image_b64 = img_url
             
-            chat_response = {
-                "id": f"chatcmpl-video-{int(time.time())}",
-                "object": "chat.completion",
-                "created": int(time.time()),
-                "model": target_model_id,
-                "choices": [{
-                    "index": 0,
-                    "message": {
-                        "role": "assistant",
-                        "content": markdown_content
-                    },
-                    "finish_reason": "stop"
-                }]
-            }
+            payload_to_send = {}
+            if prompt:
+                payload_to_send["prompt"] = prompt
+            if image_b64:
+                payload_to_send["image"] = image_b64
+                
+            desc_prompt = prompt or "Uploaded Image"
             
             if stream:
                 async def stream_video_markdown():
-                    # Stream role and empty block first
-                    yield f"data: {json.dumps({'choices': [{'delta': {'role': 'assistant', 'content': ''}, 'index': 0, 'finish_reason': None}]})}\n\n"
-                    # Stream the full markdown video block
-                    yield f"data: {json.dumps({'choices': [{'delta': {'content': markdown_content}, 'index': 0, 'finish_reason': None}]})}\n\n"
-                    # Stream stop indicator
-                    yield f"data: {json.dumps({'choices': [{'delta': {}, 'index': 0, 'finish_reason': 'stop'}]})}\n\n"
-                    yield "data: [DONE]\n\n"
+                    queue = asyncio.Queue()
+                    
+                    # Yield initial status
+                    await queue.put("🎬 **Starting Video Generation...**\n\n")
+                    
+                    async def progress_cb(msg: str):
+                        await queue.put(msg)
+                        
+                    async def run_generation():
+                        try:
+                            res = await backend.handle_video_generation(
+                                payload_to_send,
+                                progress_callback=progress_cb
+                            )
+                            await queue.put(res)
+                        except Exception as err:
+                            await queue.put(err)
+                            
+                    # Start generation task in the background
+                    gen_task = asyncio.create_task(run_generation())
+                    
+                    role_sent = False
+                    while True:
+                        item = await queue.get()
+                        if isinstance(item, str):
+                            # Stream status update to chat client
+                            if not role_sent:
+                                yield f"data: {json.dumps({'choices': [{'delta': {'role': 'assistant', 'content': item}, 'index': 0, 'finish_reason': None}]})}\n\n"
+                                role_sent = True
+                            else:
+                                yield f"data: {json.dumps({'choices': [{'delta': {'content': item}, 'index': 0, 'finish_reason': None}]})}\n\n"
+                        elif isinstance(item, dict):
+                            # Success! Save the video to the static generated assets folder
+                            b64_data = item["b64_json"]
+                            import uuid
+                            vid_filename = f"video_{uuid.uuid4().hex}.mp4"
+                            vid_dir = os.path.join("cerberai", "static", "generated")
+                            os.makedirs(vid_dir, exist_ok=True)
+                            vid_path = os.path.join(vid_dir, vid_filename)
+                            with open(vid_path, "wb") as fh:
+                                fh.write(base64.b64decode(b64_data))
+                                
+                            static_url = f"/static/generated/{vid_filename}"
+                            final_markdown = f"\n\n🎬 **Video Generated Successfully!**\n\n<video src=\"{static_url}\" controls style=\"width: 100%; max-width: 512px; border-radius: 8px;\"></video>\n\n[Download Video]({static_url})"
+                            
+                            yield f"data: {json.dumps({'choices': [{'delta': {'content': final_markdown}, 'index': 0, 'finish_reason': None}]})}\n\n"
+                            yield f"data: {json.dumps({'choices': [{'delta': {}, 'index': 0, 'finish_reason': 'stop'}]})}\n\n"
+                            yield "data: [DONE]\n\n"
+                            break
+                        else:
+                            # Exception occurred
+                            err_msg = f"\n\n❌ **Video Generation Failed:** {str(item)}"
+                            yield f"data: {json.dumps({'choices': [{'delta': {'content': err_msg}, 'index': 0, 'finish_reason': 'stop'}]})}\n\n"
+                            yield "data: [DONE]\n\n"
+                            break
                 return StreamingResponse(stream_video_markdown(), media_type="text/event-stream")
             else:
+                # Non-streaming request (like telegram / api calls)
+                vid_result = await backend.handle_video_generation(payload_to_send)
+                b64_data = vid_result["b64_json"]
+                
+                import uuid
+                vid_filename = f"video_{uuid.uuid4().hex}.mp4"
+                vid_dir = os.path.join("cerberai", "static", "generated")
+                os.makedirs(vid_dir, exist_ok=True)
+                vid_path = os.path.join(vid_dir, vid_filename)
+                with open(vid_path, "wb") as fh:
+                    fh.write(base64.b64decode(b64_data))
+                
+                static_url = f"/static/generated/{vid_filename}"
+                markdown_content = f"Here is the video you requested for **\"{desc_prompt}\"**:\n\n<video src=\"{static_url}\" controls style=\"width: 100%; max-width: 512px; border-radius: 8px;\"></video>\n\n[Download Video]({static_url})"
+                
+                chat_response = {
+                    "id": f"chatcmpl-video-{int(time.time())}",
+                    "object": "chat.completion",
+                    "created": int(time.time()),
+                    "model": target_model_id,
+                    "choices": [{
+                        "index": 0,
+                        "message": {
+                            "role": "assistant",
+                            "content": markdown_content
+                        },
+                        "finish_reason": "stop"
+                    }]
+                }
                 return JSONResponse(content=chat_response)
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"Video generation error: {str(e)}")

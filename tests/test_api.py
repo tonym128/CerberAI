@@ -111,6 +111,40 @@ class TestAPI(unittest.TestCase):
         self.assertEqual(data["model"], "video-generation")
         self.assertIn("video", data["choices"][0]["message"]["content"])
 
+    @patch("cerberai.main.manager.get_model")
+    @patch("cerberai.main.router.route_chat")
+    def test_chat_completions_image_to_video_route(self, mock_route_chat, mock_get_model):
+        mock_route_chat.return_value = "video-generation"
+        mock_backend = AsyncMock()
+        mock_backend.handle_video_generation.return_value = {
+            "b64_json": "bW9jay12aWRlbw=="
+        }
+        mock_get_model.return_value = mock_backend
+        
+        payload = {
+            "model": "video-generation",
+            "messages": [{
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": "make this image move"},
+                    {"type": "image_url", "image_url": {"url": "data:image/png;base64,bW9jay1pbWFnZQ=="}}
+                ]
+            }],
+            "stream": False
+        }
+        
+        with patch("builtins.open", unittest.mock.mock_open()) as mock_file, \
+             patch("os.makedirs") as mock_makedirs:
+            response = self.client.post("/v1/chat/completions", json=payload)
+            
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertEqual(data["model"], "video-generation")
+        mock_backend.handle_video_generation.assert_called_once_with({
+            "prompt": "make this image move",
+            "image": "bW9jay1pbWFnZQ=="
+        })
+
     def test_conversations_flow(self):
         # 1. Create a new conversation
         response = self.client.post("/api/conversations", json={"title": "Test Chat"})

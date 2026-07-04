@@ -90,12 +90,6 @@ class DynamicModelManager:
         elif b_type == "diffusers":
             return DiffusersBackend(model_cfg.id, backend_config, model_cfg.vram_estimate_gb)
         elif b_type == "video":
-            # Auto-scale video model based on system VRAM limits
-            max_vram = self.config.resource_limits.max_vram_gb
-            if max_vram >= 14.0 and backend_config.get("model_name") == "THUDM/CogVideoX-2b":
-                print("Upgrading default Video model to CogVideoX-5b based on VRAM capacity (>= 14GB)...")
-                backend_config["model_name"] = "THUDM/CogVideoX-5b"
-                model_cfg.vram_estimate_gb = 14.0
             return VideoBackend(model_cfg.id, backend_config, model_cfg.vram_estimate_gb)
         else:
             print(f"Warning: Backend '{model_cfg.backend}' for model '{model_cfg.id}' is not implemented yet.")
