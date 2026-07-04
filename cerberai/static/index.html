@@ -50,7 +50,10 @@
             <!-- Chat History (Collapsible) -->
             <div class="collapsible-header collapsed" onclick="toggleSection(this)">
                 <span>💬 Chat History</span>
-                <span class="chevron">▶</span>
+                <div style="display: flex; align-items: center; gap: 8px;">
+                    <span class="popout-btn" onclick="event.stopPropagation(); popoutSection(this.closest('.collapsible-header'))" title="Pop out to main pane">↗</span>
+                    <span class="chevron">▶</span>
+                </div>
             </div>
             <div class="collapsible-content collapsed">
                 <div id="conversations-list" class="conversations-history" style="margin-bottom: 12px; padding-right: 4px;">
@@ -93,7 +96,10 @@
             <!-- Model Catalog (Collapsible) -->
             <div class="collapsible-header collapsed" onclick="toggleSection(this)">
                 <span>📦 Model Catalog</span>
-                <span class="chevron">▶</span>
+                <div style="display: flex; align-items: center; gap: 8px;">
+                    <span class="popout-btn" onclick="event.stopPropagation(); popoutSection(this.closest('.collapsible-header'))" title="Pop out to main pane">↗</span>
+                    <span class="chevron">▶</span>
+                </div>
             </div>
             <div class="collapsible-content collapsed">
                 <div id="models-list" class="models-catalog" style="margin-bottom: 12px;">
@@ -101,10 +107,13 @@
                 </div>
             </div>
             
-            <!-- Automations (Collapsible) -->
+            <!-- Daily Video Briefing (Collapsible) -->
             <div class="collapsible-header collapsed" onclick="toggleSection(this)">
-                <span>⚙️ Automations</span>
-                <span class="chevron">▶</span>
+                <span>🎬 Daily Video Briefing</span>
+                <div style="display: flex; align-items: center; gap: 8px;">
+                    <span class="popout-btn" onclick="event.stopPropagation(); popoutSection(this.closest('.collapsible-header'))" title="Pop out to main pane">↗</span>
+                    <span class="chevron">▶</span>
+                </div>
             </div>
             <div class="collapsible-content collapsed">
                 <div class="automation-card" style="margin-bottom: 12px;">
@@ -158,7 +167,10 @@
             <!-- Deep Research Agent (Collapsible) -->
             <div class="collapsible-header collapsed" onclick="toggleSection(this)">
                 <span>🔬 Deep Research Agent</span>
-                <span class="chevron">▶</span>
+                <div style="display: flex; align-items: center; gap: 8px;">
+                    <span class="popout-btn" onclick="event.stopPropagation(); popoutSection(this.closest('.collapsible-header'))" title="Pop out to main pane">↗</span>
+                    <span class="chevron">▶</span>
+                </div>
             </div>
             <div class="collapsible-content collapsed">
                 <div class="automation-card" style="margin-bottom: 12px;">
@@ -206,7 +218,10 @@
             <!-- Daily Podcast Briefing (Collapsible) -->
             <div class="collapsible-header collapsed" onclick="toggleSection(this)">
                 <span>🎙️ Daily Podcast Briefing</span>
-                <span class="chevron">▶</span>
+                <div style="display: flex; align-items: center; gap: 8px;">
+                    <span class="popout-btn" onclick="event.stopPropagation(); popoutSection(this.closest('.collapsible-header'))" title="Pop out to main pane">↗</span>
+                    <span class="chevron">▶</span>
+                </div>
             </div>
             <div class="collapsible-content collapsed">
                 <div class="automation-card" style="margin-bottom: 12px;">
@@ -255,7 +270,10 @@
             <!-- Scheduled Automations (Collapsible) -->
             <div class="collapsible-header collapsed" onclick="toggleSection(this)">
                 <span>⏰ Scheduled Automations</span>
-                <span class="chevron">▶</span>
+                <div style="display: flex; align-items: center; gap: 8px;">
+                    <span class="popout-btn" onclick="event.stopPropagation(); popoutSection(this.closest('.collapsible-header'))" title="Pop out to main pane">↗</span>
+                    <span class="chevron">▶</span>
+                </div>
             </div>
             <div class="collapsible-content collapsed">
                 <div class="automation-card" style="margin-bottom: 12px;">
@@ -265,11 +283,13 @@
                         <div style="display: flex; gap: 6px;">
                             <select id="sch-type" style="padding: 6px 10px; border-radius: 6px; border: 1px solid var(--border-color); background: rgba(0,0,0,0.2); color: var(--text-primary); font-size: 11px; outline: none; width: 45%;">
                                 <option value="query">Daily Query</option>
-                                <option value="automation">Daily News Video</option>
+                                <option value="news-video">Daily Video Briefing</option>
+                                <option value="deep-research">Daily Deep Research</option>
+                                <option value="podcast">Daily Podcast Briefing</option>
                             </select>
                             <input type="time" id="sch-time" value="09:00" style="padding: 6px 10px; border-radius: 6px; border: 1px solid var(--border-color); background: rgba(0,0,0,0.2); color: var(--text-primary); font-size: 11px; outline: none; width: 55%;">
                         </div>
-                        <div style="display: flex; flex-direction: column; gap: 4px;">
+                        <div id="sch-target-group" style="display: flex; flex-direction: column; gap: 4px;">
                             <label for="sch-target" id="sch-target-label" style="font-size: 10px; font-weight: 600; color: var(--text-secondary);">Query Prompt</label>
                             <input type="text" id="sch-target" placeholder="e.g. Explain LLMs..." style="padding: 6px 10px; border-radius: 6px; border: 1px solid var(--border-color); background: rgba(0,0,0,0.2); color: var(--text-primary); font-size: 11px; outline: none; width: 100%;">
                         </div>
@@ -291,7 +311,10 @@
             <!-- Telegram History (Collapsible) -->
             <div class="collapsible-header collapsed" id="header-tg-history" onclick="toggleSection(this)">
                 <span>💬 Telegram Bot Log</span>
-                <span class="chevron">▶</span>
+                <div style="display: flex; align-items: center; gap: 8px;">
+                    <span class="popout-btn" onclick="event.stopPropagation(); popoutSection(this.closest('.collapsible-header'))" title="Pop out to main pane">↗</span>
+                    <span class="chevron">▶</span>
+                </div>
             </div>
             <div class="collapsible-content collapsed">
                 <div class="automation-card" style="margin-bottom: 12px;">
@@ -512,6 +535,6 @@
 
     <!-- MarkDown and Code Highlight Plugins (Using public CDNs) -->
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
-    <script src="/static/app.js?v=3"></script>
+    <script src="/static/app.js?v=4"></script>
 </body>
 </html>

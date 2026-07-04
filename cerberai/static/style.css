@@ -1155,4 +1155,24 @@ select option {
     transition: transform 0.2s;
 }
 
+.popout-btn {
+    font-size: 11px;
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: color 0.2s, transform 0.2s;
+    padding: 2px 6px;
+    border-radius: 4px;
+    background: rgba(255,255,255,0.03);
+    border: 1px solid var(--border-color);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+.popout-btn:hover {
+    color: var(--primary);
+    background: rgba(139, 92, 246, 0.1);
+    border-color: rgba(139, 92, 246, 0.3);
+    transform: scale(1.1);
+}
+
 

@@ -1929,30 +1929,38 @@ function escapeHtml(text) {
     const schedulesListContainer = document.getElementById("schedules-list-container");
 
     if (schTypeSelect) {
-        // Toggle parameter fields depending on schedule type choice
         schTypeSelect.addEventListener("change", () => {
+            const schTargetGroup = document.getElementById("sch-target-group");
             if (schTypeSelect.value === "query") {
                 schTargetLabel.textContent = "Query Prompt";
                 schTargetInput.placeholder = "e.g. Explain quantum computing...";
+                schTargetInput.value = "";
+                if (schTargetGroup) schTargetGroup.style.display = "flex";
                 schParamsGroup.style.display = "none";
             } else {
                 schTargetLabel.textContent = "Automation Target";
                 schTargetInput.placeholder = "e.g. news-video";
-                schTargetInput.value = "news-video";
+                schTargetInput.value = schTypeSelect.value;
+                if (schTargetGroup) schTargetGroup.style.display = "none";
                 schParamsGroup.style.display = "flex";
             }
         });
 
         // Add daily schedule to API config
         btnAddSchedule.addEventListener("click", async () => {
-            const targetVal = schTargetInput.value.trim();
+            const typeSelectVal = schTypeSelect.value;
+            let targetVal = schTargetInput.value.trim();
+            if (typeSelectVal !== "query") {
+                targetVal = typeSelectVal; // e.g. "news-video", "deep-research", "podcast"
+            }
+            
             if (!targetVal) {
-                alert("Please enter a query prompt or automation target name.");
+                alert("Please enter a query prompt or select an automation target.");
                 return;
             }
 
             const payload = {
-                type: schTypeSelect.value,
+                type: (typeSelectVal === "query") ? "query" : "automation",
                 time: schTimeInput.value,
                 target: targetVal
             };
@@ -2011,9 +2019,14 @@ function escapeHtml(text) {
                         margin-bottom: 4px;
                     `;
                     
+                    let displayName = item.target;
+                    if (item.target === "news-video") displayName = "Video Briefing";
+                    else if (item.target === "deep-research") displayName = "Deep Research";
+                    else if (item.target === "podcast") displayName = "Podcast Briefing";
+                    
                     const desc = item.type === "query" 
                         ? `💬 Prompt: "${item.target.length > 25 ? item.target.slice(0, 22) + '...' : item.target}"`
-                        : `⚙️ Auto: "${item.target}"${item.parameters?.topic ? ' (' + item.parameters.topic + ')' : ''}`;
+                        : `⚙️ Auto: "${displayName}"${item.parameters?.topic ? ' (' + item.parameters.topic + ')' : ''}`;
 
                     el.innerHTML = `
                         <div style="flex-grow: 1; min-width: 0;">
@@ -2114,6 +2127,116 @@ function escapeHtml(text) {
         }
     }
 })();
+
+// ==========================================================================
+// SIDEBAR POPOUT MANAGEMENT (POP OUT PANE TO MAIN VIEW)
+// ==========================================================================
+let currentPoppedElement = null;
+let currentPoppedParent = null;
+
+function popoutSection(header) {
+    if (!header) return;
+    const content = header.nextElementSibling;
+    if (!content) return;
+    
+    // Extract title text cleanly
+    const titleSpan = header.querySelector("span");
+    const title = titleSpan ? titleSpan.textContent.trim() : "Details";
+    
+    // Find or create main-popout-view inside main
+    let popoutView = document.getElementById("main-popout-view");
+    if (!popoutView) {
+        popoutView = document.createElement("div");
+        popoutView.id = "main-popout-view";
+        popoutView.style.cssText = `
+            display: none;
+            flex-direction: column;
+            height: 100%;
+            width: 100%;
+            padding: 24px;
+            background: #0f111a;
+            overflow-y: auto;
+            position: relative;
+        `;
+        
+        const mainPane = document.querySelector(".chat-container");
+        if (mainPane) {
+            mainPane.appendChild(popoutView);
+        }
+    }
+    
+    // If something is already popped out, restore it first
+    restorePoppedSection();
+    
+    // Hide chat messages and the input area
+    const chatMessages = document.getElementById("chat-messages");
+    const chatInputArea = document.querySelector(".chat-input-area");
+    if (chatMessages) chatMessages.style.display = "none";
+    if (chatInputArea) chatInputArea.style.display = "none";
+    
+    // Set up popout header inside main-popout-view
+    popoutView.innerHTML = `
+        <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border-color); padding-bottom: 16px; margin-bottom: 24px;">
+            <h2 style="font-size: 20px; font-weight: 600; color: var(--text-primary); margin: 0; display: flex; align-items: center; gap: 8px;">
+                ${title}
+            </h2>
+            <button type="button" id="btn-close-popout" class="btn btn-secondary" style="font-size: 11px; padding: 6px 12px; cursor: pointer; border-radius: 6px; background: rgba(255, 255, 255, 0.05); border: 1px solid var(--border-color); color: var(--text-primary);">Close & Back to Chat</button>
+        </div>
+        <div id="popout-content-body" style="flex-grow: 1; min-height: 0;">
+        </div>
+    `;
+    
+    // Keep track of the original parent so we can restore it
+    currentPoppedParent = content;
+    
+    // Get the child card element of content (usually class .automation-card or .models-catalog or .conversations-history)
+    const childCard = content.firstElementChild;
+    if (childCard) {
+        currentPoppedElement = childCard;
+        // Make sure it has display block / visible
+        childCard.style.display = "block";
+        const body = document.getElementById("popout-content-body");
+        if (body) {
+            body.appendChild(childCard);
+        }
+    }
+    
+    // Collapse the sidebar content to avoid visual redundancy
+    if (!content.classList.contains("collapsed")) {
+        content.classList.add("collapsed");
+        const chevron = header.querySelector(".chevron");
+        if (chevron) chevron.textContent = "▶";
+    }
+    
+    // Display the popout view
+    popoutView.style.display = "flex";
+    
+    // Bind close handler
+    const closeBtn = document.getElementById("btn-close-popout");
+    if (closeBtn) {
+        closeBtn.addEventListener("click", restorePoppedSection);
+    }
+}
+
+function restorePoppedSection() {
+    if (!currentPoppedElement || !currentPoppedParent) return;
+    
+    // Move the element back to its original parent in the sidebar
+    currentPoppedParent.appendChild(currentPoppedElement);
+    
+    currentPoppedElement = null;
+    currentPoppedParent = null;
+    
+    // Hide popout view
+    const popoutView = document.getElementById("main-popout-view");
+    if (popoutView) popoutView.style.display = "none";
+    
+    // Restore chat messages and input area
+    const chatMessages = document.getElementById("chat-messages");
+    const chatInputArea = document.querySelector(".chat-input-area");
+    if (chatMessages) chatMessages.style.display = "flex";
+    if (chatInputArea) chatInputArea.style.display = "flex";
+}
 
 
 

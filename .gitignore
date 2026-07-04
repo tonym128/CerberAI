@@ -32,6 +32,7 @@ test_bin_cache/
 
 # Local Configurations & API Secrets
 config.yaml
+schedules.json
 .env
 cerberai/static/telegram_history.json
 

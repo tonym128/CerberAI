@@ -90,9 +90,6 @@ def create_transparent_overlay(width: int, height: int, title: str, summary: str
     img = Image.new("RGBA", (width, height), (0, 0, 0, 0))
     draw = ImageDraw.Draw(img)
     
-    # Draw red "BREAKING NEWS" banner at the top
-    draw.rectangle([0, 0, width, 50], fill=(200, 16, 16, 220))
-    
     # Draw semi-transparent black banner at the bottom for subtitles
     draw.rectangle([0, height - 120, width, height], fill=(0, 0, 0, 180))
     
@@ -106,8 +103,23 @@ def create_transparent_overlay(width: int, height: int, title: str, summary: str
         font_text = ImageFont.load_default()
         font_source = ImageFont.load_default()
         
-    # Draw BREAKING NEWS text
-    draw.text((15, 12), "BREAKING NEWS: " + title.upper(), fill=(255, 255, 255, 255), font=font_title)
+    # Wrap breaking news title text
+    full_title_text = "BREAKING NEWS: " + title.upper()
+    title_max_width = width - 30  # 15px padding on each side
+    wrapped_title_lines = wrap_text(full_title_text, draw, title_max_width, font_title)
+    
+    # Dynamically calculate banner height based on number of wrapped title lines
+    line_spacing = 26
+    banner_height = max(50, 16 + len(wrapped_title_lines) * line_spacing)
+    
+    # Draw red "BREAKING NEWS" banner at the top with calculated dynamic height
+    draw.rectangle([0, 0, width, banner_height], fill=(200, 16, 16, 220))
+    
+    # Draw the wrapped title text lines
+    y_title = 12
+    for line in wrapped_title_lines:
+        draw.text((15, y_title), line, fill=(255, 255, 255, 255), font=font_title)
+        y_title += line_spacing
     
     has_qr = False
     
@@ -362,6 +374,7 @@ async def generate_yesterday_news_video(manager, agent, topic: str = None, date_
             "-c:v", "libx264",
             "-c:a", "aac", "-b:a", "192k",
             "-pix_fmt", "yuv420p",
+            "-movflags", "+faststart",
             "-t", f"{duration:.3f}",
             segment_path
         ]
@@ -410,6 +423,7 @@ async def generate_yesterday_news_video(manager, agent, topic: str = None, date_
         "-c:v", "libx264",
         "-preset", "superfast",
         "-pix_fmt", "yuv420p",
+        "-movflags", "+faststart",
         "-c:a", "aac",
         str(final_video_path.resolve())
     ]

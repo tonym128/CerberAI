@@ -123,6 +123,28 @@ async def send_telegram_photo(config, photo_path: str, caption: str = None):
     except Exception as e:
         print(f"Failed to send Telegram photo: {e}")
 
+async def send_telegram_document(config, doc_path: str, caption: str = None):
+    """Upload and send a local document file (PDF, MP3, etc.) via Telegram Bot API."""
+    if not config.telegram_bot_token or not config.telegram_chat_id:
+        return
+    url = f"https://api.telegram.org/bot{config.telegram_bot_token}/sendDocument"
+    if not os.path.exists(doc_path):
+        print(f"Telegram document upload failed: file does not exist at {doc_path}")
+        return
+    try:
+        log_telegram_interaction("Bot", f"[Document sent] {caption if caption else ''}")
+        async with httpx.AsyncClient(timeout=120.0) as client:
+            with open(doc_path, "rb") as f:
+                files = {"document": f}
+                data = {"chat_id": config.telegram_chat_id}
+                if caption:
+                    data["caption"] = caption
+                response = await client.post(url, data=data, files=files)
+                if response.status_code != 200:
+                    print(f"Failed to send Telegram document: {response.text}")
+    except Exception as e:
+        print(f"Failed to send Telegram document: {e}")
+
 async def send_telegram_message(config, text: str):
     """Send a markdown formatted text message via Telegram Bot API."""
     if not config.telegram_bot_token or not config.telegram_chat_id:

@@ -51,21 +51,20 @@ async def run_scheduled_query(prompt: str, manager, agent, config):
 async def run_scheduled_automation(target: str, params: dict, manager, agent, config):
     try:
         print(f"Running scheduled automation: {target} with params {params}")
+        from .telegram import send_telegram_message, send_telegram_document, send_telegram_video
+        
         if target == "news-video":
             from .automation import generate_yesterday_news_video, get_status
             topic = params.get("topic")
             date_str = params.get("date")
             
-            from .telegram import send_telegram_message
             await send_telegram_message(
                 config, 
                 f"🔔 **Scheduled News Video Triggered**\nTopic: `{topic if topic else 'World News'}`\nDate: `{date_str if date_str else 'Yesterday'}`\nGenerating video in background..."
             )
             
-            # Run the generator
             await generate_yesterday_news_video(manager, agent, topic, date_str)
             
-            # Check status
             status_data = get_status()
             if status_data["status"] == "completed":
                 video_url = status_data["video_url"]
@@ -85,17 +84,83 @@ async def run_scheduled_automation(target: str, params: dict, manager, agent, co
                     f"✅ **Scheduled News Video Completed!**\nTopic: `{topic if topic else 'World News'}`"
                 )
                 
-                # Send the video file
-                from .telegram import send_telegram_video
                 await send_telegram_video(
                     config, 
                     video_path, 
-                    f"🎬 **Breaking News:** {topic if topic else 'World News'}{stories_caption}"
+                    f"🎬 **Breaking News Briefing:** {topic if topic else 'World News'}{stories_caption}"
                 )
             else:
                 await send_telegram_message(
                     config, 
                     f"❌ **Scheduled News Video Failed:** {status_data['message']}"
+                )
+
+        elif target == "deep-research":
+            from .automation import generate_deep_research_report, get_research_status
+            topic = params.get("topic")
+            if not topic:
+                topic = "General Interest"
+                
+            await send_telegram_message(
+                config, 
+                f"🔔 **Scheduled Deep Research Triggered**\nTopic: `{topic}`\nGenerating comprehensive report in background..."
+            )
+            
+            await generate_deep_research_report(manager, agent, topic)
+            
+            status_data = get_research_status()
+            if status_data["status"] == "success":
+                pdf_url = status_data["pdf_url"]
+                pdf_path = pdf_url.replace("/static/reports/", "cerberai/static/reports/")
+                report_url = status_data["report_url"]
+                
+                await send_telegram_message(
+                    config, 
+                    f"✅ **Scheduled Deep Research Completed!**\nTopic: `{topic}`\nMarkdown Version: {report_url}"
+                )
+                
+                await send_telegram_document(
+                    config,
+                    pdf_path,
+                    f"🔬 **Deep Research Report:** {topic}"
+                )
+            else:
+                await send_telegram_message(
+                    config, 
+                    f"❌ **Scheduled Deep Research Failed:** {status_data['message']}"
+                )
+
+        elif target == "podcast":
+            from .automation import generate_daily_podcast, get_podcast_status
+            topic = params.get("topic")
+            date_str = params.get("date")
+            
+            await send_telegram_message(
+                config, 
+                f"🔔 **Scheduled Podcast Briefing Triggered**\nTopic: `{topic if topic else 'World News'}`\nGenerating audio briefing..."
+            )
+            
+            await generate_daily_podcast(manager, agent, topic, date_str)
+            
+            status_data = get_podcast_status()
+            if status_data["status"] == "success":
+                podcast_url = status_data["podcast_url"]
+                podcast_path = podcast_url.replace("/static/podcasts/", "cerberai/static/podcasts/")
+                
+                await send_telegram_message(
+                    config, 
+                    f"✅ **Scheduled Podcast Briefing Completed!**\nTopic: `{topic if topic else 'World News'}`"
+                )
+                
+                await send_telegram_document(
+                    config,
+                    podcast_path,
+                    f"🎙️ **Daily Audio News Briefing:** {topic if topic else 'World News'}"
+                )
+            else:
+                await send_telegram_message(
+                    config, 
+                    f"❌ **Scheduled Podcast Briefing Failed:** {status_data['message']}"
                 )
     except Exception as e:
         print(f"Error running scheduled automation: {e}")
