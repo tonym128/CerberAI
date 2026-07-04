@@ -1328,8 +1328,89 @@ if (openSetupBtn && setupModal) {
                     </div>
                 </div>
             `;
+        } else if (model.type === "vision") {
+            card.innerHTML = `
+                <h4>👁️ Vision Model (Multimodal): ${model.id}</h4>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Model ID</label>
+                        <input type="text" class="model-id" value="${model.id}" readonly style="opacity: 0.7;" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Specifier / Purpose</label>
+                        <input type="text" class="model-purpose" value="${model.purpose || ""}" required>
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>HF Repo ID</label>
+                        <input type="text" class="model-repo" value="${model.backend_config.repo_id || ""}" required>
+                    </div>
+                    <div class="form-group">
+                        <label>HF Filename</label>
+                        <input type="text" class="model-filename" value="${model.backend_config.filename || ""}" required>
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>mmproj Repo ID</label>
+                        <input type="text" class="model-mmproj-repo" value="${model.backend_config.mmproj_repo_id || ""}" required>
+                    </div>
+                    <div class="form-group">
+                        <label>mmproj Filename</label>
+                        <input type="text" class="model-mmproj-filename" value="${model.backend_config.mmproj_filename || ""}" required>
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>VRAM Estimate (GB)</label>
+                        <input type="number" class="model-vram" step="0.1" value="${model.vram_estimate_gb}" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Port</label>
+                        <input type="number" class="model-port" value="${model.backend_config.port || 8084}" required>
+                    </div>
+                </div>
+            `;
+        } else if (model.type === "tts") {
+            card.innerHTML = `
+                <h4>🗣️ Text-to-Speech (TTS): ${model.id}</h4>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>TTS Engine</label>
+                        <select class="model-tts-engine">
+                            <option value="kokoro" ${model.backend_config.engine === "kokoro" ? "selected" : ""}>Kokoro (Offline / High Quality)</option>
+                            <option value="pyttsx3" ${model.backend_config.engine === "pyttsx3" ? "selected" : ""}>PyTTSx3 (System Native / Low Resource)</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Voice Speaker Name</label>
+                        <input type="text" class="model-tts-voice" value="${model.backend_config.voice || ""}" required>
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>VRAM Estimate (GB)</label>
+                        <input type="number" class="model-vram" step="0.1" value="${model.vram_estimate_gb}" required>
+                    </div>
+                </div>
+            `;
+        } else if (model.type === "video") {
+            card.innerHTML = `
+                <h4>🎬 Video Generator: ${model.id}</h4>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>HF Repo ID / Model Name</label>
+                        <input type="text" class="model-repo" value="${model.backend_config.model_name || ""}" required>
+                    </div>
+                    <div class="form-group">
+                        <label>VRAM Estimate (GB)</label>
+                        <input type="number" class="model-vram" step="0.1" value="${model.vram_estimate_gb}" required>
+                    </div>
+                </div>
+            `;
         } else {
-            // Unhandled models (like tts-offline) return empty or keep properties statically
+            // Unhandled models return empty or keep properties statically
             card.style.display = "none";
             card.innerHTML = `<input type="hidden" class="model-raw-json" value='${JSON.stringify(model)}'>`;
         }
@@ -1640,6 +1721,57 @@ if (openSetupBtn && setupModal) {
                         model_name: modelName
                     },
                     vram_estimate_gb: vram
+                });
+            } else if (type === "vision") {
+                const id = card.querySelector(".model-id").value.trim();
+                const purpose = card.querySelector(".model-purpose").value.trim();
+                const repo = card.querySelector(".model-repo").value.trim();
+                const filename = card.querySelector(".model-filename").value.trim();
+                const mmprojRepo = card.querySelector(".model-mmproj-repo").value.trim();
+                const mmprojFilename = card.querySelector(".model-mmproj-filename").value.trim();
+                const vram = parseFloat(card.querySelector(".model-vram").value);
+                const port = parseInt(card.querySelector(".model-port").value);
+                modelPayloads.push({
+                    id: id,
+                    type: "vision",
+                    backend: "llama.cpp",
+                    backend_config: {
+                        repo_id: repo,
+                        filename: filename,
+                        mmproj_repo_id: mmprojRepo,
+                        mmproj_filename: mmprojFilename,
+                        port: port,
+                        n_gpu_layers: 99
+                    },
+                    vram_estimate_gb: vram,
+                    purpose: purpose
+                });
+            } else if (type === "tts") {
+                const engine = card.querySelector(".model-tts-engine").value;
+                const voice = card.querySelector(".model-tts-voice").value.trim();
+                const vram = parseFloat(card.querySelector(".model-vram").value);
+                modelPayloads.push({
+                    id: "tts-offline",
+                    type: "tts",
+                    backend: "tts",
+                    backend_config: {
+                        engine: engine,
+                        voice: voice
+                    },
+                    vram_estimate_gb: vram
+                });
+            } else if (type === "video") {
+                const modelName = card.querySelector(".model-repo").value.trim();
+                const vram = parseFloat(card.querySelector(".model-vram").value);
+                modelPayloads.push({
+                    id: "video-generation",
+                    type: "video",
+                    backend: "video",
+                    backend_config: {
+                        model_name: modelName
+                    },
+                    vram_estimate_gb: vram,
+                    purpose: "text-to-video scene generation"
                 });
             } else {
                 // Parse hidden/raw model (e.g. tts-offline)

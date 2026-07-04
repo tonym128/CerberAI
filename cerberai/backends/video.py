@@ -62,6 +62,15 @@ class VideoBackend(BaseBackend):
                     self.pipeline.enable_model_cpu_offload()
                 else:
                     self.pipeline.to(device)
+
+                # Prevent GPU scheduling timeouts (TDR resets) by splitting VAE operations
+                try:
+                    if hasattr(self.pipeline, "vae") and self.pipeline.vae is not None:
+                        print("Enabling VAE tiling and slicing to prevent GPU timeouts/resets...")
+                        self.pipeline.vae.enable_tiling()
+                        self.pipeline.vae.enable_slicing()
+                except Exception as ex:
+                    print(f"Warning: Could not enable VAE tiling/slicing: {ex}")
             else:
                 self.pipeline.to(device)
                 
