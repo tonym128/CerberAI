@@ -63,16 +63,19 @@ class VideoBackend(BaseBackend):
                 else:
                     self.pipeline.to(device)
 
-                # Prevent GPU scheduling timeouts (TDR resets) by splitting VAE operations
-                if hasattr(self.pipeline, "vae") and self.pipeline.vae is not None:
-                    try:
-                        self.pipeline.vae.enable_tiling()
-                    except Exception as ex:
-                        print(f"Warning: Could not enable VAE tiling: {ex}")
-                    try:
-                        self.pipeline.vae.enable_slicing()
-                    except Exception as ex:
-                        print(f"Warning: Could not enable VAE slicing: {ex}")
+                # Prevent GPU scheduling timeouts (TDR resets) by splitting VAE operations at pipeline level
+                try:
+                    if hasattr(self.pipeline, "enable_vae_tiling"):
+                        print("Enabling pipeline VAE tiling...")
+                        self.pipeline.enable_vae_tiling()
+                except Exception as ex:
+                    print(f"Warning: Could not enable VAE tiling: {ex}")
+                try:
+                    if hasattr(self.pipeline, "enable_vae_slicing"):
+                        print("Enabling pipeline VAE slicing...")
+                        self.pipeline.enable_vae_slicing()
+                except Exception as ex:
+                    print(f"Warning: Could not enable VAE slicing: {ex}")
             else:
                 self.pipeline.to(device)
                 
@@ -187,14 +190,36 @@ class VideoBackend(BaseBackend):
             with tempfile.NamedTemporaryFile(suffix=".mp4", delete=False) as tmp_file:
                 tmp_path = tmp_file.name
             
+            web_path = None
             try:
                 export_to_video(video_frames, tmp_path, fps=8)
-                with open(tmp_path, "rb") as f:
+                
+                # Transcode video to ensure H.264 / yuv420p web-playback compatibility
+                web_path = tmp_path + "_web.mp4"
+                cmd = [
+                    "ffmpeg", "-y",
+                    "-i", tmp_path,
+                    "-vcodec", "libx264",
+                    "-pix_fmt", "yuv420p",
+                    "-movflags", "+faststart",
+                    web_path
+                ]
+                import subprocess
+                try:
+                    subprocess.run(cmd, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+                    use_path = web_path
+                except Exception as ex:
+                    print(f"Warning: ffmpeg transcoding failed, falling back to raw export: {ex}")
+                    use_path = tmp_path
+                    
+                with open(use_path, "rb") as f:
                     video_bytes = f.read()
                 b64_data = base64.b64encode(video_bytes).decode("utf-8")
             finally:
                 if os.path.exists(tmp_path):
                     os.unlink(tmp_path)
+                if web_path and os.path.exists(web_path):
+                    os.unlink(web_path)
             
             return {
                 "created": int(time.time()),
