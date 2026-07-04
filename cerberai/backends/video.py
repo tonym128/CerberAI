@@ -50,13 +50,16 @@ class VideoBackend(BaseBackend):
             
             # Apply memory saving techniques for lower VRAM environments
             if device in ["cuda", "xpu"]:
-                if self.vram_estimate_gb <= 12.0:
-                    print("Enabling CPU model offloading & sequential offloading for Video generation (saves VRAM)...")
+                if self.vram_estimate_gb <= 10.0:
+                    print("Enabling model offloading & sequential offloading (saves maximum VRAM, slow execution)...")
                     self.pipeline.enable_model_cpu_offload()
                     try:
                         self.pipeline.enable_sequential_cpu_offload()
                     except Exception:
                         pass
+                elif self.vram_estimate_gb < 18.0:
+                    print("Enabling model-level CPU offloading (saves VRAM, fast execution)...")
+                    self.pipeline.enable_model_cpu_offload()
                 else:
                     self.pipeline.to(device)
             else:
