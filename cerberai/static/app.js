@@ -675,8 +675,8 @@ if (btnNewsVideo) {
                 btnNewsVideo.textContent = "Generate Video";
                 newsVideoStatusContainer.classList.add("hidden");
                 
-                // Load and play video with cache buster
-                newsVideoPlayer.src = `${data.video_url}?t=${Date.now()}`;
+                // Load and play video
+                newsVideoPlayer.src = data.video_url;
                 newsVideoPlayerContainer.classList.remove("hidden");
                 newsVideoPlayer.load();
                 renderVideoStories(data.stories);
@@ -840,7 +840,7 @@ if (btnNewsVideo) {
                 });
                 
                 el.addEventListener("click", () => {
-                    newsVideoPlayer.src = `${item.video_url}?t=${Date.now()}`;
+                    newsVideoPlayer.src = item.video_url;
                     newsVideoPlayerContainer.classList.remove("hidden");
                     newsVideoPlayer.load();
                     newsVideoPlayer.play().catch(err => console.log("Auto-play blocked:", err));
@@ -1076,7 +1076,7 @@ if (btnStartPodcast) {
                 btnStartPodcast.textContent = "Generate Podcast";
                 podcastStatusContainer.classList.add("hidden");
                 
-                podcastAudioPlayer.src = `${data.podcast_url}?t=${Date.now()}`;
+                podcastAudioPlayer.src = data.podcast_url;
                 podcastPlayerContainer.classList.remove("hidden");
                 podcastAudioPlayer.load();
 
@@ -1201,7 +1201,7 @@ if (btnStartPodcast) {
                 });
                 
                 el.addEventListener("click", () => {
-                    podcastAudioPlayer.src = `${item.podcast_url}?t=${Date.now()}`;
+                    podcastAudioPlayer.src = item.podcast_url;
                     podcastPlayerContainer.classList.remove("hidden");
                     podcastAudioPlayer.load();
                     podcastAudioPlayer.play().catch(err => console.log("Auto-play blocked:", err));
