@@ -127,6 +127,16 @@ def load_config(config_path: str = "config.yaml") -> AppConfig:
                         "vram_estimate_gb": 2.2,
                         "n_ctx": 4096,
                         "purpose": "routing classification"
+                    },
+                    {
+                        "id": "video-generation",
+                        "type": "video",
+                        "backend": "video",
+                        "backend_config": {
+                            "model_name": "THUDM/CogVideoX-2b"
+                        },
+                        "vram_estimate_gb": 8.0,
+                        "purpose": "text-to-video scene generation"
                     }
                 ],
                 "resource_limits": {

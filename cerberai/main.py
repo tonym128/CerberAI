@@ -636,15 +636,17 @@ async def start_news_video_automation(request: Request, background_tasks: Backgr
         
     topic = None
     date_str = None
+    video_mode = "image"
     try:
         payload = await request.json()
         topic = payload.get("topic")
         date_str = payload.get("date")
+        video_mode = payload.get("video_mode", "image")
     except Exception:
         pass
         
     update_status("running", 0, "Starting automation task...")
-    background_tasks.add_task(generate_yesterday_news_video, manager, agent, topic, date_str)
+    background_tasks.add_task(generate_yesterday_news_video, manager, agent, topic, date_str, video_mode)
     return JSONResponse(content={"message": "Automation started successfully.", "status": get_status()})
 
 @app.get("/v1/automate/news-video/status")

@@ -288,6 +288,14 @@ async def generate_yesterday_news_video(manager, agent, topic: str = None, date_
         print("Breaking News video generation failed due to lack of verifiable sources.")
         return
         
+    # Check VRAM limits to disable video generation for low VRAM systems (< 8GB)
+    max_vram = manager.config.resource_limits.max_vram_gb
+    if max_vram < 8.0:
+        msg = f"Video generation disabled: Requires at least 8.0 GB VRAM (system has {max_vram} GB VRAM)."
+        print(msg)
+        update_status("failed", 0, msg)
+        return
+
     # Get image and tts backends
     img_backend = await manager.get_model("image-lcm")
     tts_backend = await manager.get_model("tts-offline")
@@ -302,18 +310,44 @@ async def generate_yesterday_news_video(manager, agent, topic: str = None, date_
     async def process_slide(idx, story):
         nonlocal completed_count
         
-        # A. Generate Image
+        # A. Generate Image or Video segment depending on VRAM and model availability
+        video_temp_raw = os.path.join(temp_dir, f"video_raw_{idx}.mp4")
         img_temp_raw = os.path.join(temp_dir, f"raw_{idx}.png")
-        try:
-            img_res = await img_backend.handle_image_generation({"prompt": story["image_prompt"]})
-            b64_data = img_res["data"][0]["b64_json"]
-            with open(img_temp_raw, "wb") as f:
-                f.write(base64.b64decode(b64_data))
-        except Exception as e:
-            print(f"Failed to generate image for slide {idx}: {e}")
-            # Fallback placeholder image
-            img_placeholder = Image.new("RGB", (512, 512), color=(40, 44, 52))
-            img_placeholder.save(img_temp_raw)
+        use_video_model = False
+        
+        has_video_model = any(m.id == "video-generation" for m in manager.config.models)
+        if has_video_model and max_vram >= 8.0:
+            use_video_model = True
+            
+        if use_video_model:
+            try:
+                # Load video model
+                video_backend = await manager.get_model("video-generation")
+                # Generate video frames
+                video_res = await video_backend.handle_video_generation({
+                    "prompt": story["image_prompt"],
+                    "num_frames": 16, # ~2 seconds
+                    "num_inference_steps": 20
+                })
+                b64_video = video_res["b64_json"]
+                with open(video_temp_raw, "wb") as f:
+                    f.write(base64.b64decode(b64_video))
+            except Exception as e:
+                print(f"Failed to generate AI video segment for slide {idx}: {e}. Falling back to image...")
+                use_video_model = False
+
+        if not use_video_model:
+            # Fallback to image generation
+            try:
+                img_res = await img_backend.handle_image_generation({"prompt": story["image_prompt"]})
+                b64_data = img_res["data"][0]["b64_json"]
+                with open(img_temp_raw, "wb") as f:
+                    f.write(base64.b64decode(b64_data))
+            except Exception as e:
+                print(f"Failed to generate image for slide {idx}: {e}")
+                # Fallback placeholder image
+                img_placeholder = Image.new("RGB", (512, 512), color=(40, 44, 52))
+                img_placeholder.save(img_temp_raw)
             
         # B. Create transparent overlay containing fixed text, news borders, and domain source
         overlay_temp = os.path.join(temp_dir, f"overlay_{idx}.png")
@@ -351,33 +385,51 @@ async def generate_yesterday_news_video(manager, agent, topic: str = None, date_
         duration = max(2.0, duration + 0.2)
         total_frames = int(duration * 25) # 25 FPS target for zoompan
         
-        # D. Convert Slide + Audio to Video Segment using ffmpeg with Ken Burns effect
+        # D. Convert Slide + Audio to Video Segment using ffmpeg
         segment_path = os.path.join(temp_dir, f"segment_{idx}.mp4")
         
-        # Alternating zoom-in and zoom-out Ken Burns expressions, scaled up to 2048 to prevent pixel jitter
-        if idx % 2 == 0:
-            # Zoom-in: starting at 1.0, zooming in towards 1.3
-            zoom_filter = f"[0:v]scale=2048:2048,zoompan=z='min(zoom+0.0015,1.3)':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d={total_frames}:s=2048x2048,scale=512:512[bg];[bg][1:v]overlay=x=0:y=0[out]"
+        if use_video_model:
+            # Loop the generated video file to match the narration duration
+            cmd = [
+                "ffmpeg", "-y",
+                "-stream_loop", "-1",
+                "-i", video_temp_raw,
+                "-i", overlay_temp,
+                "-i", audio_temp,
+                "-filter_complex", "[0:v]scale=512:512[bg];[bg][1:v]overlay=x=0:y=0[out]",
+                "-map", "[out]",
+                "-map", "2:a",
+                "-c:v", "libx264",
+                "-preset", "superfast",
+                "-pix_fmt", "yuv420p",
+                "-movflags", "+faststart",
+                "-c:a", "aac", "-b:a", "192k",
+                "-t", f"{duration:.3f}",
+                segment_path
+            ]
         else:
-            # Zoom-out: starting at 1.3, zooming out towards 1.0
-            zoom_filter = f"[0:v]scale=2048:2048,zoompan=z='max(1.3-0.001*on,1.0)':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d={total_frames}:s=2048x2048,scale=512:512[bg];[bg][1:v]overlay=x=0:y=0[out]"
-        
-        # Command builds a video clip with smooth zoom and static text overlay
-        cmd = [
-            "ffmpeg", "-y",
-            "-i", img_temp_raw,
-            "-i", overlay_temp,
-            "-i", audio_temp,
-            "-filter_complex", zoom_filter,
-            "-map", "[out]",
-            "-map", "2:a",
-            "-c:v", "libx264",
-            "-c:a", "aac", "-b:a", "192k",
-            "-pix_fmt", "yuv420p",
-            "-movflags", "+faststart",
-            "-t", f"{duration:.3f}",
-            segment_path
-        ]
+            # Alternating zoom-in and zoom-out Ken Burns expressions, scaled up to 2048 to prevent pixel jitter
+            if idx % 2 == 0:
+                zoom_filter = f"[0:v]scale=2048:2048,zoompan=z='min(zoom+0.0015,1.3)':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d={total_frames}:s=2048x2048,scale=512:512[bg];[bg][1:v]overlay=x=0:y=0[out]"
+            else:
+                zoom_filter = f"[0:v]scale=2048:2048,zoompan=z='max(1.3-0.001*on,1.0)':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d={total_frames}:s=2048x2048,scale=512:512[bg];[bg][1:v]overlay=x=0:y=0[out]"
+            
+            # Command builds a video clip with smooth zoom and static text overlay
+            cmd = [
+                "ffmpeg", "-y",
+                "-i", img_temp_raw,
+                "-i", overlay_temp,
+                "-i", audio_temp,
+                "-filter_complex", zoom_filter,
+                "-map", "[out]",
+                "-map", "2:a",
+                "-c:v", "libx264",
+                "-c:a", "aac", "-b:a", "192k",
+                "-pix_fmt", "yuv420p",
+                "-movflags", "+faststart",
+                "-t", f"{duration:.3f}",
+                segment_path
+            ]
         
         proc = await asyncio.create_subprocess_exec(
             *cmd,

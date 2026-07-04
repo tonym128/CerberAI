@@ -8,6 +8,7 @@ from .backends.llamacpp import LlamaCppBackend
 from .backends.whisper import WhisperBackend
 from .backends.tts import TTSBackend
 from .backends.diffusers import DiffusersBackend
+from .backends.video import VideoBackend
 
 class DynamicModelManager:
     def __init__(self, config: AppConfig):
@@ -88,6 +89,14 @@ class DynamicModelManager:
             return TTSBackend(model_cfg.id, backend_config, model_cfg.vram_estimate_gb)
         elif b_type == "diffusers":
             return DiffusersBackend(model_cfg.id, backend_config, model_cfg.vram_estimate_gb)
+        elif b_type == "video":
+            # Auto-scale video model based on system VRAM limits
+            max_vram = self.config.resource_limits.max_vram_gb
+            if max_vram >= 16.0 and backend_config.get("model_name") == "THUDM/CogVideoX-2b":
+                print("Upgrading default Video model to CogVideoX-5b based on VRAM capacity (>= 16GB)...")
+                backend_config["model_name"] = "THUDM/CogVideoX-5b"
+                model_cfg.vram_estimate_gb = 16.0
+            return VideoBackend(model_cfg.id, backend_config, model_cfg.vram_estimate_gb)
         else:
             print(f"Warning: Backend '{model_cfg.backend}' for model '{model_cfg.id}' is not implemented yet.")
             return None
