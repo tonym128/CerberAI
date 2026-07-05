@@ -13,10 +13,10 @@ services:
     # Works by forwarding port 3000 to the container. Requires CerberAI's 
     # server.host in config.yaml to be set to 0.0.0.0 so it can accept 
     # requests from Docker's network interfaces.
-    ports:
-      - "3000:8080"
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
+    # ports:
+    #   - "3000:8080"
+    # extra_hosts:
+    #   - "host.docker.internal:host-gateway"
 
     # Option B: Host Networking (Alternative for Linux hosts)
     # Shares the host's network namespace directly. Allows Open WebUI to 
@@ -24,41 +24,42 @@ services:
     # Note: If you uncomment the line below, make sure to comment out the 
     # ports and extra_hosts blocks above. Open WebUI will then be accessible 
     # on http://localhost:8080.
-    # network_mode: host
+    network_mode: host
 
     # -------------------------------------------------------------------------
     # PERSISTENT STORAGE
     # -------------------------------------------------------------------------
     volumes:
-      - open-webui-data:/app/data
+      - open-webui-data:/app/backend/data
 
     # -------------------------------------------------------------------------
     # ENVIRONMENT CONFIGURATION
     # -------------------------------------------------------------------------
     environment:
       - TZ=UTC
+      - PORT=3000
       
       # 1. Main OpenAI API Settings (Chat / Models / Reasoning)
       # If using Option A (Bridge): http://host.docker.internal:8000/v1
       # If using Option B (Host):   http://127.0.0.1:8000/v1
-      - OPENAI_API_BASE_URL=http://host.docker.internal:8000/v1
+      - OPENAI_API_BASE_URL=http://127.0.0.1:8000/v1
       - OPENAI_API_KEY=cerberai
       
       # 2. Speech-to-Text (STT) via CerberAI
       - AUDIO_STT_ENGINE=openai
-      - AUDIO_STT_OPENAI_API_BASE_URL=http://host.docker.internal:8000/v1
+      - AUDIO_STT_OPENAI_API_BASE_URL=http://127.0.0.1:8000/v1
       - AUDIO_STT_OPENAI_API_KEY=cerberai
       
       # 3. Text-to-Speech (TTS) via CerberAI
       - AUDIO_TTS_ENGINE=openai
-      - AUDIO_TTS_OPENAI_API_BASE_URL=http://host.docker.internal:8000/v1
+      - AUDIO_TTS_OPENAI_API_BASE_URL=http://127.0.0.1:8000/v1
       - AUDIO_TTS_OPENAI_API_KEY=cerberai
       - AUDIO_TTS_OPENAI_API_VOICE=auto
       
       # 4. Image Generation via CerberAI (Diffusers backend)
       - ENABLE_IMAGE_GENERATION=true
       - IMAGE_GENERATION_ENGINE=openai
-      - IMAGES_OPENAI_API_BASE_URL=http://host.docker.internal:8000/v1
+      - IMAGES_OPENAI_API_BASE_URL=http://127.0.0.1:8000/v1
       - IMAGES_OPENAI_API_KEY=cerberai
       - IMAGE_GENERATION_MODEL=image-lcm
 

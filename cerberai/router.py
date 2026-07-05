@@ -34,13 +34,13 @@ class IntentRouter:
             return requested_model
 
         # If the model matches a backend model name, map it (skip control keywords like auto)
-        if requested_model not in ("auto", "default", "", None):
+        if requested_model not in ("auto", "autorouting", "auto-route", "cerberai-router", "default", "", None):
             for m in self.models:
                 if m.backend_config.get("model_name") == requested_model:
                     return m.id
 
         # If it's not "auto" or empty/none, and it doesn't match, we fallback or auto-route
-        if requested_model not in ("auto", "", None, "default"):
+        if requested_model not in ("auto", "autorouting", "auto-route", "cerberai-router", "", None, "default"):
             # If the requested model is a known keyword (e.g. contains 'coding' or 'coder'), route there
             if "code" in requested_model.lower() or "coder" in requested_model.lower():
                 return self.default_coding
@@ -59,6 +59,12 @@ class IntentRouter:
 
         # Get last message content to analyze
         last_message = messages[-1].get("content", "")
+        
+        # Intercept internal system utility tasks (like follow-ups, title, tags generation)
+        if isinstance(last_message, str) and self._is_utility_or_meta_task(last_message):
+            print("Detected internal utility/meta task, routing to General LLM")
+            return self.default_general
+
         if isinstance(last_message, list):
             parts = []
             has_image = False
@@ -82,6 +88,24 @@ class IntentRouter:
             return await self._route_with_llm(last_message, manager)
         else:
             return self._route_with_heuristics(last_message)
+
+    def _is_utility_or_meta_task(self, prompt: str) -> bool:
+        """Detect if the prompt is an internal system/utility task (e.g. follow-ups, title, tags, compaction)."""
+        prompt_lower = prompt.lower()
+        utility_indicators = [
+            "### task:",
+            "follow-up",
+            "follow_ups",
+            "generate a short title",
+            "generate a 3-5 word title",
+            "generate a title",
+            "generate tags",
+            "<chat_history>",
+            "</chat_history>",
+            "suggest 3-5 relevant",
+            "context_compaction"
+        ]
+        return any(indicator in prompt_lower for indicator in utility_indicators)
 
     def _route_with_heuristics_strict(self, prompt: str) -> Optional[str]:
         """Strict keyword/regex-based routing. Returns None if no clear intent matches."""

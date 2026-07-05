@@ -159,6 +159,16 @@ async def list_models():
         "root": "auto",
         "parent": None
     })
+    # Include 'autorouting' as a virtual model that maps to our intelligent router
+    data.append({
+        "id": "autorouting",
+        "object": "model",
+        "created": 1677610602,
+        "owned_by": "cerberai",
+        "permission": [],
+        "root": "autorouting",
+        "parent": None
+    })
     return {"object": "list", "data": data}
 
 from typing import AsyncIterator
@@ -273,7 +283,8 @@ async def chat_completions(request: Request):
             with open(img_path, "wb") as fh:
                 fh.write(base64.b64decode(b64_data))
             
-            static_url = f"/static/generated/{img_filename}"
+            base_url = str(request.base_url).rstrip("/")
+            static_url = f"{base_url}/static/generated/{img_filename}"
             markdown_content = f"Here is the image you requested for **\"{last_message_content}\"**:\n\n![Generated Image]({static_url})"
             
             chat_response = {
@@ -383,7 +394,8 @@ async def chat_completions(request: Request):
                             with open(vid_path, "wb") as fh:
                                 fh.write(base64.b64decode(b64_data))
                                 
-                            static_url = f"/static/generated/{vid_filename}"
+                            base_url = str(request.base_url).rstrip("/")
+                            static_url = f"{base_url}/static/generated/{vid_filename}"
                             final_markdown = f"\n\n🎬 **Video Generated Successfully!**\n\n<video src=\"{static_url}\" controls style=\"width: 100%; max-width: 512px; border-radius: 8px;\"></video>\n\n[Download Video]({static_url})"
                             
                             yield f"data: {json.dumps({'choices': [{'delta': {'content': final_markdown}, 'index': 0, 'finish_reason': None}]})}\n\n"
@@ -410,7 +422,8 @@ async def chat_completions(request: Request):
                 with open(vid_path, "wb") as fh:
                     fh.write(base64.b64decode(b64_data))
                 
-                static_url = f"/static/generated/{vid_filename}"
+                base_url = str(request.base_url).rstrip("/")
+                static_url = f"{base_url}/static/generated/{vid_filename}"
                 markdown_content = f"Here is the video you requested for **\"{desc_prompt}\"**:\n\n<video src=\"{static_url}\" controls style=\"width: 100%; max-width: 512px; border-radius: 8px;\"></video>\n\n[Download Video]({static_url})"
                 
                 chat_response = {
@@ -482,7 +495,8 @@ async def chat_completions(request: Request):
             with open(audio_path, "wb") as fh:
                 fh.write(audio_bytes)
                 
-            static_url = f"/static/generated/{audio_filename}"
+            base_url = str(request.base_url).rstrip("/")
+            static_url = f"{base_url}/static/generated/{audio_filename}"
             markdown_content = f"Here is the spoken audio for **\"{last_message_content}\"**:\n\n<audio controls src=\"{static_url}\" style=\"width: 100%; margin-top: 8px;\"></audio>"
             
             chat_response = {
