@@ -176,8 +176,53 @@ class AgentExecutor:
         except Exception as e:
             return f"Google search error: {e}"
 
+    def clean_search_query(self, query: str) -> str:
+        # Remove common prefix phrases and natural language fluff
+        q = query.lower().strip()
+        
+        # Phrases to remove
+        phrases = [
+            "search the web for the latest news about",
+            "search the web for the latest news on",
+            "search the web for news about",
+            "search the web for news on",
+            "search the web for latest news about",
+            "search the web for latest news on",
+            "search the web for info about",
+            "search the web for info on",
+            "search the web for information about",
+            "search the web for information on",
+            "search the web for",
+            "search the internet for",
+            "latest news about",
+            "latest news on",
+            "news about",
+            "news on",
+            "information about",
+            "information on",
+            "info about",
+            "info on",
+            "tell me about",
+            "find news about",
+            "find news on"
+        ]
+        for p in phrases:
+            if q.startswith(p):
+                q = q[len(p):].strip()
+                break
+                
+        # Also strip basic stop words from start and end
+        stop_words = ["about", "on", "for", "the", "a", "an", "latest", "news", "info", "information", "search", "find"]
+        words = q.split()
+        while words and words[0] in stop_words:
+            words.pop(0)
+        while words and words[-1] in stop_words:
+            words.pop()
+            
+        return " ".join(words) if words else query
+
     async def _search_duckduckgo(self, query: str) -> str:
-        """Query DuckDuckGo HTML search page and parse top results, falling back to Wikipedia if blocked."""
+        """Query DuckDuckGo HTML search page and parse top results, falling back to other search engines if blocked."""
         import html
         url = f"https://html.duckduckgo.com/html/?q={urllib.parse.quote(query)}"
         headers = {
@@ -185,6 +230,10 @@ class AgentExecutor:
             "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
             "Accept-Language": "en-US,en;q=0.5"
         }
+        
+        # Clean the query for keyword-based fallback APIs
+        clean_query = self.clean_search_query(query)
+        
         try:
             async with httpx.AsyncClient(headers=headers, timeout=12.0, follow_redirects=True) as client:
                 response = await client.get(url)
@@ -202,7 +251,6 @@ class AgentExecutor:
                         clean_title = html.unescape(re.sub(r'<[^>]+>', '', title).strip())
                         clean_snippet = html.unescape(re.sub(r'<[^>]+>', '', snippet).strip())
                         
-                        # Resolve actual URL from uddg param
                         real_url = raw_link
                         if "uddg=" in raw_link:
                             match = re.search(r'uddg=([^&]+)', raw_link)
@@ -229,7 +277,6 @@ class AgentExecutor:
                                 source_url = api_data.get("AbstractURL", "")
                                 api_results.append(f"1. Abstract Summary: {abstract}\nSource: {source_url} ({source_name})\n")
                             
-                            # Append related topics
                             related = api_data.get("RelatedTopics", [])
                             count = 0
                             for item in related:
@@ -246,9 +293,54 @@ class AgentExecutor:
                 except Exception as api_err:
                     print(f"DuckDuckGo Instant Answer API check failed: {api_err}")
 
-                # Fallback 2: Wikipedia API search if DuckDuckGo triggers CAPTCHA or errors
-                print("Falling back to Wikipedia API...")
-                wiki_api_url = f"https://en.wikipedia.org/w/api.php?action=query&list=search&srsearch={urllib.parse.quote(query)}&format=json"
+                # Fallback 2: Hacker News Search API (Algolia) - highly reliable, no CAPTCHAs
+                print(f"Falling back to Hacker News Search API with query: '{clean_query}'...")
+                try:
+                    hn_api_url = "https://hn.algolia.com/api/v1/search"
+                    async with httpx.AsyncClient(timeout=10.0) as hn_client:
+                        hn_res = await hn_client.get(hn_api_url, params={"query": clean_query})
+                        if hn_res.status_code == 200:
+                            hn_data = hn_res.json()
+                            hn_results = []
+                            for idx, hit in enumerate(hn_data.get("hits", [])[:5]):
+                                title = hit.get("title") or hit.get("story_title") or "Hacker News discussion"
+                                url = hit.get("url") or hit.get("story_url") or f"https://news.ycombinator.com/item?id={hit.get('objectID')}"
+                                snippet = hit.get("comment_text") or hit.get("story_text") or f"HN Post by {hit.get('author', 'anonymous')}"
+                                snippet_clean = html.unescape(re.sub(r'<[^>]+>', ' ', snippet).strip())
+                                hn_results.append(f"{len(hn_results)+1}. {title}\nSnippet: {snippet_clean[:250]}...\nSource: {url}\n")
+                            if hn_results:
+                                return "\n".join(hn_results)
+                except Exception as hn_err:
+                    print(f"Hacker News Search API fallback check failed: {hn_err}")
+
+                # Fallback 3: GitHub Repository Search API - highly reliable for software/tech queries
+                print(f"Falling back to GitHub Search API with query: '{clean_query}'...")
+                try:
+                    github_api_url = f"https://api.github.com/search/repositories?q={urllib.parse.quote(clean_query)}"
+                    github_headers = {
+                        "User-Agent": "CerberAI/1.0 (tonym@example.com)",
+                        "Accept": "application/vnd.github+json"
+                    }
+                    async with httpx.AsyncClient(headers=github_headers, timeout=10.0) as gh_client:
+                        gh_res = await gh_client.get(github_api_url)
+                        if gh_res.status_code == 200:
+                            gh_data = gh_res.json()
+                            gh_results = []
+                            for idx, item in enumerate(gh_data.get("items", [])[:5]):
+                                name = item.get("full_name", "")
+                                url = item.get("html_url", "")
+                                desc = item.get("description") or "No description provided."
+                                stars = item.get("stargazers_count", 0)
+                                lang = item.get("language") or "unspecified language"
+                                gh_results.append(f"{len(gh_results)+1}. GitHub Repository: {name}\nSnippet: {desc} (Stars: {stars}, Language: {lang})\nSource: {url}\n")
+                            if gh_results:
+                                return "\n".join(gh_results)
+                except Exception as gh_err:
+                    print(f"GitHub Search API fallback check failed: {gh_err}")
+
+                # Fallback 4: Wikipedia API search if other sources trigger CAPTCHA or errors
+                print(f"Falling back to Wikipedia API with query: '{clean_query}'...")
+                wiki_api_url = f"https://en.wikipedia.org/w/api.php?action=query&list=search&srsearch={urllib.parse.quote(clean_query)}&format=json"
                 wiki_headers = {
                     "User-Agent": "CerberAI/1.0 (tonym@example.com)"
                 }
@@ -262,11 +354,11 @@ class AgentExecutor:
                             title = r.get("title", "")
                             snippet = html.unescape(re.sub(r'<[^>]+>', '', r.get("snippet", "")).strip())
                             page_url = f"https://en.wikipedia.org/wiki/{urllib.parse.quote(title)}"
-                            results.append(f"{idx+1}. {title}\nSnippet: {snippet}\nSource: {page_url}\n")
+                            results.append(f"{len(results)+1}. {title}\nSnippet: {snippet}\nSource: {page_url}\n")
                         if results:
                             return "\n".join(results)
                             
-                return "Error: Search challenge encountered and all fallbacks (DuckDuckGo Instant Answer & Wikipedia) returned no results."
+                return "Error: Search challenge encountered and all fallbacks (DuckDuckGo Instant Answer, Hacker News, GitHub, & Wikipedia) returned no results."
         except Exception as e:
             return f"Search error: {e}"
 
