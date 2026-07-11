@@ -593,35 +593,86 @@ async def chat_completions(request: Request):
             local_payload["messages"] = local_messages
             local_payload["stream"] = False  # Disable streaming for intermediate agent reasoning steps
 
-            loop_limit = 5
-            for step in range(loop_limit):
-                response = await backend.handle_chat_completion(local_payload)
-                content = response["choices"][0]["message"]["content"]
-                
-                # Check for tool call tags
-                match = re.search(r"<tool_call>(.*?)</tool_call>", content, re.DOTALL)
-                if match:
-                    tool_call_json = match.group(1).strip()
-                    tool_result = await agent.execute_tool(tool_call_json)
+            if stream:
+                async def stream_agent_workflow():
+                    yield f"data: {json.dumps({'choices': [{'delta': {'role': 'assistant', 'content': ''}, 'index': 0, 'finish_reason': None}]})}\n\n"
                     
-                    # Append history
-                    local_messages.append({"role": "assistant", "content": content})
-                    local_messages.append({
-                        "role": "user",
-                        "content": f"[TOOL RESPONSE]\n{tool_result}"
-                    })
-                    local_payload["messages"] = local_messages
-                    continue
-                else:
-                    # Final response reached!
+                    loop_limit = 5
+                    content = ""
+                    for step in range(loop_limit):
+                        response = await backend.handle_chat_completion(local_payload)
+                        content = response["choices"][0]["message"]["content"]
+                        
+                        match = re.search(r"<tool_call>(.*?)</tool_call>", content, re.DOTALL)
+                        if match:
+                            tool_call_json = match.group(1).strip()
+                            
+                            # Parse details
+                            tool_name = "unknown"
+                            tool_args_str = ""
+                            try:
+                                tc_data = json.loads(tool_call_json)
+                                tool_name = tc_data.get("name", "unknown")
+                                tool_args_str = json.dumps(tc_data.get("arguments", {}))
+                            except Exception:
+                                func_match = re.match(r"^(\w+)\((.*)\)$", tool_call_json, re.DOTALL)
+                                if func_match:
+                                    tool_name = func_match.group(1)
+                                    tool_args_str = func_match.group(2).strip()
+                                else:
+                                    tool_name = "tool_call"
+                                    tool_args_str = tool_call_json[:150]
+                                    
+                            # Stream "Running" block
+                            sandbox_running_html = (
+                                f"\n<div class=\"tool-sandbox-call\" data-tool=\"{tool_name}\">\n"
+                                f"  <div class=\"tool-sandbox-header\">🔧 Running tool: <strong>{tool_name}</strong></div>\n"
+                                f"  <div class=\"tool-sandbox-query\">arguments: <code>{tool_args_str}</code></div>\n"
+                                f"  <div class=\"tool-sandbox-status pulse\">Executing locally...</div>\n"
+                                f"</div>\n\n"
+                            )
+                            yield f"data: {json.dumps({'choices': [{'delta': {'content': sandbox_running_html}, 'index': 0, 'finish_reason': None}]})}\n\n"
+                            
+                            # Execute tool
+                            tool_result = await agent.execute_tool(tool_call_json)
+                            
+                            # Truncate
+                            truncated_result = tool_result
+                            if len(truncated_result) > 2000:
+                                truncated_result = truncated_result[:2000] + "\n\n... [Output Truncated for View] ..."
+                                
+                            # Stream "Finished" block
+                            sandbox_finished_html = (
+                                f"\n<div class=\"tool-sandbox-call success\" data-tool=\"{tool_name}\">\n"
+                                f"  <details open>\n"
+                                f"    <summary>✓ Ran tool: <strong>{tool_name}</strong> (Click to collapse results)</summary>\n"
+                                f"    <pre class=\"tool-sandbox-result\">{truncated_result}</pre>\n"
+                                f"  </details>\n"
+                                f"</div>\n\n"
+                            )
+                            yield f"data: {json.dumps({'choices': [{'delta': {'content': sandbox_finished_html}, 'index': 0, 'finish_reason': None}]})}\n\n"
+                            
+                            # Append history
+                            local_messages.append({"role": "assistant", "content": content})
+                            local_messages.append({
+                                "role": "user",
+                                "content": f"[TOOL RESPONSE]\n{tool_result}"
+                            })
+                            local_payload["messages"] = local_messages
+                            continue
+                        else:
+                            # Final response
+                            chunk_size = 6
+                            for i in range(0, len(content), chunk_size):
+                                chunk = content[i:i+chunk_size]
+                                yield f"data: {json.dumps({'choices': [{'delta': {'content': chunk}, 'index': 0, 'finish_reason': None}]})}\n\n"
+                                await asyncio.sleep(0.01)
+                            break
+                            
+                    # Yield metrics and stop
                     end_time = time.time()
                     wall_time = end_time - start_time
-                    completion_tokens = 0
-                    if "usage" in response and "completion_tokens" in response["usage"]:
-                        completion_tokens = response["usage"]["completion_tokens"]
-                    else:
-                        completion_tokens = max(1, len(content) // 4)
-                        
+                    completion_tokens = max(1, len(content) // 4)
                     tps = completion_tokens / wall_time if wall_time > 0 else 0.0
                     metrics = {
                         "model": target_model_id,
@@ -629,31 +680,73 @@ async def chat_completions(request: Request):
                         "completion_tokens": completion_tokens,
                         "tokens_per_second": tps
                     }
+                    yield f"data: {json.dumps({'metrics': metrics})}\n\n"
+                    yield f"data: {json.dumps({'choices': [{'delta': {}, 'index': 0, 'finish_reason': 'stop'}]})}\n\n"
+                    yield "data: [DONE]\n\n"
+                
+                return StreamingResponse(stream_agent_workflow(), media_type="text/event-stream")
+            else:
+                loop_limit = 5
+                accumulated_content = ""
+                content = ""
+                response = None
+                for step in range(loop_limit):
+                    response = await backend.handle_chat_completion(local_payload)
+                    content = response["choices"][0]["message"]["content"]
                     
-                    if stream:
-                        async def stream_pregenerated():
-                            yield f"data: {json.dumps({'choices': [{'delta': {'role': 'assistant', 'content': ''}, 'index': 0, 'finish_reason': None}]})}\n\n"
-                            yield f"data: {json.dumps({'choices': [{'delta': {'content': content}, 'index': 0, 'finish_reason': None}]})}\n\n"
-                            yield f"data: {json.dumps({'metrics': metrics})}\n\n"
-                            yield f"data: {json.dumps({'choices': [{'delta': {}, 'index': 0, 'finish_reason': 'stop'}]})}\n\n"
-                            yield "data: [DONE]\n\n"
-                        return StreamingResponse(stream_pregenerated(), media_type="text/event-stream")
+                    match = re.search(r"<tool_call>(.*?)</tool_call>", content, re.DOTALL)
+                    if match:
+                        tool_call_json = match.group(1).strip()
+                        
+                        tool_name = "unknown"
+                        try:
+                            tc_data = json.loads(tool_call_json)
+                            tool_name = tc_data.get("name", "unknown")
+                        except Exception:
+                            func_match = re.match(r"^(\w+)\((.*)\)$", tool_call_json, re.DOTALL)
+                            if func_match:
+                                tool_name = func_match.group(1)
+                                
+                        tool_result = await agent.execute_tool(tool_call_json)
+                        
+                        truncated_result = tool_result
+                        if len(truncated_result) > 2000:
+                            truncated_result = truncated_result[:2000] + "\n\n... [Output Truncated for View] ..."
+                            
+                        sandbox_html = (
+                            f"\n<div class=\"tool-sandbox-call success\" data-tool=\"{tool_name}\">\n"
+                            f"  <details>\n"
+                            f"    <summary>🔧 Ran tool: <strong>{tool_name}</strong> (Click to view results)</summary>\n"
+                            f"    <pre class=\"tool-sandbox-result\">{truncated_result}</pre>\n"
+                            f"  </details>\n"
+                            f"</div>\n\n"
+                        )
+                        accumulated_content += sandbox_html
+                        
+                        local_messages.append({"role": "assistant", "content": content})
+                        local_messages.append({
+                            "role": "user",
+                            "content": f"[TOOL RESPONSE]\n{tool_result}"
+                        })
+                        local_payload["messages"] = local_messages
+                        continue
                     else:
-                        response["metrics"] = metrics
-                        return JSONResponse(content=response)
-            
-            # If loop limit exceeded, return last response
-            end_time = time.time()
-            wall_time = end_time - start_time
-            completion_tokens = max(1, len(content) // 4)
-            tps = completion_tokens / wall_time if wall_time > 0 else 0.0
-            response["metrics"] = {
-                "model": target_model_id,
-                "wall_time_sec": wall_time,
-                "completion_tokens": completion_tokens,
-                "tokens_per_second": tps
-            }
-            return JSONResponse(content=response)
+                        accumulated_content += content
+                        break
+                        
+                end_time = time.time()
+                wall_time = end_time - start_time
+                completion_tokens = max(1, len(accumulated_content) // 4)
+                tps = completion_tokens / wall_time if wall_time > 0 else 0.0
+                
+                response["choices"][0]["message"]["content"] = accumulated_content
+                response["metrics"] = {
+                    "model": target_model_id,
+                    "wall_time_sec": wall_time,
+                    "completion_tokens": completion_tokens,
+                    "tokens_per_second": tps
+                }
+                return JSONResponse(content=response)
         except Exception as e:
             import traceback
             traceback.print_exc()

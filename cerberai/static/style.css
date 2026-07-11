@@ -1485,4 +1485,97 @@ body {
     padding: 40px 10px;
 }
 
+/* ==========================================================================
+   TOOL CALL SANDBOX WIDGET STYLES
+   ========================================================================== */
+.tool-sandbox-call {
+    margin: 12px 0;
+    padding: 12px 16px;
+    background: rgba(255, 255, 255, 0.02);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    border-left: 4px solid var(--primary);
+    border-radius: 8px;
+    font-family: var(--font-mono);
+    font-size: 12px;
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    box-shadow: 0 4px 16px rgba(0,0,0,0.15);
+}
+
+.tool-sandbox-call.success {
+    border-left-color: #10b981;
+}
+
+.tool-sandbox-header {
+    font-weight: 600;
+    color: var(--text-primary);
+    margin-bottom: 6px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.tool-sandbox-query {
+    color: var(--text-secondary);
+    background: rgba(0, 0, 0, 0.25);
+    padding: 6px 8px;
+    border-radius: 6px;
+    border: 1px solid rgba(255, 255, 255, 0.03);
+    margin-bottom: 6px;
+    word-break: break-all;
+    font-size: 11px;
+}
+
+.tool-sandbox-query code {
+    background: transparent !important;
+    padding: 0 !important;
+}
+
+.tool-sandbox-status {
+    color: #fbbf24;
+    font-weight: 600;
+    font-size: 11px;
+}
+
+.tool-sandbox-status.pulse {
+    animation: sandboxPulse 1.5s infinite ease-in-out;
+}
+
+@keyframes sandboxPulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.4; }
+}
+
+.tool-sandbox-call details {
+    cursor: pointer;
+    width: 100%;
+}
+
+.tool-sandbox-call details summary {
+    font-weight: 600;
+    color: #34d399;
+    outline: none;
+    user-select: none;
+    list-style: none;
+}
+
+.tool-sandbox-call details summary::-webkit-details-marker {
+    display: none;
+}
+
+.tool-sandbox-result {
+    margin-top: 8px;
+    padding: 10px;
+    background: rgba(0, 0, 0, 0.35);
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    border-radius: 6px;
+    color: #a7f3d0;
+    font-size: 11px;
+    max-height: 250px;
+    overflow-y: auto;
+    white-space: pre-wrap;
+    word-break: break-all;
+    line-height: 1.4;
+}
+
 
