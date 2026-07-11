@@ -158,7 +158,8 @@ async function pollStatus() {
     }
 }
 
-// Render model catalog sidebar ifunction renderCatalog(allModels, activeModels, loadingStatus) {
+// Render model catalog sidebar
+function renderCatalog(allModels, activeModels, loadingStatus) {
     const formatTimeAgo = (ts) => {
         if (!ts) return "Never";
         const diff = Math.floor(Date.now() / 1000 - ts);
@@ -891,6 +892,23 @@ if (btnNewsVideo) {
         container.classList.remove("hidden");
     }
 
+    function formatHistoryTimestamp(item) {
+        if (item.timestamp) {
+            return {
+                date: item.timestamp.split(" ")[0],
+                time: item.timestamp.split(" ")[1] || ""
+            };
+        }
+        if (item.created_at) {
+            const d = new Date(item.created_at * 1000);
+            const pad = (n) => String(n).padStart(2, '0');
+            const dateStr = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+            const timeStr = `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+            return { date: dateStr, time: timeStr };
+        }
+        return { date: "", time: "" };
+    }
+
     async function fetchVideoHistory() {
         if (!newsVideoHistoryList) return;
         try {
@@ -918,13 +936,14 @@ if (btnNewsVideo) {
                     gap: 2px;
                     margin-bottom: 2px;
                 `;
+                const ts = formatHistoryTimestamp(item);
                 el.innerHTML = `
                     <div style="font-size: 11px; font-weight: 600; color: var(--text-primary); text-overflow: ellipsis; overflow: hidden; white-space: nowrap;">
                         🎬 ${item.topic}
                     </div>
                     <div style="font-size: 9px; color: var(--text-secondary); display: flex; justify-content: space-between;">
-                        <span>Date: ${item.date}</span>
-                        <span>${item.timestamp.split(" ")[0]}</span>
+                        <span>Date: ${item.date || ts.date}</span>
+                        <span>${ts.date}</span>
                     </div>
                 `;
                 
@@ -1099,12 +1118,13 @@ if (btnStartResearch) {
                     margin-bottom: 2px;
                 `;
                 
+                const ts = formatHistoryTimestamp(item);
                 el.innerHTML = `
                     <div style="font-size: 11px; font-weight: 600; color: var(--text-primary); text-overflow: ellipsis; overflow: hidden; white-space: nowrap;" title="${item.query}">
                         🔬 ${item.query}
                     </div>
                     <div style="display: flex; gap: 4px; align-items: center; justify-content: space-between;">
-                        <span style="font-size: 9px; color: var(--text-secondary);">${item.timestamp.split(" ")[0]}</span>
+                        <span style="font-size: 9px; color: var(--text-secondary);">${ts.date}</span>
                         <div style="display: flex; gap: 4px;">
                             <a href="${item.report_url}" target="_blank" style="font-size: 9px; color: var(--text-secondary); text-decoration: none; padding: 2px 4px; background: rgba(255,255,255,0.05); border: 1px solid var(--border-color); border-radius: 4px;">MD</a>
                             <a href="${item.pdf_url}" target="_blank" style="font-size: 9px; color: var(--primary); text-decoration: none; padding: 2px 4px; background: rgba(139, 92, 246, 0.1); border: 1px solid rgba(139, 92, 246, 0.3); border-radius: 4px; font-weight: 600;">PDF</a>
@@ -1279,12 +1299,13 @@ if (btnStartPodcast) {
                     margin-bottom: 2px;
                 `;
                 
+                const ts = formatHistoryTimestamp(item);
                 el.innerHTML = `
                     <div style="font-size: 11px; font-weight: 600; color: var(--text-primary); text-overflow: ellipsis; overflow: hidden; white-space: nowrap;" title="${item.query}">
                         🎙️ ${item.query}
                     </div>
                     <div style="font-size: 9px; color: var(--text-secondary); display: flex; justify-content: space-between;">
-                        <span>${item.timestamp.split(" ")[0]}</span>
+                        <span>${ts.date}</span>
                         <span style="color: var(--primary); font-weight: 600;">Play Audio</span>
                     </div>
                 `;
@@ -2389,7 +2410,8 @@ function escapeHtml(text) {
                     margin-bottom: 2px;
                 `;
                 
-                const timeStr = item.timestamp ? item.timestamp.split(" ")[1] : "";
+                const ts = formatHistoryTimestamp(item);
+                const timeStr = ts.time;
                 
                 el.innerHTML = `
                     <div style="display: flex; justify-content: space-between; font-size: 9px; color: var(--text-secondary); margin-bottom: 2px; font-weight: 600;">

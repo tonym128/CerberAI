@@ -52,6 +52,27 @@ class SubprocessManager:
         import shutil
         import os
         import platform
+        import psutil
+        import time
+
+        # Kill any orphaned process occupying this port to prevent binding crashes
+        for proc in psutil.process_iter(['pid', 'name']):
+            try:
+                for conn in proc.connections(kind='inet'):
+                    if conn.laddr.port == self.port:
+                        print(f"Port {self.port} is occupied by process {proc.info['name']} (PID: {proc.info['pid']}). Terminating orphaned engine process...")
+                        if progress_callback:
+                            progress_callback(f"[1/3] Terminating orphaned engine process on port {self.port}...")
+                        try:
+                            proc.terminate()
+                            proc.wait(timeout=2.0)
+                        except psutil.TimeoutExpired:
+                            proc.kill()
+                            proc.wait(timeout=1.0)
+                        except Exception as e:
+                            print(f"Error killing process {proc.info['pid']}: {e}")
+            except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
+                pass
 
         llama_server_path = self.config.get("llama_server_path", "llama-server")
         model_path = self.config.get("model_path")
