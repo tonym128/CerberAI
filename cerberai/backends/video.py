@@ -12,7 +12,7 @@ class VideoBackend(BaseBackend):
         self.current_model_name = None
         self.pipeline = None
 
-    async def load_model(self, model_name: str) -> bool:
+    async def load_model(self, model_name: str, progress_callback=None) -> bool:
         """Dynamically load or switch the Video pipeline."""
         if self.pipeline and self.current_model_name == model_name:
             self._is_loaded = True
@@ -22,6 +22,8 @@ class VideoBackend(BaseBackend):
             await self.unload()
 
         print(f"Loading Video model '{model_name}'...")
+        if progress_callback:
+            progress_callback("[2/3] Loading PyTorch & Video frameworks...")
         try:
             import torch
             
@@ -35,6 +37,8 @@ class VideoBackend(BaseBackend):
                 device = "cpu"
                 torch_dtype = torch.float32
 
+            if progress_callback:
+                progress_callback(f"[3/3] Initializing pipeline '{model_name}' on device...")
             if "svd" in model_name.lower() or "img2vid" in model_name.lower():
                 from diffusers import StableVideoDiffusionPipeline
                 self.pipeline = StableVideoDiffusionPipeline.from_pretrained(
@@ -87,7 +91,7 @@ class VideoBackend(BaseBackend):
             return False
 
     async def load(self, progress_callback=None) -> bool:
-        return await self.load_model(self.model_name)
+        return await self.load_model(self.model_name, progress_callback)
 
     async def unload(self) -> bool:
         """Unload pipeline and release VRAM."""

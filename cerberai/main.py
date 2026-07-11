@@ -129,7 +129,8 @@ async def get_status():
                 "type": m.type,
                 "backend": m.backend,
                 "vram_estimate_gb": m.vram_estimate_gb,
-                "n_ctx": getattr(m, "n_ctx", None)
+                "n_ctx": getattr(m, "n_ctx", None),
+                "diagnostics": manager.backends[m.id].get_diagnostics() if m.id in manager.backends else {}
             }
             for m in config.models
         ]

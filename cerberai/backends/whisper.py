@@ -16,8 +16,12 @@ class WhisperBackend(BaseBackend):
             return True
             
         print(f"Loading Whisper model '{self.model_name}'...")
+        if progress_callback:
+            progress_callback("[2/3] Loading Whisper package files...")
         try:
             import whisper
+            if progress_callback:
+                progress_callback(f"[3/3] Initializing Whisper model '{self.model_name}'...")
             # whisper.load_model automatically downloads model weights if missing
             self.model = whisper.load_model(self.model_name)
             self._is_loaded = True

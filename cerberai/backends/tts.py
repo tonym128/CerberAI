@@ -29,6 +29,8 @@ class TTSBackend(BaseBackend):
                 return True
                 
             print("Initializing local SOTA TTS engine (Kokoro-82M ONNX)...")
+            if progress_callback:
+                progress_callback("[2/3] Checking Kokoro ONNX weights & voices...")
             try:
                 from ..downloader import ensure_gguf_model
                 
@@ -36,6 +38,8 @@ class TTSBackend(BaseBackend):
                 self.model_path = await ensure_gguf_model("rumbleFTW/kokoro-v1.0-onnx", "kokoro-v1.0.onnx")
                 self.voices_path = await ensure_gguf_model("rumbleFTW/kokoro-v1.0-onnx", "voices-v1.0.bin")
                 
+                if progress_callback:
+                    progress_callback("[3/3] Initializing Kokoro ONNX model pipeline...")
                 import numpy as np
                 original_load = np.load
                 np.load = lambda *args, **kwargs: original_load(*args, allow_pickle=True, **kwargs)
@@ -60,6 +64,8 @@ class TTSBackend(BaseBackend):
                 return True
                 
             print(f"Initializing offline TTS engine (pyttsx3)...")
+            if progress_callback:
+                progress_callback("[2/3] Initializing offline system voice (pyttsx3)...")
             try:
                 import pyttsx3
                 self.engine = pyttsx3.init()

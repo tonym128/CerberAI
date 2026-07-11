@@ -66,6 +66,8 @@ class SubprocessManager:
 
         # Auto-download llama-server binary if missing
         if not shutil.which(llama_server_path) and not os.path.exists(llama_server_path):
+            if progress_callback:
+                progress_callback("[2/3] Downloading llama-server binary...")
             from ..downloader import ensure_llama_server
             try:
                 llama_server_path = await ensure_llama_server()
@@ -76,6 +78,8 @@ class SubprocessManager:
         # Auto-download GGUF if missing
         if not model_path or not os.path.exists(model_path):
             if repo_id and filename:
+                if progress_callback:
+                    progress_callback("[2/3] Downloading model GGUF checkpoints...")
                 from ..downloader import ensure_gguf_model
                 try:
                     model_path = await ensure_gguf_model(repo_id, filename, progress_callback)
@@ -89,6 +93,8 @@ class SubprocessManager:
         # Auto-download mmproj GGUF for vision models if missing
         if mmproj_filename and (not mmproj_path or not os.path.exists(mmproj_path)):
             if mmproj_repo_id and mmproj_filename:
+                if progress_callback:
+                    progress_callback("[2/3] Downloading vision projector GGUF checkpoints...")
                 from ..downloader import ensure_gguf_model
                 try:
                     mmproj_path = await ensure_gguf_model(mmproj_repo_id, mmproj_filename, progress_callback)
@@ -133,6 +139,8 @@ class SubprocessManager:
                 env["LD_LIBRARY_PATH"] = f"{server_dir_abs}:{current_ld}" if current_ld else server_dir_abs
 
         print(f"Starting llama.cpp server: {' '.join(cmd)}")
+        if progress_callback:
+            progress_callback(f"[3/3] Launching local engine server (port {self.port})...")
         try:
             popen_args = {
                 "stdout": subprocess.PIPE,
@@ -151,6 +159,8 @@ class SubprocessManager:
             health_url = f"http://{self.host}:{self.port}/health"
             async with httpx.AsyncClient() as client:
                 for i in range(60): # 60 seconds timeout
+                    if progress_callback:
+                        progress_callback(f"[3/3] Warming up KV Cache (health check attempt {i+1}/60)...")
                     await asyncio.sleep(1.0)
                     if self.process.poll() is not None:
                         stdout, stderr = self.process.communicate()

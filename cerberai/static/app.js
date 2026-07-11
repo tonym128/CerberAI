@@ -158,8 +158,19 @@ async function pollStatus() {
     }
 }
 
-// Render model catalog sidebar items
-function renderCatalog(allModels, activeModels, loadingStatus) {
+// Render model catalog sidebar ifunction renderCatalog(allModels, activeModels, loadingStatus) {
+    const formatTimeAgo = (ts) => {
+        if (!ts) return "Never";
+        const diff = Math.floor(Date.now() / 1000 - ts);
+        if (diff < 5) return "Just now";
+        if (diff < 60) return `${diff}s ago`;
+        const mins = Math.floor(diff / 60);
+        if (mins < 60) return `${mins}m ago`;
+        const hours = Math.floor(mins / 60);
+        if (hours < 24) return `${hours}h ago`;
+        return new Date(ts * 1000).toLocaleDateString();
+    };
+
     modelsList.innerHTML = "";
     
     // Create lookup map for active models
@@ -203,6 +214,45 @@ function renderCatalog(allModels, activeModels, loadingStatus) {
             modalityClass = "modality-video";
         }
 
+        // Build telemetry html
+        const diag = model.diagnostics || {};
+        const showDiagnostics = diag.calls_count > 0 || diag.load_time_seconds > 0 || diag.last_error;
+        
+        let telemetryHtml = "";
+        if (showDiagnostics) {
+            telemetryHtml = `
+                <div class="model-telemetry-container" style="margin-top: 6px; padding-top: 6px; border-top: 1px dashed rgba(255,255,255,0.06); font-size: 10.5px; color: var(--text-secondary); display: flex; flex-direction: column; gap: 4px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                        <span>Invocations:</span>
+                        <span style="color: var(--text-primary); font-weight: 600;">${diag.calls_count || 0}</span>
+                    </div>
+                    ${diag.load_time_seconds > 0 
+                        ? `
+                        <div style="display: flex; justify-content: space-between; align-items: center;">
+                            <span>Load Speed:</span>
+                            <span style="color: var(--text-primary); font-weight: 600;">${diag.load_time_seconds.toFixed(2)}s</span>
+                        </div>
+                        ` : ''
+                    }
+                    ${diag.last_active_timestamp > 0 
+                        ? `
+                        <div style="display: flex; justify-content: space-between; align-items: center;">
+                            <span>Last Active:</span>
+                            <span style="color: var(--text-primary); font-weight: 600;" title="${new Date(diag.last_active_timestamp * 1000).toLocaleString()}">${formatTimeAgo(diag.last_active_timestamp)}</span>
+                        </div>
+                        ` : ''
+                    }
+                    ${diag.last_error 
+                        ? `
+                        <div style="margin-top: 4px; padding: 6px; border-radius: 6px; background: rgba(239, 68, 68, 0.08); border: 1px solid rgba(239, 68, 68, 0.2); color: #f87171; word-break: break-all; font-size: 9.5px; line-height: 1.3;" title="${diag.last_error}">
+                            <strong>Error:</strong> ${diag.last_error}
+                        </div>
+                        ` : ''
+                    }
+                </div>
+            `;
+        }
+
         card.innerHTML = `
             <div class="catalog-card-header">
                 <span class="catalog-card-title" title="${model.id}">${model.id}</span>
@@ -211,10 +261,11 @@ function renderCatalog(allModels, activeModels, loadingStatus) {
             <div class="catalog-card-details">
                 <div class="status-indicator">
                     <span class="status-dot ${dotClass}"></span>
-                    <span style="font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 120px;" title="${statusText}">${statusText}</span>
+                    <span style="font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 140px;" title="${statusText}">${statusText}</span>
                 </div>
                 <span class="vram-pill">${model.vram_estimate_gb.toFixed(1)} GB</span>
             </div>
+            ${telemetryHtml}
             <div class="catalog-card-actions">
                 ${isActive 
                     ? `<button class="card-action-btn btn-unload" onclick="event.stopPropagation(); unloadModel('${model.id}')">Purge VRAM</button>`

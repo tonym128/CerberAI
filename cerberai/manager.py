@@ -109,22 +109,34 @@ class DynamicModelManager:
             is_loaded = await backend.is_loaded()
             
             if not is_loaded:
-                # Ensure resources are available
+                # 1/3: Eviction Stage
+                self.loading_status[model_id] = {
+                    "status": "evicting",
+                    "progress": None,
+                    "message": "[1/3] Evicting inactive models from VRAM..."
+                }
                 await self._ensure_resources_for(model_id)
                 
-                # Update status to initializing/loading
+                # 2/3: Loading / Initializing Stage
                 self.loading_status[model_id] = {
                     "status": "loading",
                     "progress": None,
-                    "message": "Initializing model engine..."
+                    "message": "[2/3] Allocating VRAM & initializing engine..."
                 }
                 
-                def progress_callback(percentage):
-                    self.loading_status[model_id] = {
-                        "status": "downloading",
-                        "progress": round(percentage, 1),
-                        "message": f"Downloading checkpoints... {percentage:.1f}%"
-                    }
+                def progress_callback(val):
+                    if isinstance(val, (int, float)):
+                        self.loading_status[model_id] = {
+                            "status": "downloading",
+                            "progress": round(val, 1),
+                            "message": f"[2/3] Downloading model checkpoints... {val:.1f}%"
+                        }
+                    elif isinstance(val, str):
+                        self.loading_status[model_id] = {
+                            "status": "loading",
+                            "progress": None,
+                            "message": val
+                        }
                 
                 # Load the model
                 print(f"Loading model '{model_id}'...")

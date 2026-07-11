@@ -18,6 +18,8 @@ class DiffusersBackend(BaseBackend):
             return True
 
         print(f"Loading Diffusers image generation model '{self.model_name}'...")
+        if progress_callback:
+            progress_callback("[2/3] Loading PyTorch & Diffusers frameworks...")
         try:
             import torch
             from diffusers import AutoPipelineForText2Image
@@ -39,6 +41,9 @@ class DiffusersBackend(BaseBackend):
                 torch_dtype = torch.bfloat16
             else:
                 torch_dtype = torch.float16 if device in ["cuda", "xpu"] else torch.float32
+            
+            if progress_callback:
+                progress_callback(f"[3/3] Loading weights for '{self.model_name}' on {device}...")
             
             self.pipeline = AutoPipelineForText2Image.from_pretrained(
                 self.model_name,
