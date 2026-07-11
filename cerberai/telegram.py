@@ -7,31 +7,9 @@ from pathlib import Path
 from typing import Dict, Any
 
 def log_telegram_interaction(sender: str, message: str):
-    """Log user/bot telegram messages into a static JSON history array."""
-    import datetime
-    log_path = Path("cerberai/static/telegram_history.json")
-    history = []
-    if log_path.exists():
-        try:
-            with open(log_path, "r") as f:
-                history = json.load(f)
-        except Exception:
-            pass
-            
-    new_entry = {
-        "timestamp": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-        "sender": sender,
-        "message": message
-    }
-    history.insert(0, new_entry)
-    history = history[:100]
-    
-    log_path.parent.mkdir(parents=True, exist_ok=True)
-    try:
-        with open(log_path, "w") as f:
-            json.dump(history, f, indent=2)
-    except Exception as e:
-        print(f"Failed to log Telegram interaction: {e}")
+    """Log user/bot telegram messages into the SQLite database."""
+    from .database import db_add_telegram_history
+    db_add_telegram_history(role=sender, content=message)
 
 async def send_telegram_voice(config, voice_bytes: bytes, caption: str = None):
     """Upload and send a raw voice note (OGG/Opus) via Telegram Bot API."""

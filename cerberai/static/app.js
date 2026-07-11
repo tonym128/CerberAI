@@ -170,7 +170,7 @@ function renderCatalog(allModels, activeModels, loadingStatus) {
         const isLoading = loadingStatus && loadingStatus[model.id];
         
         const card = document.createElement("div");
-        card.className = `catalog-item ${model.id === activeModelId ? 'active' : ''}`;
+        card.className = `catalog-card ${model.id === activeModelId ? 'active' : ''}`;
         
         let statusText = "Unloaded";
         let dotClass = "gray";
@@ -183,19 +183,62 @@ function renderCatalog(allModels, activeModels, loadingStatus) {
             dotClass = "orange loading-pulse";
         }
 
+        // Get emoji/style for modality
+        let emoji = "🤖";
+        let modalityClass = "modality-llm";
+        if (model.type === "image") {
+            emoji = "🎨";
+            modalityClass = "modality-image";
+        } else if (model.type === "vision") {
+            emoji = "👁";
+            modalityClass = "modality-vision";
+        } else if (model.type === "tts") {
+            emoji = "🎙";
+            modalityClass = "modality-tts";
+        } else if (model.type === "stt") {
+            emoji = "🔊";
+            modalityClass = "modality-stt";
+        } else if (model.type === "video") {
+            emoji = "🎬";
+            modalityClass = "modality-video";
+        }
+
         card.innerHTML = `
-            <div class="model-info-box">
-                <span class="model-name-title">${model.id}</span>
-                <div class="model-meta-tags">
-                    <span class="model-tag">${model.type.toUpperCase()}</span>
-                    <span class="model-tag">${model.vram_estimate_gb.toFixed(1)} GB</span>
-                </div>
+            <div class="catalog-card-header">
+                <span class="catalog-card-title" title="${model.id}">${model.id}</span>
+                <span class="modality-badge ${modalityClass}">${emoji} ${model.type.toUpperCase()}</span>
             </div>
-            <div class="status-indicator">
-                <span class="status-dot ${dotClass}"></span>
-                <span style="font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 140px;" title="${statusText}">${statusText}</span>
+            <div class="catalog-card-details">
+                <div class="status-indicator">
+                    <span class="status-dot ${dotClass}"></span>
+                    <span style="font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 120px;" title="${statusText}">${statusText}</span>
+                </div>
+                <span class="vram-pill">${model.vram_estimate_gb.toFixed(1)} GB</span>
+            </div>
+            <div class="catalog-card-actions">
+                ${isActive 
+                    ? `<button class="card-action-btn btn-unload" onclick="event.stopPropagation(); unloadModel('${model.id}')">Purge VRAM</button>`
+                    : `<button class="card-action-btn btn-load" ${isLoading ? 'disabled' : ''} onclick="event.stopPropagation(); loadModel('${model.id}')">${isLoading ? 'Loading...' : 'Force Load'}</button>`
+                }
             </div>
         `;
+        
+        card.addEventListener("click", (e) => {
+            // Avoid selecting model if user clicked on action buttons
+            if (e.target.closest('.card-action-btn')) return;
+            
+            activeModelId = model.id;
+            modelSelect.value = model.id;
+            
+            // Trigger change event logic manually
+            currentChatModelLabel.textContent = `📦 ${activeModelId}`;
+            routingDescLabel.textContent = `Strict routing enabled. All requests are routed to ${activeModelId}.`;
+            
+            document.querySelectorAll(".catalog-card").forEach(c => c.classList.remove("active"));
+            card.classList.add("active");
+            
+            pollStatus();
+        });
         
         modelsList.appendChild(card);
     });
@@ -1594,6 +1637,29 @@ if (openSetupBtn && setupModal) {
             document.getElementById("setup-tg-token").value = config.telegram_bot_token || "";
             document.getElementById("setup-tg-chat").value = config.telegram_chat_id || "";
 
+            // Populate search settings
+            const searchProviderSelect = document.getElementById("setup-search-provider");
+            const searchSearxngUrl = document.getElementById("setup-search-searxng-url");
+            const searchTavilyKey = document.getElementById("setup-search-tavily-key");
+            const searchGoogleKey = document.getElementById("setup-search-google-key");
+            const searchGoogleCx = document.getElementById("setup-search-google-cx");
+            
+            const searchConfig = config.search || { provider: "duckduckgo", searxng_url: "", tavily_api_key: "", google_api_key: "", google_cse_id: "" };
+            searchProviderSelect.value = searchConfig.provider || "duckduckgo";
+            searchSearxngUrl.value = searchConfig.searxng_url || "";
+            searchTavilyKey.value = searchConfig.tavily_api_key || "";
+            searchGoogleKey.value = searchConfig.google_api_key || "";
+            searchGoogleCx.value = searchConfig.google_cse_id || "";
+            
+            const updateSearchFields = () => {
+                const prov = searchProviderSelect.value;
+                document.getElementById("setup-search-searxng-group").classList.toggle("hidden", prov !== "searxng");
+                document.getElementById("setup-search-tavily-group").classList.toggle("hidden", prov !== "tavily");
+                document.getElementById("setup-search-google-group").classList.toggle("hidden", prov !== "google");
+            };
+            searchProviderSelect.onchange = updateSearchFields;
+            updateSearchFields();
+
             // Populate router settings
             const routerTypeSelect = document.getElementById("setup-router-type");
             const routerModelSelect = document.getElementById("setup-router-model");
@@ -1799,6 +1865,13 @@ if (openSetupBtn && setupModal) {
                 model_type: document.getElementById("setup-router-type").value,
                 model_name: document.getElementById("setup-router-type").value === "llm" ? document.getElementById("setup-router-model").value : null,
                 fallback_model: "general-llama3"
+            },
+            search: {
+                provider: document.getElementById("setup-search-provider").value,
+                searxng_url: document.getElementById("setup-search-searxng-url").value.trim(),
+                tavily_api_key: document.getElementById("setup-search-tavily-key").value.trim(),
+                google_api_key: document.getElementById("setup-search-google-key").value.trim(),
+                google_cse_id: document.getElementById("setup-search-google-cx").value.trim()
             },
             models: modelPayloads,
             hf_token: hfTokenVal || null,
@@ -2392,6 +2465,160 @@ function restorePoppedSection() {
     const chatInputArea = document.querySelector(".chat-input-area");
     if (chatMessages) chatMessages.style.display = "flex";
     if (chatInputArea) chatInputArea.style.display = "flex";
+}
+
+// -------------------------------------------------------------------------
+// MODEL LOAD/UNLOAD QUICK ACTIONS
+// -------------------------------------------------------------------------
+window.loadModel = async function(modelId) {
+    try {
+        const response = await fetch(`/api/models/${modelId}/load`, { method: "POST" });
+        if (!response.ok) {
+            const err = await response.json();
+            alert("Load failed: " + err.detail);
+        }
+    } catch (e) {
+        alert("Load failed: " + e);
+    }
+    pollStatus();
+};
+
+window.unloadModel = async function(modelId) {
+    try {
+        const response = await fetch(`/api/models/${modelId}/unload`, { method: "POST" });
+        if (!response.ok) {
+            const err = await response.json();
+            alert("Unload failed: " + err.detail);
+        }
+    } catch (e) {
+        alert("Unload failed: " + e);
+    }
+    pollStatus();
+};
+
+// -------------------------------------------------------------------------
+// DEDICATED MEDIA DRAWER CONTROLLER
+// -------------------------------------------------------------------------
+const openMediaBtn = document.getElementById("open-media");
+const closeMediaBtn = document.getElementById("close-media");
+const mediaDrawer = document.getElementById("media-drawer");
+const drawerContentPane = document.getElementById("drawer-content-pane");
+let activeDrawerTab = "images";
+
+if (openMediaBtn && closeMediaBtn && mediaDrawer) {
+    openMediaBtn.addEventListener("click", () => {
+        mediaDrawer.classList.remove("closed");
+        loadDrawerTab(activeDrawerTab);
+    });
+
+    closeMediaBtn.addEventListener("click", () => {
+        mediaDrawer.classList.add("closed");
+    });
+}
+
+document.querySelectorAll(".drawer-tab").forEach(tab => {
+    tab.addEventListener("click", (e) => {
+        document.querySelectorAll(".drawer-tab").forEach(t => t.classList.remove("active"));
+        tab.classList.add("active");
+        activeDrawerTab = tab.getAttribute("data-tab");
+        loadDrawerTab(activeDrawerTab);
+    });
+});
+
+async function loadDrawerTab(tab) {
+    if (!drawerContentPane) return;
+    drawerContentPane.innerHTML = `<div style="text-align: center; color: var(--text-secondary); padding: 40px 10px; font-size: 13px;">Loading assets...</div>`;
+    
+    try {
+        if (tab === "images") {
+            const res = await fetch("/api/images");
+            const images = await res.json();
+            if (images.length === 0) {
+                drawerContentPane.innerHTML = `<div class="drawer-no-data">No generated images found.</div>`;
+                return;
+            }
+            let html = `<div class="drawer-grid">`;
+            images.forEach(img => {
+                html += `
+                    <div class="drawer-img-card" onclick="window.open('${img.url}', '_blank')">
+                        <img src="${img.url}" alt="${img.name}" title="Generated on: ${new Date(img.created * 1000).toLocaleString()}">
+                    </div>
+                `;
+            });
+            html += `</div>`;
+            drawerContentPane.innerHTML = html;
+        } else if (tab === "videos") {
+            const res = await fetch("/v1/automate/news-video/history");
+            const videos = await res.json();
+            if (videos.length === 0) {
+                drawerContentPane.innerHTML = `<div class="drawer-no-data">No generated videos found.</div>`;
+                return;
+            }
+            let html = "";
+            videos.forEach(vid => {
+                const fileUrl = `/static/generated/${vid.filename}`;
+                html += `
+                    <div class="drawer-item-card">
+                        <span class="drawer-item-title" title="${vid.topic || 'General News'}">${vid.topic || 'General News'}</span>
+                        <video src="${fileUrl}" controls style="width: 100%; border-radius: 6px; background: #000;"></video>
+                        <div class="drawer-item-meta">
+                            <span>${vid.date || ''}</span>
+                            <a href="${fileUrl}" target="_blank" style="color: var(--primary); text-decoration: none; font-weight: 600;">Download</a>
+                        </div>
+                    </div>
+                `;
+            });
+            drawerContentPane.innerHTML = html;
+        } else if (tab === "reports") {
+            const res = await fetch("/v1/automate/deep-research/history");
+            const reports = await res.json();
+            if (reports.length === 0) {
+                drawerContentPane.innerHTML = `<div class="drawer-no-data">No research reports found.</div>`;
+                return;
+            }
+            let html = "";
+            reports.forEach(rep => {
+                html += `
+                    <div class="drawer-item-card">
+                        <span class="drawer-item-title" title="${rep.query}">${rep.query}</span>
+                        <div class="drawer-item-meta">
+                            <span>Research Report</span>
+                            <div style="display: flex; gap: 10px;">
+                                <a href="/static/generated/${rep.md_filename}" target="_blank" style="color: var(--primary); text-decoration: none; font-weight: 600;">Markdown</a>
+                                <a href="/static/generated/${rep.pdf_filename}" target="_blank" style="color: var(--secondary); text-decoration: none; font-weight: 600;">PDF</a>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            });
+            drawerContentPane.innerHTML = html;
+        } else if (tab === "podcasts") {
+            const res = await fetch("/v1/automate/podcast/history");
+            const podcasts = await res.json();
+            if (podcasts.length === 0) {
+                drawerContentPane.innerHTML = `<div class="drawer-no-data">No podcast briefings found.</div>`;
+                return;
+            }
+            let html = "";
+            podcasts.forEach(pod => {
+                const fileUrl = `/static/generated/${pod.filename}`;
+                html += `
+                    <div class="drawer-item-card">
+                        <span class="drawer-item-title" title="${pod.topic || 'General briefing'}">${pod.topic || 'General briefing'}</span>
+                        <audio src="${fileUrl}" controls style="width: 100%; height: 32px; outline: none;"></audio>
+                        <div class="drawer-item-meta">
+                            <span>${pod.date || ''}</span>
+                            <a href="${fileUrl}" target="_blank" style="color: var(--primary); text-decoration: none; font-weight: 600;">Download</a>
+                        </div>
+                    </div>
+                `;
+            });
+            drawerContentPane.innerHTML = html;
+        }
+    } catch (err) {
+        console.error(err);
+        drawerContentPane.innerHTML = `<div style="color: var(--accent-red); text-align: center; padding: 20px; font-size: 13px;">Failed to load assets: ${err.message}</div>`;
+    }
 }
 
 

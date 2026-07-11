@@ -31,37 +31,14 @@ def update_status(state: str, progress: int, msg: str, video_url: str = None, st
         status["stories"] = stories
 
 def add_video_to_history(video_filename: str, topic: str, date_str: str, stories: list):
-    import json
-    import datetime
-    
-    history_path = Path("cerberai/static/videos/history.json")
-    history = []
-    if history_path.exists():
-        try:
-            with open(history_path, "r") as f:
-                history = json.load(f)
-        except Exception:
-            pass
-            
-    new_entry = {
-        "id": video_filename.replace(".mp4", ""),
-        "timestamp": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-        "topic": topic if topic else "World News",
-        "date": date_str,
-        "video_url": f"/static/videos/{video_filename}",
-        "stories": stories
-    }
-    
-    # Prepend to keep newest at the top
-    history.insert(0, new_entry)
-    
-    # Ensure directory exists and write
-    history_path.parent.mkdir(parents=True, exist_ok=True)
-    try:
-        with open(history_path, "w") as f:
-            json.dump(history, f, indent=2)
-    except Exception as e:
-        print(f"Failed to write video history: {e}")
+    from .database import db_add_media_history
+    db_add_media_history(
+        item_type="video",
+        filename=video_filename,
+        topic=topic,
+        date=date_str,
+        meta_data={"stories": stories}
+    )
 
 def wrap_text(text: str, draw: ImageDraw.Draw, max_width: int, font) -> list:
     """Wrap text to fit inside max_width."""
@@ -572,33 +549,14 @@ def update_research_status(state: str, progress: int, msg: str, report_url: str 
         research_status["query"] = query
 
 def add_report_to_history(markdown_filename: str, pdf_filename: str, query: str):
-    import json
-    import datetime
-    
-    history_path = Path("cerberai/static/reports/history.json")
-    history = []
-    if history_path.exists():
-        try:
-            with open(history_path, "r") as f:
-                history = json.load(f)
-        except Exception:
-            pass
-            
-    new_entry = {
-        "id": markdown_filename.replace(".md", ""),
-        "timestamp": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-        "query": query,
-        "report_url": f"/static/reports/{markdown_filename}",
-        "pdf_url": f"/static/reports/{pdf_filename}"
-    }
-    
-    history.insert(0, new_entry)
-    history_path.parent.mkdir(parents=True, exist_ok=True)
-    try:
-        with open(history_path, "w") as f:
-            json.dump(history, f, indent=2)
-    except Exception as e:
-        print(f"Failed to write report history: {e}")
+    from .database import db_add_media_history
+    db_add_media_history(
+        item_type="report",
+        filename=markdown_filename,
+        query=query,
+        md_filename=markdown_filename,
+        pdf_filename=pdf_filename
+    )
 
 def convert_markdown_to_pdf(markdown_text: str, output_path: str, query: str, date_str: str):
     """Convert raw Markdown text into a styled PDF report using fpdf2 write_html."""
@@ -905,32 +863,15 @@ def update_podcast_status(state: str, progress: int, msg: str, podcast_url: str 
         podcast_status["query"] = query
 
 def add_podcast_to_history(podcast_filename: str, query: str):
-    import json
+    from .database import db_add_media_history
     import datetime
-    
-    history_path = Path("cerberai/static/podcasts/history.json")
-    history = []
-    if history_path.exists():
-        try:
-            with open(history_path, "r") as f:
-                history = json.load(f)
-        except Exception:
-            pass
-            
-    new_entry = {
-        "id": podcast_filename.replace(".mp3", ""),
-        "timestamp": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-        "query": query,
-        "podcast_url": f"/static/podcasts/{podcast_filename}"
-    }
-    
-    history.insert(0, new_entry)
-    history_path.parent.mkdir(parents=True, exist_ok=True)
-    try:
-        with open(history_path, "w") as f:
-            json.dump(history, f, indent=2)
-    except Exception as e:
-        print(f"Failed to write podcast history: {e}")
+    today = datetime.date.today().strftime("%Y-%m-%d")
+    db_add_media_history(
+        item_type="podcast",
+        filename=podcast_filename,
+        topic=query,
+        date=today
+    )
 
 async def generate_daily_podcast(manager, agent, topic: str = None, date_str: str = None):
     """

@@ -89,6 +89,94 @@ class AgentExecutor:
             return f"Fetch error: {e}"
 
     async def web_search_tool(self, query: str) -> str:
+        """Query the configured search provider (DuckDuckGo, SearXNG, Tavily, Google)."""
+        search_cfg = getattr(self.config, "search", None)
+        provider = getattr(search_cfg, "provider", "duckduckgo") if search_cfg else "duckduckgo"
+        
+        if provider == "tavily":
+            return await self._search_tavily(query)
+        elif provider == "searxng":
+            return await self._search_searxng(query)
+        elif provider == "google":
+            return await self._search_google(query)
+        else:
+            return await self._search_duckduckgo(query)
+
+    async def _search_tavily(self, query: str) -> str:
+        api_key = getattr(self.config.search, "tavily_api_key", None)
+        if not api_key:
+            return "Error: Tavily API key is not configured in settings."
+        try:
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                res = await client.post("https://api.tavily.com/search", json={
+                    "api_key": api_key,
+                    "query": query,
+                    "max_results": 5
+                })
+                if res.status_code == 200:
+                    data = res.json()
+                    results = []
+                    for i, r in enumerate(data.get("results", [])):
+                        title = r.get("title", "")
+                        snippet = r.get("content", "")
+                        url = r.get("url", "")
+                        results.append(f"{i+1}. {title}\nSnippet: {snippet}\nSource: {url}\n")
+                    return "\n".join(results) if results else "No results found."
+                return f"Error: Tavily API returned status {res.status_code}: {res.text}"
+        except Exception as e:
+            return f"Tavily search error: {e}"
+
+    async def _search_searxng(self, query: str) -> str:
+        url = getattr(self.config.search, "searxng_url", None)
+        if not url:
+            return "Error: SearXNG URL is not configured in settings."
+        try:
+            base_url = url.rstrip("/")
+            search_url = f"{base_url}/search"
+            async with httpx.AsyncClient(timeout=10.0, follow_redirects=True) as client:
+                res = await client.get(search_url, params={
+                    "q": query,
+                    "format": "json"
+                })
+                if res.status_code == 200:
+                    data = res.json()
+                    results = []
+                    for i, r in enumerate(data.get("results", [])[:5]):
+                        title = r.get("title", "")
+                        snippet = r.get("content", "")
+                        source_url = r.get("url", "")
+                        results.append(f"{i+1}. {title}\nSnippet: {snippet}\nSource: {source_url}\n")
+                    return "\n".join(results) if results else "No results found."
+                return f"Error: SearXNG API returned status {res.status_code}: {res.text}"
+        except Exception as e:
+            return f"SearXNG search error: {e}"
+
+    async def _search_google(self, query: str) -> str:
+        api_key = getattr(self.config.search, "google_api_key", None)
+        cx = getattr(self.config.search, "google_cse_id", None)
+        if not api_key or not cx:
+            return "Error: Google API Key or Custom Search Engine ID (CX) is not configured in settings."
+        try:
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                res = await client.get("https://www.googleapis.com/customsearch/v1", params={
+                    "key": api_key,
+                    "cx": cx,
+                    "q": query
+                })
+                if res.status_code == 200:
+                    data = res.json()
+                    results = []
+                    for i, item in enumerate(data.get("items", [])[:5]):
+                        title = item.get("title", "")
+                        snippet = item.get("snippet", "")
+                        url = item.get("link", "")
+                        results.append(f"{i+1}. {title}\nSnippet: {snippet}\nSource: {url}\n")
+                    return "\n".join(results) if results else "No results found."
+                return f"Error: Google Search API returned status {res.status_code}: {res.text}"
+        except Exception as e:
+            return f"Google search error: {e}"
+
+    async def _search_duckduckgo(self, query: str) -> str:
         """Query DuckDuckGo HTML search page and parse top results, falling back to Wikipedia if blocked."""
         import html
         url = f"https://html.duckduckgo.com/html/?q={urllib.parse.quote(query)}"

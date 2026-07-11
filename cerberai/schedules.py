@@ -7,22 +7,13 @@ from typing import List, Dict, Any
 
 SCHEDULES_FILE = Path("schedules.json")
 
+from .database import db_load_schedules, db_save_schedules
+
 def load_schedules() -> List[Dict[str, Any]]:
-    if not SCHEDULES_FILE.exists():
-        return []
-    try:
-        with open(SCHEDULES_FILE, "r") as f:
-            return json.load(f)
-    except Exception as e:
-        print(f"Failed to load schedules: {e}")
-        return []
+    return db_load_schedules()
 
 def save_schedules(schedules: List[Dict[str, Any]]):
-    try:
-        with open(SCHEDULES_FILE, "w") as f:
-            json.dump(schedules, f, indent=2)
-    except Exception as e:
-        print(f"Failed to save schedules: {e}")
+    db_save_schedules(schedules)
 
 async def run_scheduled_query(prompt: str, manager, agent, config):
     try:

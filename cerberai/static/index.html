@@ -376,6 +376,7 @@
                     <p id="routing-description">Automatically selects between coding and general models based on your request.</p>
                 </div>
                 <div class="header-actions">
+                    <button id="open-media" class="btn btn-secondary">🎬 Gallery</button>
                     <button id="clear-chat" class="btn btn-secondary">Clear Chat</button>
                     <button id="open-setup" class="btn btn-secondary">⚙️ Setup</button>
                     <label class="stream-toggle">
@@ -439,6 +440,23 @@
             </footer>
 
         </main>
+
+        <!-- Media Drawer -->
+        <aside id="media-drawer" class="media-drawer closed">
+            <div class="drawer-header">
+                <h2>🎬 Media Gallery</h2>
+                <button id="close-media" class="close-btn">&times;</button>
+            </div>
+            <div class="drawer-tabs">
+                <div class="drawer-tab active" data-tab="images">Images</div>
+                <div class="drawer-tab" data-tab="videos">Videos</div>
+                <div class="drawer-tab" data-tab="reports">Reports</div>
+                <div class="drawer-tab" data-tab="podcasts">Podcasts</div>
+            </div>
+            <div id="drawer-content-pane" class="drawer-content">
+                <!-- Content loaded dynamically -->
+            </div>
+        </aside>
     </div>
 
     <!-- Setup Modal -->
@@ -484,6 +502,44 @@
                                 <label for="setup-ram">Max RAM Limit (GB)</label>
                                 <input type="number" id="setup-ram" step="0.1" min="1" max="256" required>
                             </div>
+                    </div>
+
+                    <!-- Web Search Settings -->
+                    <div class="form-section">
+                        <h3>Web Search Configuration</h3>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="setup-search-provider">Search Provider</label>
+                                <select id="setup-search-provider" class="custom-select">
+                                    <option value="duckduckgo">DuckDuckGo (Free & Local)</option>
+                                    <option value="searxng">SearXNG (Self-Hosted)</option>
+                                    <option value="tavily">Tavily (AI Search API)</option>
+                                    <option value="google">Google Custom Search API</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div id="setup-search-searxng-group" class="form-row hidden" style="margin-top: 10px;">
+                            <div class="form-group">
+                                <label for="setup-search-searxng-url">SearXNG Instance URL</label>
+                                <input type="text" id="setup-search-searxng-url" placeholder="e.g. http://localhost:8080">
+                            </div>
+                        </div>
+                        <div id="setup-search-tavily-group" class="form-row hidden" style="margin-top: 10px;">
+                            <div class="form-group">
+                                <label for="setup-search-tavily-key">Tavily API Key</label>
+                                <input type="password" id="setup-search-tavily-key" placeholder="tvly-...">
+                            </div>
+                        </div>
+                        <div id="setup-search-google-group" class="form-row hidden" style="margin-top: 10px;">
+                            <div class="form-group">
+                                <label for="setup-search-google-key">Google API Key</label>
+                                <input type="password" id="setup-search-google-key" placeholder="AIzaSy...">
+                            </div>
+                            <div class="form-group">
+                                <label for="setup-search-google-cx">Google Custom Search CX ID</label>
+                                <input type="text" id="setup-search-google-cx" placeholder="e.g. 0123456789...">
+                            </div>
+                        </div>
                     </div>
 
                     <!-- Global & Integration Settings -->

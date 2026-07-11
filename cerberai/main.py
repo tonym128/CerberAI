@@ -797,15 +797,9 @@ async def get_news_video_automation_status():
 @app.get("/v1/automate/news-video/history")
 async def get_news_video_history():
     """Retrieve the history list of generated news videos."""
-    import json
-    from pathlib import Path
-    history_path = Path("cerberai/static/videos/history.json")
-    if not history_path.exists():
-        return JSONResponse(content=[])
+    from .database import db_get_media_history
     try:
-        with open(history_path, "r") as f:
-            data = json.load(f)
-        return JSONResponse(content=data)
+        return JSONResponse(content=db_get_media_history("video"))
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to read history: {str(e)}")
 
@@ -842,15 +836,9 @@ async def get_deep_research_status_endpoint():
 @app.get("/v1/automate/deep-research/history")
 async def get_deep_research_history():
     """Retrieve the history list of generated deep research reports."""
-    import json
-    from pathlib import Path
-    history_path = Path("cerberai/static/reports/history.json")
-    if not history_path.exists():
-        return JSONResponse(content=[])
+    from .database import db_get_media_history
     try:
-        with open(history_path, "r") as f:
-            data = json.load(f)
-        return JSONResponse(content=data)
+        return JSONResponse(content=db_get_media_history("report"))
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to read history: {str(e)}")
 
@@ -886,15 +874,9 @@ async def get_podcast_status_endpoint():
 @app.get("/v1/automate/podcast/history")
 async def get_podcast_history():
     """Retrieve the history list of generated podcasts."""
-    import json
-    from pathlib import Path
-    history_path = Path("cerberai/static/podcasts/history.json")
-    if not history_path.exists():
-        return JSONResponse(content=[])
+    from .database import db_get_media_history
     try:
-        with open(history_path, "r") as f:
-            data = json.load(f)
-        return JSONResponse(content=data)
+        return JSONResponse(content=db_get_media_history("podcast"))
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to read history: {str(e)}")
 
@@ -957,17 +939,71 @@ async def delete_schedule_endpoint(schedule_id: str):
 @app.get("/api/telegram/history")
 async def get_telegram_history_endpoint():
     """Retrieve the Telegram message history logs."""
-    import json
-    from pathlib import Path
-    log_path = Path("cerberai/static/telegram_history.json")
-    if not log_path.exists():
-        return JSONResponse(content=[])
+    from .database import db_get_telegram_history
+    import datetime
     try:
-        with open(log_path, "r") as f:
-            data = json.load(f)
-        return JSONResponse(content=data)
+        history = db_get_telegram_history()
+        formatted = []
+        for item in history:
+            dt_str = datetime.datetime.fromtimestamp(item["timestamp"]).strftime("%Y-%m-%d %H:%M:%S")
+            formatted.append({
+                "timestamp": dt_str,
+                "sender": item["role"],
+                "message": item["content"]
+            })
+        return JSONResponse(content=formatted)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/models/{model_id}/load")
+async def load_model_endpoint(model_id: str):
+    """Force load a model into VRAM."""
+    try:
+        await manager.get_model(model_id)
+        return {"status": "success", "message": f"Model '{model_id}' loaded successfully."}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/models/{model_id}/unload")
+async def unload_model_endpoint(model_id: str):
+    """Force unload a model (purge from VRAM)."""
+    if model_id not in manager.backends:
+        raise HTTPException(status_code=404, detail=f"Model '{model_id}' not found.")
+    try:
+        backend = manager.backends[model_id]
+        await backend.unload()
+        if model_id in manager.last_used:
+            del manager.last_used[model_id]
+        return {"status": "success", "message": f"Model '{model_id}' unloaded successfully."}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/images")
+async def list_generated_images():
+    """List all generated images in the static generated folder."""
+    from pathlib import Path
+    img_dir = Path("cerberai/static/generated")
+    if not img_dir.exists():
+        return JSONResponse(content=[])
+    try:
+        files = []
+        for ext in ("*.png", "*.jpg", "*.jpeg"):
+            for path in img_dir.glob(ext):
+                # Exclude video or audio temp files if stored here
+                if "video_" in path.name or "audio_" in path.name:
+                    continue
+                stat = path.stat()
+                files.append({
+                    "name": path.name,
+                    "url": f"/static/generated/{path.name}",
+                    "created": int(stat.st_mtime)
+                })
+        # Sort by creation time descending
+        files.sort(key=lambda x: x["created"], reverse=True)
+        return JSONResponse(content=files)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 @app.get("/api/config")
 async def get_current_config():
     """Retrieve the raw configuration values directly from config.yaml."""
