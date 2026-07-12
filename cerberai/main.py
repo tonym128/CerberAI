@@ -16,6 +16,14 @@ from fastapi.responses import StreamingResponse, JSONResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
+import logging
+
+class EndpointFilter(logging.Filter):
+    def filter(self, record: logging.LogRecord) -> bool:
+        return "GET /status" not in record.getMessage()
+
+# Register the filter at import time
+logging.getLogger("uvicorn.access").addFilter(EndpointFilter())
 
 from .config import load_config
 from .manager import DynamicModelManager
@@ -40,6 +48,10 @@ telegram_task = None
 async def lifespan(app: FastAPI):
     # Startup: launch background tasks
     global cleanup_task, scheduler_task, telegram_task
+    
+    # Ensure uvicorn access logs filter out spammy GET /status checks
+    logging.getLogger("uvicorn.access").addFilter(EndpointFilter())
+    
     cleanup_task = asyncio.create_task(manager.start_cleanup_loop())
     
     from .schedules import start_scheduler_loop
