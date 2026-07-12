@@ -42,14 +42,26 @@ class DiffusersBackend(BaseBackend):
             else:
                 torch_dtype = torch.float16 if device in ["cuda", "xpu"] else torch.float32
             
+            # Suppress verbose warnings from transformers and diffusers loggers
+            from diffusers import logging as diffusers_logging
+            from transformers import logging as transformers_logging
+            diffusers_logging.set_verbosity_error()
+            transformers_logging.set_verbosity_error()
+            
             if progress_callback:
                 progress_callback(f"[3/3] Loading weights for '{self.model_name}' on {device}...")
             
+            kwargs = {
+                "torch_dtype": torch_dtype
+            }
+            # Only pass safety checker to SD v1.5/v2.1 models (SDXL and Flux do not accept them)
+            if not is_flux and "sdxl" not in self.model_name.lower():
+                kwargs["safety_checker"] = None
+                kwargs["requires_safety_checker"] = False
+                
             self.pipeline = AutoPipelineForText2Image.from_pretrained(
                 self.model_name,
-                torch_dtype=torch_dtype,
-                safety_checker=None,
-                requires_safety_checker=False
+                **kwargs
             )
 
             if is_flux and device in ["cuda", "xpu"]:
