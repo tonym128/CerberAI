@@ -562,6 +562,20 @@ def convert_markdown_to_pdf(markdown_text: str, output_path: str, query: str, da
     """Convert raw Markdown text into a styled PDF report using fpdf2 write_html."""
     from fpdf import FPDF, XPos, YPos
     
+    # Normalize common non-ASCII punctuation and replace unsupported characters
+    replacements = {
+        "’": "'",
+        "‘": "'",
+        "“": '"',
+        "”": '"',
+        "–": "-",
+        "—": "-",
+        "…": "...",
+    }
+    for orig, rep in replacements.items():
+        markdown_text = markdown_text.replace(orig, rep)
+    markdown_text = markdown_text.encode("latin-1", errors="replace").decode("latin-1")
+    
     class ResearchPDF(FPDF):
         report_date = ""
         def header(self):
@@ -813,6 +827,21 @@ async def generate_deep_research_report(manager, agent, query: str):
         print(f"Failed to compile PDF: {e}")
         # Fallback PDF in case converter fails
         try:
+            fallback_text = report_markdown[:2000]
+            replacements = {
+                "’": "'",
+                "‘": "'",
+                "•": "*",
+                "“": '"',
+                "”": '"',
+                "–": "-",
+                "—": "-",
+                "…": "...",
+            }
+            for orig, rep in replacements.items():
+                fallback_text = fallback_text.replace(orig, rep)
+            fallback_text = fallback_text.encode("latin-1", errors="replace").decode("latin-1")
+
             from fpdf import FPDF
             fallback_pdf = FPDF()
             fallback_pdf.add_page()
@@ -820,7 +849,7 @@ async def generate_deep_research_report(manager, agent, query: str):
             fallback_pdf.cell(0, 10, "CerberAI Research Report (Fallback Mode)", new_x="LMARGIN", new_y="NEXT")
             fallback_pdf.set_font("helvetica", "", 12)
             fallback_pdf.ln(10)
-            fallback_pdf.write(5, report_markdown[:2000] + "\n\n[Truncated due to compilation error]")
+            fallback_pdf.write(5, fallback_text + "\n\n[Truncated due to compilation error]")
             fallback_pdf.output(str(pdf_path.resolve()))
         except Exception as fe:
             print(f"Fallback PDF compilation also failed: {fe}")

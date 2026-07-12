@@ -40,5 +40,25 @@ class TestDeepResearchPDF(unittest.TestCase):
         self.assertTrue(self.test_pdf_path.exists())
         self.assertGreater(self.test_pdf_path.stat().st_size, 0)
 
+    def test_pdf_conversion_with_unicode_characters(self):
+        markdown_content = (
+            "# Superconductivity Research\n\n"
+            "This is a test summary of superconductivity featuring LLM curly quotes like ‘this’ and ’that’, "
+            "double quotes like “these” and ”those”, an en-dash – and em-dash —, and an ellipsis…\n"
+        )
+        
+        self.assertFalse(self.test_pdf_path.exists())
+        
+        # Run conversion (should not raise exception)
+        convert_markdown_to_pdf(
+            markdown_content, 
+            str(self.test_pdf_path.resolve()), 
+            "superconductivity unicode", 
+            "2026-07-03"
+        )
+        
+        self.assertTrue(self.test_pdf_path.exists())
+        self.assertGreater(self.test_pdf_path.stat().st_size, 0)
+
 if __name__ == "__main__":
     unittest.main()

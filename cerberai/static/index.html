@@ -8,10 +8,13 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=Plus+Jakarta+Sans:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="/static/style.css?v=2">
+    <link rel="stylesheet" href="/static/style.css?v=3">
 </head>
 <body>
     <div class="app-container">
+        <!-- Sidebar Backdrop for mobile -->
+        <div id="sidebar-backdrop" class="sidebar-backdrop"></div>
+
         <!-- Sidebar -->
         <aside class="sidebar">
             <div class="logo-area">
@@ -20,7 +23,7 @@
                 <span class="badge">v0.1.0</span>
             </div>
 
-            <!-- New Chat & VRAM Monitor -->
+            <!-- New Chat -->
             <button id="btn-new-chat" class="btn btn-primary w-full" style="margin-bottom: 12px; font-weight: 600;">💬 New Chat</button>
 
             <!-- VRAM Monitor -->
@@ -50,10 +53,7 @@
             <!-- Chat History (Collapsible) -->
             <div class="collapsible-header collapsed" onclick="toggleSection(this)">
                 <span>💬 Chat History</span>
-                <div style="display: flex; align-items: center; gap: 8px;">
-                    <span class="popout-btn" onclick="event.stopPropagation(); popoutSection(this.closest('.collapsible-header'))" title="Pop out to main pane">↗</span>
-                    <span class="chevron">▶</span>
-                </div>
+                <span class="chevron">▶</span>
             </div>
             <div class="collapsible-content collapsed">
                 <div id="conversations-list" class="conversations-history" style="margin-bottom: 12px; padding-right: 4px;">
@@ -86,7 +86,7 @@
             </div>
 
             <!-- Model Selection -->
-            <div class="section-title">Active Routing Model</div>
+            <div class="section-title" style="margin-top: 16px;">Active Routing Model</div>
             <div class="model-picker-container">
                 <select id="model-select" class="custom-select">
                     <option value="auto" selected>✨ Intelligent Router (Auto)</option>
@@ -96,10 +96,7 @@
             <!-- Model Catalog (Collapsible) -->
             <div class="collapsible-header collapsed" onclick="toggleSection(this)">
                 <span>📦 Model Catalog</span>
-                <div style="display: flex; align-items: center; gap: 8px;">
-                    <span class="popout-btn" onclick="event.stopPropagation(); popoutSection(this.closest('.collapsible-header'))" title="Pop out to main pane">↗</span>
-                    <span class="chevron">▶</span>
-                </div>
+                <span class="chevron">▶</span>
             </div>
             <div class="collapsible-content collapsed">
                 <div id="models-list" class="models-catalog" style="margin-bottom: 12px;">
@@ -107,259 +104,7 @@
                 </div>
             </div>
             
-            <!-- Daily Video Briefing (Collapsible) -->
-            <div class="collapsible-header collapsed" onclick="toggleSection(this)">
-                <span>🎬 Daily Video Briefing</span>
-                <div style="display: flex; align-items: center; gap: 8px;">
-                    <span class="popout-btn" onclick="event.stopPropagation(); popoutSection(this.closest('.collapsible-header'))" title="Pop out to main pane">↗</span>
-                    <span class="chevron">▶</span>
-                </div>
-            </div>
-            <div class="collapsible-content collapsed">
-                <div class="automation-card" style="margin-bottom: 12px;">
-                    <div class="auto-header">Yesterday's News Video</div>
-                    <p class="auto-description" style="font-size: 11px;">Generates the top 10 news stories of yesterday, writes summaries, draws graphics, synthesizes voice tracks, and stitches them into a final broadcast video.</p>
-                    
-                    <div style="margin-bottom: 12px; display: flex; flex-direction: column; gap: 8px;">
-                        <div style="display: flex; flex-direction: column; gap: 4px;">
-                            <label for="auto-video-mode" style="font-size: 10px; font-weight: 600; color: var(--text-secondary);">Visual Generation Mode</label>
-                            <select id="auto-video-mode" style="padding: 6px 10px; border-radius: 6px; border: 1px solid var(--border-color); background: rgba(0,0,0,0.2); color: var(--text-primary); font-size: 11px; outline: none; width: 100%;">
-                                <option value="image">Static Image (Ken Burns Zoom)</option>
-                                <option value="image_to_video">Image-to-Video Animation</option>
-                                <option value="text_to_video">Text-to-Video Generation</option>
-                            </select>
-                        </div>
-                        <div style="display: flex; flex-direction: column; gap: 4px;">
-                            <label for="auto-topic" style="font-size: 10px; font-weight: 600; color: var(--text-secondary);">Custom Topic (Optional)</label>
-                            <input type="text" id="auto-topic" placeholder="e.g. Space & Physics" style="padding: 6px 10px; border-radius: 6px; border: 1px solid var(--border-color); background: rgba(0,0,0,0.2); color: var(--text-primary); font-size: 11px; outline: none; width: 100%;">
-                        </div>
-                        <div style="display: flex; flex-direction: column; gap: 4px;">
-                            <label for="auto-date" style="font-size: 10px; font-weight: 600; color: var(--text-secondary);">Target Date (Optional)</label>
-                            <input type="date" id="auto-date" style="padding: 6px 10px; border-radius: 6px; border: 1px solid var(--border-color); background: rgba(0,0,0,0.2); color: var(--text-primary); font-size: 11px; outline: none; width: 100%;">
-                        </div>
-                    </div>
-                    
-                    <div style="display: flex; gap: 8px; width: 100%;">
-                        <button id="btn-news-video" class="btn btn-primary" style="flex-grow: 1; font-size: 11px; padding: 8px;">Generate Video</button>
-                        <button type="button" id="btn-news-history" class="btn btn-secondary" style="padding: 0 10px; display: flex; align-items: center; justify-content: center; font-size: 11px;" title="View Video History">📋 History</button>
-                    </div>
-                    <div id="news-video-status-container" class="status-container hidden">
-                        <div class="progress-bar-bg">
-                            <div id="news-video-progress" class="progress-bar" style="width: 0%"></div>
-                        </div>
-                        <span id="news-video-status-msg" class="status-msg">Starting...</span>
-                    </div>
-                    <div id="news-video-player-container" class="player-container hidden">
-                        <video id="news-video-player" controls class="w-full" style="border-radius: 8px; margin-top: 10px; max-height: 200px; border: 1px solid var(--border-color);"></video>
-                    </div>
-                    
-                    <div id="news-video-sources" class="hidden" style="margin-top: 12px; border-top: 1px solid var(--border-color); padding-top: 10px;">
-                        <h4 style="font-size: 10px; font-weight: 600; color: var(--text-secondary); margin: 0 0 6px 0; text-transform: uppercase; letter-spacing: 0.5px;">Featured Stories & Links</h4>
-                        <div id="news-video-sources-list" style="display: flex; flex-direction: column; gap: 4px; padding-right: 4px;">
-                            <!-- Links populated dynamically -->
-                        </div>
-                    </div>
-                    
-                    <div id="news-video-history-container" class="hidden" style="margin-top: 12px; border-top: 1px solid var(--border-color); padding-top: 12px;">
-                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-                            <h4 style="font-size: 10px; font-weight: 600; color: var(--text-secondary); margin: 0; text-transform: uppercase; letter-spacing: 0.5px;">Video History</h4>
-                            <button type="button" id="btn-close-history" style="background: none; border: none; color: var(--text-secondary); cursor: pointer; font-size: 14px; padding: 0; line-height: 1;">&times;</button>
-                        </div>
-                        <div id="news-video-history-list" style="display: flex; flex-direction: column; gap: 6px; padding-right: 4px;">
-                            <!-- Populated dynamically -->
-                        </div>
-                    </div>
-                </div>
-            </div>
-            
-            <!-- Deep Research Agent (Collapsible) -->
-            <div class="collapsible-header collapsed" onclick="toggleSection(this)">
-                <span>🔬 Deep Research Agent</span>
-                <div style="display: flex; align-items: center; gap: 8px;">
-                    <span class="popout-btn" onclick="event.stopPropagation(); popoutSection(this.closest('.collapsible-header'))" title="Pop out to main pane">↗</span>
-                    <span class="chevron">▶</span>
-                </div>
-            </div>
-            <div class="collapsible-content collapsed">
-                <div class="automation-card" style="margin-bottom: 12px;">
-                    <p class="auto-description" style="font-size: 11px;">Runs a recursive multi-step web search and fetching loop to synthesize an exhaustive, cited markdown research report and a formatted PDF.</p>
-                    
-                    <div style="margin-bottom: 12px; display: flex; flex-direction: column; gap: 8px;">
-                        <div style="display: flex; flex-direction: column; gap: 4px;">
-                            <label for="research-query" style="font-size: 10px; font-weight: 600; color: var(--text-secondary);">Research Query / Topic</label>
-                            <input type="text" id="research-query" placeholder="e.g. room-temperature superconductivity 2026" style="padding: 6px 10px; border-radius: 6px; border: 1px solid var(--border-color); background: rgba(0,0,0,0.2); color: var(--text-primary); font-size: 11px; outline: none; width: 100%;">
-                        </div>
-                    </div>
-                    
-                    <div style="display: flex; gap: 8px; width: 100%;">
-                        <button type="button" id="btn-start-research" class="btn btn-primary" style="flex-grow: 1; font-size: 11px; padding: 8px;">Start Research</button>
-                        <button type="button" id="btn-research-history" class="btn btn-secondary" style="padding: 0 10px; display: flex; align-items: center; justify-content: center; font-size: 11px;" title="View Report History">📋 History</button>
-                    </div>
-                    
-                    <div id="research-status-container" class="status-container hidden" style="margin-top: 10px;">
-                        <div class="progress-bar-bg">
-                            <div id="research-progress" class="progress-bar" style="width: 0%"></div>
-                        </div>
-                        <span id="research-status-msg" class="status-msg" style="font-size: 10px; color: var(--text-secondary); display: block; margin-top: 4px;">Starting...</span>
-                    </div>
-                    
-                    <div id="research-result-container" class="hidden" style="margin-top: 12px; border-top: 1px solid var(--border-color); padding-top: 10px; display: flex; flex-direction: column; gap: 8px;">
-                        <h4 style="font-size: 10px; font-weight: 600; color: var(--text-secondary); margin: 0; text-transform: uppercase;">Latest Research Report</h4>
-                        <div style="display: flex; gap: 6px;">
-                            <a id="link-research-md" href="#" target="_blank" class="btn btn-secondary" style="flex-grow: 1; font-size: 10px; padding: 6px; text-align: center; text-decoration: none;">📄 View Markdown</a>
-                            <a id="link-research-pdf" href="#" target="_blank" class="btn btn-primary" style="flex-grow: 1; font-size: 10px; padding: 6px; text-align: center; text-decoration: none;">📥 Download PDF</a>
-                        </div>
-                    </div>
-                    
-                    <div id="research-history-container" class="hidden" style="margin-top: 12px; border-top: 1px solid var(--border-color); padding-top: 12px;">
-                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-                            <h4 style="font-size: 10px; font-weight: 600; color: var(--text-secondary); margin: 0; text-transform: uppercase; letter-spacing: 0.5px;">Report History</h4>
-                            <button type="button" id="btn-close-research-history" style="background: none; border: none; color: var(--text-secondary); cursor: pointer; font-size: 14px; padding: 0; line-height: 1;">&times;</button>
-                        </div>
-                        <div id="research-history-list" style="display: flex; flex-direction: column; gap: 6px; padding-right: 4px;">
-                            <!-- Populated dynamically -->
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Daily Podcast Briefing (Collapsible) -->
-            <div class="collapsible-header collapsed" onclick="toggleSection(this)">
-                <span>🎙️ Daily Podcast Briefing</span>
-                <div style="display: flex; align-items: center; gap: 8px;">
-                    <span class="popout-btn" onclick="event.stopPropagation(); popoutSection(this.closest('.collapsible-header'))" title="Pop out to main pane">↗</span>
-                    <span class="chevron">▶</span>
-                </div>
-            </div>
-            <div class="collapsible-content collapsed">
-                <div class="automation-card" style="margin-bottom: 12px;">
-                    <p class="auto-description" style="font-size: 11px;">Generates a multi-speaker audio news briefing (featuring Alex & Taylor) using local LLM scriptwriting and Kokoro TTS voice synthesis.</p>
-                    
-                    <div style="margin-bottom: 12px; display: flex; flex-direction: column; gap: 8px;">
-                        <div style="display: flex; flex-direction: column; gap: 4px;">
-                            <label for="podcast-topic" style="font-size: 10px; font-weight: 600; color: var(--text-secondary);">Custom Topic (Optional)</label>
-                            <input type="text" id="podcast-topic" placeholder="e.g. Technology" style="padding: 6px 10px; border-radius: 6px; border: 1px solid var(--border-color); background: rgba(0,0,0,0.2); color: var(--text-primary); font-size: 11px; outline: none; width: 100%;">
-                        </div>
-                        <div style="display: flex; flex-direction: column; gap: 4px;">
-                            <label for="podcast-date" style="font-size: 10px; font-weight: 600; color: var(--text-secondary);">Target Date (Optional)</label>
-                            <input type="date" id="podcast-date" style="padding: 6px 10px; border-radius: 6px; border: 1px solid var(--border-color); background: rgba(0,0,0,0.2); color: var(--text-primary); font-size: 11px; outline: none; width: 100%;">
-                        </div>
-                    </div>
-                    
-                    <div style="display: flex; gap: 8px; width: 100%;">
-                        <button type="button" id="btn-start-podcast" class="btn btn-primary" style="flex-grow: 1; font-size: 11px; padding: 8px;">Generate Podcast</button>
-                        <button type="button" id="btn-podcast-history" class="btn btn-secondary" style="padding: 0 10px; display: flex; align-items: center; justify-content: center; font-size: 11px;" title="View Podcast History">📋 History</button>
-                    </div>
-                    
-                    <div id="podcast-status-container" class="status-container hidden" style="margin-top: 10px;">
-                        <div class="progress-bar-bg">
-                            <div id="podcast-progress" class="progress-bar" style="width: 0%"></div>
-                        </div>
-                        <span id="podcast-status-msg" class="status-msg" style="font-size: 10px; color: var(--text-secondary); display: block; margin-top: 4px;">Starting...</span>
-                    </div>
-                    
-                    <div id="podcast-player-container" class="hidden" style="margin-top: 12px; border-top: 1px solid var(--border-color); padding-top: 10px; display: flex; flex-direction: column; gap: 6px;">
-                        <h4 style="font-size: 10px; font-weight: 600; color: var(--text-secondary); margin: 0; text-transform: uppercase;">Latest Briefing Audio</h4>
-                        <audio id="podcast-audio-player" controls class="w-full" style="margin-top: 4px; height: 36px;"></audio>
-                    </div>
-                    
-                    <div id="podcast-history-container" class="hidden" style="margin-top: 12px; border-top: 1px solid var(--border-color); padding-top: 12px;">
-                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-                            <h4 style="font-size: 10px; font-weight: 600; color: var(--text-secondary); margin: 0; text-transform: uppercase; letter-spacing: 0.5px;">Podcast History</h4>
-                            <button type="button" id="btn-close-podcast-history" style="background: none; border: none; color: var(--text-secondary); cursor: pointer; font-size: 14px; padding: 0; line-height: 1;">&times;</button>
-                        </div>
-                        <div id="podcast-history-list" style="display: flex; flex-direction: column; gap: 6px; padding-right: 4px;">
-                            <!-- Populated dynamically -->
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Scheduled Automations (Collapsible) -->
-            <div class="collapsible-header collapsed" onclick="toggleSection(this)">
-                <span>⏰ Scheduled Automations</span>
-                <div style="display: flex; align-items: center; gap: 8px;">
-                    <span class="popout-btn" onclick="event.stopPropagation(); popoutSection(this.closest('.collapsible-header'))" title="Pop out to main pane">↗</span>
-                    <span class="chevron">▶</span>
-                </div>
-            </div>
-            <div class="collapsible-content collapsed">
-                <div class="automation-card" style="margin-bottom: 12px;">
-                    <p class="auto-description" style="font-size: 11px;">Configure daily triggers to run search queries or automations automatically and send results to Telegram.</p>
-                    
-                    <div style="margin-bottom: 12px; display: flex; flex-direction: column; gap: 8px;">
-                        <div style="display: flex; gap: 6px;">
-                            <select id="sch-type" style="padding: 6px 10px; border-radius: 6px; border: 1px solid var(--border-color); background: rgba(0,0,0,0.2); color: var(--text-primary); font-size: 11px; outline: none; width: 45%;">
-                                <option value="query">Daily Query</option>
-                                <option value="news-video">Daily Video Briefing</option>
-                                <option value="deep-research">Daily Deep Research</option>
-                                <option value="podcast">Daily Podcast Briefing</option>
-                            </select>
-                            <input type="time" id="sch-time" value="09:00" style="padding: 6px 10px; border-radius: 6px; border: 1px solid var(--border-color); background: rgba(0,0,0,0.2); color: var(--text-primary); font-size: 11px; outline: none; width: 55%;">
-                        </div>
-                        <div id="sch-target-group" style="display: flex; flex-direction: column; gap: 4px;">
-                            <label for="sch-target" id="sch-target-label" style="font-size: 10px; font-weight: 600; color: var(--text-secondary);">Query Prompt</label>
-                            <input type="text" id="sch-target" placeholder="e.g. Explain LLMs..." style="padding: 6px 10px; border-radius: 6px; border: 1px solid var(--border-color); background: rgba(0,0,0,0.2); color: var(--text-primary); font-size: 11px; outline: none; width: 100%;">
-                        </div>
-                        <div id="sch-params-group" style="display: none; flex-direction: column; gap: 4px;">
-                            <label for="sch-params-topic" style="font-size: 10px; font-weight: 600; color: var(--text-secondary);">Custom Topic (Optional)</label>
-                            <input type="text" id="sch-params-topic" placeholder="e.g. AI News" style="padding: 6px 10px; border-radius: 6px; border: 1px solid var(--border-color); background: rgba(0,0,0,0.2); color: var(--text-primary); font-size: 11px; outline: none; width: 100%;">
-                        </div>
-                        <div id="sch-video-mode-group" style="display: none; flex-direction: column; gap: 4px;">
-                            <label for="sch-video-mode" style="font-size: 10px; font-weight: 600; color: var(--text-secondary);">Video Generation Mode</label>
-                            <select id="sch-video-mode" style="padding: 6px 10px; border-radius: 6px; border: 1px solid var(--border-color); background: rgba(0,0,0,0.2); color: var(--text-primary); font-size: 11px; outline: none; width: 100%;">
-                                <option value="image">Static Image (Ken Burns Zoom)</option>
-                                <option value="image_to_video">Image-to-Video Animation</option>
-                                <option value="text_to_video">Text-to-Video Generation</option>
-                            </select>
-                        </div>
-                    </div>
-                    
-                    <button id="btn-add-schedule" class="btn btn-primary w-full" style="font-size: 11px; padding: 8px;">+ Add Daily Schedule</button>
-                    
-                    <!-- Schedules List Container -->
-                    <div id="schedules-list-container" style="margin-top: 12px; border-top: 1px solid var(--border-color); padding-top: 12px; display: flex; flex-direction: column; gap: 6px;">
-                        <!-- Populated dynamically -->
-                    </div>
-                </div>
-            </div>
-
-            <!-- Telegram History (Collapsible) -->
-            <div class="collapsible-header collapsed" id="header-tg-history" onclick="toggleSection(this)">
-                <span>💬 Telegram Bot Log</span>
-                <div style="display: flex; align-items: center; gap: 8px;">
-                    <span class="popout-btn" onclick="event.stopPropagation(); popoutSection(this.closest('.collapsible-header'))" title="Pop out to main pane">↗</span>
-                    <span class="chevron">▶</span>
-                </div>
-            </div>
-            <div class="collapsible-content collapsed">
-                <div class="automation-card" style="margin-bottom: 12px;">
-                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-                        <span style="font-size: 10px; color: var(--text-secondary); text-transform: uppercase; font-weight: 600; letter-spacing: 0.5px;">Message History</span>
-                        <button type="button" id="btn-refresh-tg-history" style="background: none; border: none; color: var(--primary); cursor: pointer; font-size: 10px; font-weight: 600; padding: 0;">🔄 Refresh</button>
-                    </div>
-                    <div id="telegram-history-list" style="display: flex; flex-direction: column; gap: 6px; padding-right: 4px;">
-                        <!-- Populated dynamically -->
-                    </div>
-                </div>
-            </div>
-            
-            <script>
-                function toggleSection(header) {
-                    header.classList.toggle("collapsed");
-                    const content = header.nextElementSibling;
-                    if (content) {
-                        content.classList.toggle("collapsed");
-                    }
-                    const chevron = header.querySelector(".chevron");
-                    if (chevron) {
-                        chevron.textContent = header.classList.contains("collapsed") ? "▶" : "▼";
-                    }
-                }
-            </script>
-            
             <div class="sidebar-footer">
-
                 <div class="connection-status">
                     <span class="status-dot green"></span>
                     <span>Connected to CerberAI</span>
@@ -367,14 +112,30 @@
             </div>
         </aside>
 
-        <!-- Main Chat Area -->
+        <!-- Main Workspace Area -->
         <main class="chat-container">
             <!-- Header -->
             <header class="chat-header">
-                <div class="header-info">
-                    <h2 id="current-chat-model">✨ Intelligent Router</h2>
-                    <p id="routing-description">Automatically selects between coding and general models based on your request.</p>
+                <div class="header-left">
+                    <!-- Hamburger Toggle Button -->
+                    <button id="btn-sidebar-toggle" class="sidebar-toggle-btn" title="Toggle Sidebar">
+                        <svg viewBox="0 0 24 24" width="22" height="22">
+                            <path fill="currentColor" d="M3 18h18v-2H3v2zm0-5h18v-2H3v2zm0-7v2h18V6H3z"/>
+                        </svg>
+                    </button>
+                    <div class="header-info">
+                        <h2 id="current-chat-model">✨ Intelligent Router</h2>
+                        <p id="routing-description">Automatically selects between coding and general models based on your request.</p>
+                    </div>
                 </div>
+                
+                <!-- Premium Navigation Tabs -->
+                <nav class="header-tabs">
+                    <button class="tab-btn active" data-tab="chat-pane">💬 Chat</button>
+                    <button class="tab-btn" data-tab="automations-pane">⚡ Automations</button>
+                    <button class="tab-btn" data-tab="telegram-pane">📡 Telegram Log</button>
+                </nav>
+
                 <div class="header-actions">
                     <button id="open-media" class="btn btn-secondary">🎬 Gallery</button>
                     <button id="clear-chat" class="btn btn-secondary">Clear Chat</button>
@@ -390,55 +151,292 @@
                         <span class="toggle-label">Tools</span>
                     </label>
                 </div>
-
             </header>
 
-            <!-- Chat Window -->
-            <section id="chat-messages" class="chat-messages">
-                <div class="assistant-welcome">
-                    <div class="welcome-icon">⚡</div>
-                    <h2>Welcome to CerberAI</h2>
-                    <p>Ask a coding or general question. CerberAI will dynamically load the best model into memory and unload inactive ones to manage local hardware resources.</p>
-                    <div class="suggestions-grid">
-                        <div class="suggestion-card" onclick="setPrompt('Write a python script to sort a dictionary by its values')">
-                            <h4>💻 Coding Request</h4>
-                            <p>"Write a python script to sort a dictionary by its values"</p>
+            <!-- Tab Content Pane Container -->
+            <div class="tab-content-wrapper">
+                <!-- 1. Chat Workspace Pane -->
+                <div id="chat-pane" class="tab-pane active">
+                    <section id="chat-messages" class="chat-messages">
+                        <div class="assistant-welcome">
+                            <div class="welcome-icon">⚡</div>
+                            <h2>Welcome to CerberAI</h2>
+                            <p>Ask a coding or general question. CerberAI will dynamically load the best model into memory and unload inactive ones to manage local hardware resources.</p>
+                            <div class="suggestions-grid">
+                                <div class="suggestion-card" onclick="setPrompt('Write a python script to sort a dictionary by its values')">
+                                    <h4>💻 Coding Request</h4>
+                                    <p>"Write a python script to sort a dictionary by its values"</p>
+                                </div>
+                                <div class="suggestion-card" onclick="setPrompt('Explain quantum physics in a single paragraph')">
+                                    <h4>🧠 General Query</h4>
+                                    <p>"Explain quantum physics in a single paragraph"</p>
+                                </div>
+                            </div>
                         </div>
-                        <div class="suggestion-card" onclick="setPrompt('Explain quantum physics in a single paragraph')">
-                            <h4>🧠 General Query</h4>
-                            <p>"Explain quantum physics in a single paragraph"</p>
+                    </section>
+
+                    <!-- Chat Input -->
+                    <footer class="chat-input-area">
+                        <form id="chat-form">
+                            <div id="image-preview-container" class="image-preview-container hidden"></div>
+                            <div class="input-controls-row">
+                                <button type="button" id="image-upload-btn" class="image-btn" title="Upload Image for Vision/Describe">
+                                    <svg viewBox="0 0 24 24" width="20" height="20">
+                                        <path fill="currentColor" d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z"/>
+                                    </svg>
+                                </button>
+                                <input type="file" id="image-file-input" accept="image/*" style="display: none;">
+                                <button type="button" id="audio-upload-btn" class="audio-btn" title="Upload Audio / Speech to Text">
+                                    <svg viewBox="0 0 24 24" width="20" height="20">
+                                        <path fill="currentColor" d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm5.3-3c0 3-2.54 5.1-5.3 5.1S6.7 14 6.7 11H5c0 3.41 2.72 6.23 6 6.72V21h2v-3.28c3.28-.48 6-3.3 6-6.72h-1.7z"/>
+                                    </svg>
+                                </button>
+                                <input type="file" id="audio-file-input" accept="audio/*" style="display: none;">
+                                <textarea id="prompt-input" placeholder="Ask anything... (CerberAI will route and load models automatically)" rows="1"></textarea>
+                                <button type="submit" id="send-btn" class="btn btn-primary">
+                                    <svg viewBox="0 0 24 24" width="24" height="24" class="send-icon">
+                                        <path fill="currentColor" d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/>
+                                    </svg>
+                                </button>
+                            </div>
+                        </form>
+                    </footer>
+                </div>
+
+                <!-- 2. Automations Dashboard Pane -->
+                <div id="automations-pane" class="tab-pane">
+                    <div class="automations-grid">
+                        
+                        <!-- Daily Video Briefing -->
+                        <div class="automation-card">
+                            <div class="auto-header-row">
+                                <span class="auto-icon">🎬</span>
+                                <div>
+                                    <div class="auto-header">Yesterday's News Video</div>
+                                    <p class="auto-description">Generates the top 10 news stories of yesterday, writes summaries, draws graphics, synthesizes voice tracks, and stitches them into a final broadcast video.</p>
+                                </div>
+                            </div>
+                            
+                            <div class="form-grid">
+                                <div class="form-group-custom">
+                                    <label for="auto-video-mode">Visual Generation Mode</label>
+                                    <select id="auto-video-mode" class="custom-select-small">
+                                        <option value="image">Static Image (Ken Burns Zoom)</option>
+                                        <option value="image_to_video">Image-to-Video Animation</option>
+                                        <option value="text_to_video">Text-to-Video Generation</option>
+                                    </select>
+                                </div>
+                                <div class="form-group-custom">
+                                    <label for="auto-topic">Custom Topic (Optional)</label>
+                                    <input type="text" id="auto-topic" placeholder="e.g. Space & Physics" class="custom-input-small">
+                                </div>
+                                <div class="form-group-custom">
+                                    <label for="auto-date">Target Date (Optional)</label>
+                                    <input type="date" id="auto-date" class="custom-input-small">
+                                </div>
+                            </div>
+                            
+                            <div class="action-row" style="margin-top: 16px;">
+                                <button id="btn-news-video" class="btn btn-primary font-semi">Generate Video</button>
+                                <button type="button" id="btn-news-history" class="btn btn-secondary font-semi">📋 History</button>
+                            </div>
+                            
+                            <div id="news-video-status-container" class="status-container hidden">
+                                <div class="progress-bar-bg">
+                                    <div id="news-video-progress" class="progress-bar" style="width: 0%"></div>
+                                </div>
+                                <span id="news-video-status-msg" class="status-msg">Starting...</span>
+                            </div>
+                            
+                            <div id="news-video-player-container" class="player-container hidden">
+                                <video id="news-video-player" controls class="w-full" style="border-radius: 8px; margin-top: 10px; max-height: 240px; border: 1px solid var(--border-color);"></video>
+                            </div>
+                            
+                            <div id="news-video-sources" class="hidden" style="margin-top: 12px; border-top: 1px solid var(--border-color); padding-top: 10px;">
+                                <h4 class="sub-section-title">Featured Stories & Links</h4>
+                                <div id="news-video-sources-list" class="source-link-list">
+                                    <!-- Links populated dynamically -->
+                                </div>
+                            </div>
+                            
+                            <div id="news-video-history-container" class="hidden" style="margin-top: 12px; border-top: 1px solid var(--border-color); padding-top: 12px;">
+                                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                                    <h4 class="sub-section-title">Video History</h4>
+                                    <button type="button" id="btn-close-history" class="history-close-btn">&times;</button>
+                                </div>
+                                <div id="news-video-history-list" class="history-item-list">
+                                    <!-- Populated dynamically -->
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Deep Research Agent -->
+                        <div class="automation-card">
+                            <div class="auto-header-row">
+                                <span class="auto-icon">🔬</span>
+                                <div>
+                                    <div class="auto-header">Deep Research Agent</div>
+                                    <p class="auto-description">Runs a recursive multi-step web search and fetching loop to synthesize an exhaustive, cited markdown research report and a formatted PDF.</p>
+                                </div>
+                            </div>
+                            
+                            <div class="form-grid-single">
+                                <div class="form-group-custom">
+                                    <label for="research-query">Research Query / Topic</label>
+                                    <input type="text" id="research-query" placeholder="e.g. room-temperature superconductivity 2026" class="custom-input-small" style="width: 100%;">
+                                </div>
+                            </div>
+                            
+                            <div class="action-row" style="margin-top: 16px;">
+                                <button type="button" id="btn-start-research" class="btn btn-primary font-semi">Start Research</button>
+                                <button type="button" id="btn-research-history" class="btn btn-secondary font-semi">📋 History</button>
+                            </div>
+                            
+                            <div id="research-status-container" class="status-container hidden" style="margin-top: 12px;">
+                                <div class="progress-bar-bg">
+                                    <div id="research-progress" class="progress-bar" style="width: 0%"></div>
+                                </div>
+                                <span id="research-status-msg" class="status-msg" style="margin-top: 4px; display: block;">Starting...</span>
+                            </div>
+                            
+                            <div id="research-result-container" class="hidden" style="margin-top: 12px; border-top: 1px solid var(--border-color); padding-top: 10px; display: flex; flex-direction: column; gap: 8px;">
+                                <h4 class="sub-section-title">Latest Research Report</h4>
+                                <div style="display: flex; gap: 8px;">
+                                    <a id="link-research-md" href="#" target="_blank" class="btn btn-secondary text-center" style="flex-grow: 1; font-size: 11px; padding: 8px; text-decoration: none;">📄 View Markdown</a>
+                                    <a id="link-research-pdf" href="#" target="_blank" class="btn btn-primary text-center" style="flex-grow: 1; font-size: 11px; padding: 8px; text-decoration: none;">📥 Download PDF</a>
+                                </div>
+                            </div>
+                            
+                            <div id="research-history-container" class="hidden" style="margin-top: 12px; border-top: 1px solid var(--border-color); padding-top: 12px;">
+                                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                                    <h4 class="sub-section-title">Report History</h4>
+                                    <button type="button" id="btn-close-research-history" class="history-close-btn">&times;</button>
+                                </div>
+                                <div id="research-history-list" class="history-item-list">
+                                    <!-- Populated dynamically -->
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Daily Podcast Briefing -->
+                        <div class="automation-card">
+                            <div class="auto-header-row">
+                                <span class="auto-icon">🎙️</span>
+                                <div>
+                                    <div class="auto-header">Daily Podcast Briefing</div>
+                                    <p class="auto-description">Generates a multi-speaker audio news briefing (featuring Alex & Taylor) using local LLM scriptwriting and Kokoro TTS voice synthesis.</p>
+                                </div>
+                            </div>
+                            
+                            <div class="form-grid">
+                                <div class="form-group-custom">
+                                    <label for="podcast-topic">Custom Topic (Optional)</label>
+                                    <input type="text" id="podcast-topic" placeholder="e.g. Technology" class="custom-input-small">
+                                </div>
+                                <div class="form-group-custom">
+                                    <label for="podcast-date">Target Date (Optional)</label>
+                                    <input type="date" id="podcast-date" class="custom-input-small">
+                                </div>
+                            </div>
+                            
+                            <div class="action-row" style="margin-top: 16px;">
+                                <button type="button" id="btn-start-podcast" class="btn btn-primary font-semi">Generate Podcast</button>
+                                <button type="button" id="btn-podcast-history" class="btn btn-secondary font-semi">📋 History</button>
+                            </div>
+                            
+                            <div id="podcast-status-container" class="status-container hidden" style="margin-top: 12px;">
+                                <div class="progress-bar-bg">
+                                    <div id="podcast-progress" class="progress-bar" style="width: 0%"></div>
+                                </div>
+                                <span id="podcast-status-msg" class="status-msg" style="margin-top: 4px; display: block;">Starting...</span>
+                            </div>
+                            
+                            <div id="podcast-player-container" class="hidden" style="margin-top: 12px; border-top: 1px solid var(--border-color); padding-top: 10px; display: flex; flex-direction: column; gap: 6px;">
+                                <h4 class="sub-section-title">Latest Briefing Audio</h4>
+                                <audio id="podcast-audio-player" controls class="w-full" style="margin-top: 4px; height: 38px;"></audio>
+                            </div>
+                            
+                            <div id="podcast-history-container" class="hidden" style="margin-top: 12px; border-top: 1px solid var(--border-color); padding-top: 12px;">
+                                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                                    <h4 class="sub-section-title">Podcast History</h4>
+                                    <button type="button" id="btn-close-podcast-history" class="history-close-btn">&times;</button>
+                                </div>
+                                <div id="podcast-history-list" class="history-item-list">
+                                    <!-- Populated dynamically -->
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Scheduled Automations -->
+                        <div class="automation-card">
+                            <div class="auto-header-row">
+                                <span class="auto-icon">⏰</span>
+                                <div>
+                                    <div class="auto-header">Scheduled Automations</div>
+                                    <p class="auto-description">Configure daily triggers to run search queries or automations automatically and send results to Telegram.</p>
+                                </div>
+                            </div>
+                            
+                            <div class="form-grid">
+                                <div class="form-group-custom">
+                                    <label for="sch-type">Daily Schedule Type</label>
+                                    <select id="sch-type" class="custom-select-small">
+                                        <option value="query">Daily Query</option>
+                                        <option value="news-video">Daily Video Briefing</option>
+                                        <option value="deep-research">Daily Deep Research</option>
+                                        <option value="podcast">Daily Podcast Briefing</option>
+                                    </select>
+                                </div>
+                                <div class="form-group-custom">
+                                    <label for="sch-time">Trigger Time</label>
+                                    <input type="time" id="sch-time" value="09:00" class="custom-input-small">
+                                </div>
+                            </div>
+                            
+                            <div class="form-grid-single" style="margin-top: 10px;">
+                                <div id="sch-target-group" class="form-group-custom">
+                                    <label for="sch-target" id="sch-target-label">Query Prompt</label>
+                                    <input type="text" id="sch-target" placeholder="e.g. Explain LLMs..." class="custom-input-small" style="width: 100%;">
+                                </div>
+                                <div id="sch-params-group" class="form-group-custom" style="display: none;">
+                                    <label for="sch-params-topic">Custom Topic (Optional)</label>
+                                    <input type="text" id="sch-params-topic" placeholder="e.g. AI News" class="custom-input-small" style="width: 100%;">
+                                </div>
+                                <div id="sch-video-mode-group" class="form-group-custom" style="display: none;">
+                                    <label for="sch-video-mode">Video Generation Mode</label>
+                                    <select id="sch-video-mode" class="custom-select-small" style="width: 100%;">
+                                        <option value="image">Static Image (Ken Burns Zoom)</option>
+                                        <option value="image_to_video">Image-to-Video Animation</option>
+                                        <option value="text_to_video">Text-to-Video Generation</option>
+                                    </select>
+                                </div>
+                            </div>
+                            
+                            <button id="btn-add-schedule" class="btn btn-primary w-full" style="font-size: 11px; padding: 10px; margin-top: 16px; font-weight: 600;">+ Add Daily Schedule</button>
+                            
+                            <!-- Schedules List Container -->
+                            <div id="schedules-list-container" class="schedules-list">
+                                <!-- Populated dynamically -->
+                            </div>
                         </div>
                     </div>
                 </div>
-            </section>
 
-            <!-- Chat Input -->
-            <footer class="chat-input-area">
-                <form id="chat-form">
-                    <div id="image-preview-container" class="image-preview-container hidden"></div>
-                    <div class="input-controls-row" style="display: flex; align-items: flex-end; gap: 12px; width: 100%;">
-                        <button type="button" id="image-upload-btn" class="image-btn" title="Upload Image for Vision/Describe">
-                            <svg viewBox="0 0 24 24" width="20" height="20">
-                                <path fill="currentColor" d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z"/>
-                            </svg>
-                        </button>
-                        <input type="file" id="image-file-input" accept="image/*" style="display: none;">
-                        <button type="button" id="audio-upload-btn" class="audio-btn" title="Upload Audio / Speech to Text">
-                            <svg viewBox="0 0 24 24" width="20" height="20">
-                                <path fill="currentColor" d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm5.3-3c0 3-2.54 5.1-5.3 5.1S6.7 14 6.7 11H5c0 3.41 2.72 6.23 6 6.72V21h2v-3.28c3.28-.48 6-3.3 6-6.72h-1.7z"/>
-                            </svg>
-                        </button>
-                        <input type="file" id="audio-file-input" accept="audio/*" style="display: none;">
-                        <textarea id="prompt-input" placeholder="Ask anything... (CerberAI will route and load models automatically)" rows="1"></textarea>
-                        <button type="submit" id="send-btn" class="btn btn-primary">
-                            <svg viewBox="0 0 24 24" width="24" height="24" class="send-icon">
-                                <path fill="currentColor" d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/>
-                            </svg>
-                        </button>
+                <!-- 3. Telegram Logs Pane -->
+                <div id="telegram-pane" class="tab-pane">
+                    <div class="telegram-log-container">
+                        <div class="automation-card" style="margin-bottom: 0; display: flex; flex-direction: column; height: 100%; min-height: 450px;">
+                            <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border-color); padding-bottom: 12px; margin-bottom: 16px;">
+                                <h3 class="auto-header" style="margin: 0; font-size: 16px;">📡 Telegram Bot Event log</h3>
+                                <button type="button" id="btn-refresh-tg-history" class="btn btn-secondary font-semi" style="font-size: 11px; padding: 6px 12px;">🔄 Refresh Log</button>
+                            </div>
+                            <div id="telegram-history-list" class="log-list" style="flex-grow: 1; overflow-y: auto;">
+                                <!-- Populated dynamically -->
+                            </div>
+                        </div>
                     </div>
-                </form>
-            </footer>
-
+                </div>
+            </div>
         </main>
 
         <!-- Media Drawer -->
@@ -469,13 +467,13 @@
             <div class="modal-body">
                  <form id="setup-form">
                     <!-- Preset Configurations -->
-                    <div class="form-section" style="background: rgba(139, 92, 246, 0.03); border: 1px solid rgba(139, 92, 246, 0.15); padding: 15px; border-radius: 8px; margin-bottom: 20px;">
-                        <h3 style="color: #a78bfa; margin-top: 0;">⚡ Quick Preset Load</h3>
-                        <p class="section-desc" style="margin-bottom: 12px; font-size: 12px; color: var(--text-secondary);">Select a VRAM hardware tier to auto-populate recommended boundary limits and model configurations.</p>
+                    <div class="form-section-preset">
+                        <h3 style="color: #a78bfa; margin-top: 0; font-size: 14px; font-weight: 700;">⚡ Quick Preset Load</h3>
+                        <p class="section-desc" style="margin-bottom: 12px; font-size: 11.5px; color: var(--text-secondary);">Select a VRAM hardware tier to auto-populate recommended boundary limits and model configurations.</p>
                         <div class="form-row">
                             <div class="form-group" style="flex-grow: 1; margin-bottom: 0;">
                                 <label for="setup-preset">Hardware Configuration Preset</label>
-                                <select id="setup-preset" style="width: 100%; padding: 8px 12px; border-radius: 6px; border: 1px solid var(--border-color); background: var(--bg-secondary); color: var(--text-main);">
+                                <select id="setup-preset" class="custom-select-small" style="width: 100%; height: 38px; font-size: 12.5px;">
                                     <option value="" selected>-- Select a hardware tier preset --</option>
                                     <option value="4">4 GB VRAM (Ultra-Lightweight / Laptops)</option>
                                     <option value="6">6 GB VRAM (Medium Budget Cards)</option>
@@ -502,6 +500,7 @@
                                 <label for="setup-ram">Max RAM Limit (GB)</label>
                                 <input type="number" id="setup-ram" step="0.1" min="1" max="256" required>
                             </div>
+                        </div>
                     </div>
 
                     <!-- Web Search Settings -->
@@ -510,7 +509,7 @@
                         <div class="form-row">
                             <div class="form-group">
                                 <label for="setup-search-provider">Search Provider</label>
-                                <select id="setup-search-provider" class="custom-select">
+                                <select id="setup-search-provider" class="custom-select-small" style="width: 100%; height: 36px;">
                                     <option value="duckduckgo">DuckDuckGo (Free & Local)</option>
                                     <option value="searxng">SearXNG (Self-Hosted)</option>
                                     <option value="tavily">Tavily (AI Search API)</option>
@@ -569,14 +568,14 @@
                         <div class="form-row">
                             <div class="form-group">
                                 <label for="setup-router-type">Router Classification Type</label>
-                                <select id="setup-router-type">
+                                <select id="setup-router-type" class="custom-select-small" style="width: 100%; height: 36px;">
                                     <option value="heuristics">Intelligent Heuristics (Regex)</option>
                                     <option value="llm">Cognitive LLM Router</option>
                                 </select>
                             </div>
                             <div class="form-group">
                                 <label for="setup-router-model">Router LLM Classifier Model</label>
-                                <select id="setup-router-model">
+                                <select id="setup-router-model" class="custom-select-small" style="width: 100%; height: 36px;">
                                     <!-- Populated dynamically via JS -->
                                 </select>
                             </div>
@@ -600,13 +599,101 @@
                         <button type="button" id="btn-cancel-setup" class="btn btn-secondary">Cancel</button>
                         <button type="submit" class="btn btn-primary">Save & Hot-Reload</button>
                     </div>
-                </form>
+                 </form>
             </div>
         </div>
     </div>
 
     <!-- MarkDown and Code Highlight Plugins (Using public CDNs) -->
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
-    <script src="/static/app.js?v=7"></script>
+    <script src="/static/app.js?v=8"></script>
+    
+    <!-- Tab & Responsiveness Scripts -->
+    <script>
+        // Custom Accordion Sidebar Collapsibles
+        function toggleSection(header) {
+            header.classList.toggle("collapsed");
+            const content = header.nextElementSibling;
+            if (content) {
+                content.classList.toggle("collapsed");
+            }
+            const chevron = header.querySelector(".chevron");
+            if (chevron) {
+                chevron.textContent = header.classList.contains("collapsed") ? "▶" : "▼";
+            }
+        }
+
+        // Tab Navigation switching
+        document.querySelectorAll('.tab-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+                document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
+                
+                btn.classList.add('active');
+                const targetTab = btn.getAttribute('data-tab');
+                const targetPane = document.getElementById(targetTab);
+                if (targetPane) {
+                    targetPane.classList.add('active');
+                }
+                
+                // If switching back to chat, auto-scroll chat to bottom
+                if (targetTab === 'chat-pane') {
+                    const chatMessages = document.getElementById("chat-messages");
+                    if (chatMessages) {
+                        chatMessages.scrollTop = chatMessages.scrollHeight;
+                    }
+                }
+
+                // If switching to telegram log, auto-refresh the log list
+                if (targetTab === 'telegram-pane') {
+                    const refreshBtn = document.getElementById("btn-refresh-tg-history");
+                    if (refreshBtn) {
+                        refreshBtn.click();
+                    }
+                }
+            });
+        });
+
+        // Mobile Sidebar Drawer Toggle
+        const sidebar = document.querySelector('.sidebar');
+        const toggleBtn = document.getElementById('btn-sidebar-toggle');
+        const backdrop = document.getElementById('sidebar-backdrop');
+
+        if (toggleBtn && sidebar && backdrop) {
+            function openSidebar() {
+                sidebar.classList.add('open');
+                backdrop.classList.add('active');
+            }
+            function closeSidebar() {
+                sidebar.classList.remove('open');
+                backdrop.classList.remove('active');
+            }
+
+            toggleBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                if (sidebar.classList.contains('open')) {
+                    closeSidebar();
+                } else {
+                    openSidebar();
+                }
+            });
+
+            backdrop.addEventListener('click', closeSidebar);
+
+            // Auto-close sidebar on mobile when a link or action button is clicked
+            sidebar.querySelectorAll('button:not(#btn-new-chat), select').forEach(item => {
+                item.addEventListener('change', () => {
+                    if (window.innerWidth <= 1024) {
+                        closeSidebar();
+                    }
+                });
+                item.addEventListener('click', (e) => {
+                    if (window.innerWidth <= 1024 && !e.target.closest('.collapsible-header')) {
+                        closeSidebar();
+                    }
+                });
+            });
+        }
+    </script>
 </body>
 </html>
