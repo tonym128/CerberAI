@@ -533,7 +533,7 @@ function appendMessage(sender, text, metrics = null, images = []) {
         <div class="msg-content-wrapper">
             <span class="msg-meta">${displayName} &bull; ${timeString}</span>
             <div class="msg-bubble">${formattedText}${imagesHtml}</div>
-            ${sender === 'assistant' ? '<button class="tts-play-btn">🔊 Listen</button>' : ''}
+            ${sender === 'assistant' ? '<div class="tts-wrapper" style="display: flex; gap: 8px; align-items: center; margin-top: 8px;"><button class="tts-play-btn" style="margin-top: 0;">🔊 Listen</button></div>' : ''}
             ${metricsHtml}
         </div>
     `;
@@ -605,10 +605,47 @@ async function playText(messageId) {
         const audio = new Audio(audioUrl);
         audio.play();
         
+        let downloadBtn = playBtn.parentElement.querySelector(".tts-download-btn");
+        if (downloadBtn) {
+            const oldUrl = downloadBtn.getAttribute("href");
+            if (oldUrl) URL.revokeObjectURL(oldUrl);
+            downloadBtn.href = audioUrl;
+        } else {
+            downloadBtn = document.createElement("a");
+            downloadBtn.className = "tts-download-btn";
+            downloadBtn.innerHTML = "📥 Download";
+            downloadBtn.href = audioUrl;
+            downloadBtn.download = `speech_${messageId}.mp3`;
+            downloadBtn.style.background = "rgba(255, 255, 255, 0.04)";
+            downloadBtn.style.border = "1px solid var(--border-color)";
+            downloadBtn.style.borderRadius = "6px";
+            downloadBtn.style.padding = "4px 10px";
+            downloadBtn.style.color = "var(--text-secondary)";
+            downloadBtn.style.fontSize = "12px";
+            downloadBtn.style.cursor = "pointer";
+            downloadBtn.style.display = "flex";
+            downloadBtn.style.alignItems = "center";
+            downloadBtn.style.gap = "6px";
+            downloadBtn.style.textDecoration = "none";
+            downloadBtn.style.transition = "all 0.2s";
+            
+            downloadBtn.onmouseenter = () => {
+                downloadBtn.style.background = "rgba(139, 92, 246, 0.1)";
+                downloadBtn.style.borderColor = "var(--primary)";
+                downloadBtn.style.color = "var(--primary)";
+            };
+            downloadBtn.onmouseleave = () => {
+                downloadBtn.style.background = "rgba(255, 255, 255, 0.04)";
+                downloadBtn.style.borderColor = "var(--border-color)";
+                downloadBtn.style.color = "var(--text-secondary)";
+            };
+            
+            playBtn.parentElement.appendChild(downloadBtn);
+        }
+        
         audio.onended = () => {
             playBtn.disabled = false;
             playBtn.innerHTML = `🔊 Listen`;
-            URL.revokeObjectURL(audioUrl);
         };
     } catch (err) {
         console.error(err);

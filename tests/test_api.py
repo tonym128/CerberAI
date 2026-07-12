@@ -311,5 +311,60 @@ class TestAPI(unittest.TestCase):
             cerberai.main.manager = orig_manager
             cerberai.main.agent = orig_agent
 
+    @patch("cerberai.main.manager.get_model")
+    def test_chat_completions_list_content_sanitization(self, mock_get_model):
+        mock_backend = AsyncMock()
+        mock_backend.handle_chat_completion.return_value = {
+            "choices": [{"message": {"role": "assistant", "content": "mock text"}, "finish_reason": "stop"}]
+        }
+        mock_get_model.return_value = mock_backend
+
+        payload = {
+            "model": "general-llama3",
+            "messages": [
+                {"role": "user", "content": [{"type": "text", "text": "hello coding agent"}]}
+            ],
+            "tools_enabled": False,
+            "stream": False
+        }
+
+        response = self.client.post("/v1/chat/completions", json=payload)
+        self.assertEqual(response.status_code, 200)
+
+        # Verify backend was called with the content converted to a string
+        call_args = mock_backend.handle_chat_completion.call_args[0][0]
+        self.assertEqual(call_args["messages"][0]["content"], "hello coding agent")
+
+    @patch("cerberai.main.manager.get_model")
+    def test_chat_completions_bypasses_internal_agent_when_tools_provided(self, mock_get_model):
+        mock_backend = AsyncMock()
+        mock_backend.handle_chat_completion.return_value = {
+            "choices": [{"message": {"role": "assistant", "content": "mock text"}, "finish_reason": "stop"}]
+        }
+        mock_get_model.return_value = mock_backend
+
+        # Prepare payload with tools (meaning client wants to manage tools itself)
+        payload = {
+            "model": "general-llama3",
+            "messages": [{"role": "user", "content": "list the files"}],
+            "tools": [{
+                "type": "function",
+                "function": {
+                    "name": "list_files",
+                    "description": "List all files in the current folder",
+                    "parameters": {"type": "object", "properties": {}}
+                }
+            }],
+            "stream": False
+        }
+
+        response = self.client.post("/v1/chat/completions", json=payload)
+        self.assertEqual(response.status_code, 200)
+
+        # Ensure that it was handled directly by the backend, preserving the tools key
+        call_args = mock_backend.handle_chat_completion.call_args[0][0]
+        self.assertIn("tools", call_args)
+        self.assertEqual(call_args["tools"][0]["function"]["name"], "list_files")
+
 if __name__ == "__main__":
     unittest.main()

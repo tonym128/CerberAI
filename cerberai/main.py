@@ -281,6 +281,26 @@ async def chat_completions(request: Request):
 
     # If the routed model is an image generation model, generate the image inline and return a Markdown image link
     model_cfg = next((m for m in config.models if m.id == target_model_id), None)
+
+    # Sanitize messages content if target model is a text-only LLM model (unsupported list content type in llama-server)
+    if model_cfg and model_cfg.type == "llm":
+        sanitized_messages = []
+        for msg in messages:
+            msg_copy = msg.copy()
+            content = msg_copy.get("content")
+            if isinstance(content, list):
+                text_parts = []
+                for item in content:
+                    if isinstance(item, dict):
+                        if item.get("type") == "text":
+                            text_parts.append(item.get("text", ""))
+                    elif isinstance(item, str):
+                        text_parts.append(item)
+                msg_copy["content"] = "\n".join(text_parts)
+            sanitized_messages.append(msg_copy)
+        messages = sanitized_messages
+        payload["messages"] = messages
+
     if model_cfg and model_cfg.type == "image":
         try:
             last_message_content = messages[-1].get("content", "") if messages else ""
@@ -571,7 +591,7 @@ async def chat_completions(request: Request):
     # Check if tool calling should run
     tools_enabled = payload.get("tools_enabled", True)
 
-    if tools_enabled and agent.tools and model_cfg and model_cfg.type == "llm":
+    if tools_enabled and agent.tools and model_cfg and model_cfg.type == "llm" and not payload.get("tools"):
         try:
             start_time = time.time()
             sys_extension = agent.get_system_prompt_extension()
