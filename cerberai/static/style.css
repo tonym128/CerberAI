@@ -50,7 +50,7 @@ body {
     flex-direction: column;
     padding: 24px;
     flex-shrink: 0;
-    overflow-y: auto;
+    overflow: hidden;
 }
 
 .logo-area {
@@ -694,6 +694,36 @@ body {
     transform: rotate(45deg) translate(-1px, 1px);
 }
 
+/* Controls row to place buttons, textarea, and send button side-by-side */
+.input-controls-row {
+    display: flex;
+    align-items: flex-end;
+    gap: 12px;
+    width: 100%;
+}
+
+.audio-btn {
+    width: 40px;
+    height: 40px;
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    background-color: transparent;
+    border: 1px solid var(--border-color);
+    color: var(--text-secondary);
+    cursor: pointer;
+    flex-shrink: 0;
+    transition: all 0.2s;
+}
+
+.audio-btn:hover {
+    color: var(--primary);
+    border-color: var(--primary);
+    background-color: rgba(139, 92, 246, 0.05);
+}
+
 /* Image Upload and Preview Styles */
 .image-btn {
     width: 40px;
@@ -1144,10 +1174,24 @@ select option {
 }
 .collapsible-content {
     display: block;
-    overflow: hidden;
+    max-height: 380px;
+    overflow-y: auto;
+    padding-right: 4px;
 }
 .collapsible-content.collapsed {
     display: none;
+}
+#model-catalog-content {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    max-height: none;
+}
+#model-catalog-content.collapsed {
+    display: none;
+    flex: none;
 }
 .collapsible-header .chevron {
     font-size: 10px;

@@ -36,6 +36,14 @@ function setPrompt(text) {
 
 // Auto-grow textarea
 promptInput.addEventListener("input", adjustTextareaHeight);
+
+// Handle Ctrl+Enter to submit prompt
+promptInput.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
+        e.preventDefault();
+        sendBtn.click();
+    }
+});
 function adjustTextareaHeight() {
     promptInput.style.height = "auto";
     promptInput.style.height = (promptInput.scrollHeight) + "px";
