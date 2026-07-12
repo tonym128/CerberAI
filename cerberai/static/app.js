@@ -266,20 +266,37 @@ function renderCatalog(allModels, activeModels, loadingStatus) {
 
         // Build telemetry html
         const diag = model.diagnostics || {};
-        const showDiagnostics = diag.calls_count > 0 || diag.load_time_seconds > 0 || diag.last_error;
+        const stats = model.stats || { calls: 0, avg_load: 0.0, avg_ttft: 0.0, tps: 0.0 };
+        const showDiagnostics = stats.calls > 0 || diag.load_time_seconds > 0 || diag.last_error;
         
         let telemetryHtml = "";
         if (showDiagnostics) {
             telemetryHtml = `
                 <div class="model-telemetry-container" style="margin-top: 6px; padding-top: 6px; border-top: 1px dashed rgba(255,255,255,0.06); font-size: 10.5px; color: var(--text-secondary); display: flex; flex-direction: column; gap: 4px;">
                     <div style="display: flex; justify-content: space-between; align-items: center;">
-                        <span>Invocations:</span>
-                        <span style="color: var(--text-primary); font-weight: 600;">${diag.calls_count || 0}</span>
+                        <span>All-Time Calls:</span>
+                        <span style="color: var(--text-primary); font-weight: 600;">${stats.calls}</span>
                     </div>
+                    ${stats.calls > 0 
+                        ? `
+                        <div style="display: flex; justify-content: space-between; align-items: center;">
+                            <span>Avg Speed (TPS):</span>
+                            <span style="color: var(--accent); font-weight: 600;">${stats.tps.toFixed(1)} tok/s</span>
+                        </div>
+                        <div style="display: flex; justify-content: space-between; align-items: center;">
+                            <span>Avg Load:</span>
+                            <span style="color: var(--text-primary); font-weight: 600;">${stats.avg_load.toFixed(2)}s</span>
+                        </div>
+                        <div style="display: flex; justify-content: space-between; align-items: center;">
+                            <span>Avg TTFT:</span>
+                            <span style="color: var(--text-primary); font-weight: 600;">${stats.avg_ttft.toFixed(2)}s</span>
+                        </div>
+                        ` : ''
+                    }
                     ${diag.load_time_seconds > 0 
                         ? `
                         <div style="display: flex; justify-content: space-between; align-items: center;">
-                            <span>Load Speed:</span>
+                            <span>Active Load Speed:</span>
                             <span style="color: var(--text-primary); font-weight: 600;">${diag.load_time_seconds.toFixed(2)}s</span>
                         </div>
                         ` : ''
@@ -307,6 +324,9 @@ function renderCatalog(allModels, activeModels, loadingStatus) {
             <div class="catalog-card-header">
                 <span class="catalog-card-title" title="${model.id}">${model.id}</span>
                 <span class="modality-badge ${modalityClass}">${emoji} ${model.type.toUpperCase()}</span>
+            </div>
+            <div style="font-size: 11px; color: var(--text-secondary); margin-bottom: 6px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${model.model_name || ''}">
+                ${model.model_name || ''}
             </div>
             <div class="catalog-card-details">
                 <div class="status-indicator">
@@ -2883,7 +2903,10 @@ function renderStatsForPeriod(allData, period) {
     sorted.forEach(m => {
         html += `
             <tr>
-                <td class="stats-model-id">${m.model_id}</td>
+                <td class="stats-model-id">
+                    <div style="font-weight: 600; color: var(--primary);">${m.model_id}</div>
+                    <div style="font-size: 11px; color: var(--text-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 200px;" title="${m.model_name || ''}">${m.model_name || ''}</div>
+                </td>
                 <td>${formatNumber(m.requests)}</td>
                 <td>${formatNumber(m.prompt_tokens)}</td>
                 <td>${formatNumber(m.completion_tokens)}</td>
@@ -2944,10 +2967,20 @@ function renderModelRegistry(models) {
 
 // Auto-load stats when Stats tab is activated
 // Hook into existing tab click logic
+let statsInterval = null;
+
 const statsTabObserver = new MutationObserver(() => {
     const statsPane = document.getElementById("stats-pane");
     if (statsPane && statsPane.classList.contains("active")) {
         loadStatsDashboard();
+        if (!statsInterval) {
+            statsInterval = setInterval(loadStatsDashboard, 4000); // refresh stats every 4s
+        }
+    } else {
+        if (statsInterval) {
+            clearInterval(statsInterval);
+            statsInterval = null;
+        }
     }
 });
 

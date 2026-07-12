@@ -74,9 +74,15 @@ def init_db():
         load_time REAL,
         time_to_first_token REAL,
         total_time REAL,
-        timestamp REAL
+        timestamp REAL,
+        model_name TEXT
     )
     """)
+    
+    try:
+        cursor.execute("ALTER TABLE inference_stats ADD COLUMN model_name TEXT")
+    except Exception:
+        pass
     
     # 6. Model Registry table
     cursor.execute("""
@@ -296,14 +302,17 @@ def db_add_inference_stat(
     completion_tokens: int,
     load_time: float,
     time_to_first_token: float,
-    total_time: float
+    total_time: float,
+    model_name: Optional[str] = None
 ):
+    if model_name is not None and not isinstance(model_name, str):
+        model_name = None
     conn = get_db_connection()
     cursor = conn.cursor()
     cursor.execute("""
-    INSERT INTO inference_stats (model_id, prompt_tokens, completion_tokens, load_time, time_to_first_token, total_time, timestamp)
-    VALUES (?, ?, ?, ?, ?, ?, ?)
-    """, (model_id, prompt_tokens, completion_tokens, load_time, time_to_first_token, total_time, time.time()))
+    INSERT INTO inference_stats (model_id, prompt_tokens, completion_tokens, load_time, time_to_first_token, total_time, timestamp, model_name)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    """, (model_id, prompt_tokens, completion_tokens, load_time, time_to_first_token, total_time, time.time(), model_name))
     conn.commit()
     conn.close()
 
@@ -322,7 +331,7 @@ def db_get_aggregated_stats(session_start: float) -> Dict[str, Any]:
     report = {}
     for name, start_ts in intervals.items():
         cursor.execute("""
-            SELECT model_id, prompt_tokens, completion_tokens, load_time, time_to_first_token, total_time, timestamp
+            SELECT model_id, prompt_tokens, completion_tokens, load_time, time_to_first_token, total_time, timestamp, model_name
             FROM inference_stats
             WHERE timestamp >= ?
         """, (start_ts,))
@@ -354,8 +363,10 @@ def db_get_aggregated_stats(session_start: float) -> Dict[str, Any]:
         model_usage = {}
         for r in rows:
             m_id = r["model_id"]
-            if m_id not in model_usage:
-                model_usage[m_id] = {
+            m_name = r.get("model_name") or m_id
+            key = (m_id, m_name)
+            if key not in model_usage:
+                model_usage[key] = {
                     "requests": 0,
                     "prompt_tokens": 0,
                     "completion_tokens": 0,
@@ -363,7 +374,7 @@ def db_get_aggregated_stats(session_start: float) -> Dict[str, Any]:
                     "total_ttft": 0.0,
                     "total_generation_time": 0.0
                 }
-            u = model_usage[m_id]
+            u = model_usage[key]
             u["requests"] += 1
             u["prompt_tokens"] += r["prompt_tokens"]
             u["completion_tokens"] += r["completion_tokens"]
@@ -376,13 +387,14 @@ def db_get_aggregated_stats(session_start: float) -> Dict[str, Any]:
             
         # Finalize models data
         models_data = []
-        for m_id, u in model_usage.items():
+        for (m_id, m_name), u in model_usage.items():
             avg_m_tps = 0.0
             if u["total_generation_time"] > 0:
                 avg_m_tps = u["completion_tokens"] / u["total_generation_time"]
                 
             models_data.append({
                 "model_id": m_id,
+                "model_name": m_name,
                 "requests": u["requests"],
                 "prompt_tokens": u["prompt_tokens"],
                 "completion_tokens": u["completion_tokens"],

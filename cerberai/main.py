@@ -121,6 +121,34 @@ async def get_status():
             })
             total_estimated_vram += cfg.vram_estimate_gb
 
+    # Fetch lifetime stats from database for each model
+    db_stats = {}
+    try:
+        from .database import get_db_connection
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT model_id, COUNT(*) as count, AVG(load_time) as avg_load, AVG(time_to_first_token) as avg_ttft,
+                   SUM(completion_tokens) as total_comp, SUM(total_time - load_time) as total_gen
+            FROM inference_stats
+            GROUP BY model_id
+        """)
+        for row in cursor.fetchall():
+            m_id = row["model_id"]
+            total_comp = row["total_comp"] or 0
+            total_gen = row["total_gen"] or 0
+            if total_gen <= 0:
+                total_gen = 1.0 # Safe default
+            db_stats[m_id] = {
+                "calls": row["count"],
+                "avg_load": round(row["avg_load"], 2) if row["avg_load"] else 0.0,
+                "avg_ttft": round(row["avg_ttft"], 2) if row["avg_ttft"] else 0.0,
+                "tps": round(total_comp / total_gen, 1) if total_gen > 0 else 0.0
+            }
+        conn.close()
+    except Exception as db_err:
+        print(f"Warning: Failed to fetch status stats from DB: {db_err}")
+
     return {
         "status": "healthy",
         "limits": {
@@ -142,7 +170,13 @@ async def get_status():
                 "backend": m.backend,
                 "vram_estimate_gb": m.vram_estimate_gb,
                 "n_ctx": getattr(m, "n_ctx", None),
-                "diagnostics": manager.backends[m.id].get_diagnostics() if m.id in manager.backends else {}
+                "model_name": (
+                    manager.backends[m.id].actual_model_name 
+                    if m.id in manager.backends and isinstance(getattr(manager.backends[m.id], "actual_model_name", None), str)
+                    else m.backend_config.get("filename", m.backend_config.get("model_name", m.backend_config.get("repo_id", m.id)))
+                ),
+                "diagnostics": manager.backends[m.id].get_diagnostics() if m.id in manager.backends else {},
+                "stats": db_stats.get(m.id, {"calls": 0, "avg_load": 0.0, "avg_ttft": 0.0, "tps": 0.0})
             }
             for m in config.models
         ]
@@ -192,7 +226,8 @@ async def stream_with_metrics(
     generator: AsyncIterator[bytes],
     model_id: str,
     load_time: float = 0.0,
-    prompt_tokens: int = 0
+    prompt_tokens: int = 0,
+    model_name: Optional[str] = None
 ) -> AsyncIterator[bytes]:
     start_time = time.time()
     first_token_time = None
@@ -250,7 +285,8 @@ async def stream_with_metrics(
             completion_tokens=total_tokens,
             load_time=load_time,
             time_to_first_token=ttft,
-            total_time=wall_time
+            total_time=wall_time,
+            model_name=model_name
         )
     except Exception as stat_err:
         print(f"Failed to record stream stats: {stat_err}")
@@ -292,6 +328,14 @@ async def chat_completions(request: Request):
                     print(f"Warning: Failed to unload router model: {ex}")
 
     # 2. Get backend (triggers lazy load & memory eviction if required)
+    is_already_loaded = False
+    if target_model_id in manager.backends:
+        try:
+            is_already_loaded = await manager.backends[target_model_id].is_loaded()
+        except Exception:
+            pass
+            
+    t0 = time.time()
     try:
         backend = await manager.get_model(target_model_id)
     except Exception as e:
@@ -299,6 +343,8 @@ async def chat_completions(request: Request):
             status_code=500,
             detail=f"Failed to load or acquire model backend '{target_model_id}': {str(e)}"
         )
+    load_time = time.time() - t0 if not is_already_loaded else 0.0
+    prompt_tokens_est = sum(len(str(m.get('content', ''))) // 4 for m in messages)
 
     # If the routed model is an image generation model, generate the image inline and return a Markdown image link
     model_cfg = next((m for m in config.models if m.id == target_model_id), None)
@@ -503,7 +549,7 @@ async def chat_completions(request: Request):
         if stream:
             try:
                 return StreamingResponse(
-                    stream_with_metrics(backend.stream_chat_completion(payload), target_model_id),
+                    stream_with_metrics(backend.stream_chat_completion(payload), target_model_id, load_time=load_time, prompt_tokens=prompt_tokens_est, model_name=backend.actual_model_name),
                     media_type="text/event-stream"
                 )
             except Exception as e:
@@ -532,14 +578,14 @@ async def chat_completions(request: Request):
                 result["metrics"] = metrics
                 try:
                     from .database import db_add_inference_stat
-                    prompt_tokens_est = sum(len(str(m.get('content', ''))) // 4 for m in payload.get('messages', []))
                     db_add_inference_stat(
                         model_id=target_model_id,
                         prompt_tokens=prompt_tokens_est,
                         completion_tokens=completion_tokens,
-                        load_time=0.0,
+                        load_time=load_time,
                         time_to_first_token=wall_time,
-                        total_time=wall_time
+                        total_time=wall_time,
+                        model_name=backend.actual_model_name
                     )
                 except Exception as stat_err:
                     print(f"Failed to record vision inference stats: {stat_err}")
@@ -822,7 +868,7 @@ async def chat_completions(request: Request):
     if stream:
         try:
             return StreamingResponse(
-                stream_with_metrics(backend.stream_chat_completion(payload), target_model_id),
+                stream_with_metrics(backend.stream_chat_completion(payload), target_model_id, load_time=load_time, prompt_tokens=prompt_tokens_est, model_name=backend.actual_model_name),
                 media_type="text/event-stream"
             )
         except Exception as e:
@@ -851,14 +897,14 @@ async def chat_completions(request: Request):
             result["metrics"] = metrics
             try:
                 from .database import db_add_inference_stat
-                prompt_tokens_est = sum(len(str(m.get('content', ''))) // 4 for m in payload.get('messages', []))
                 db_add_inference_stat(
                     model_id=target_model_id,
                     prompt_tokens=prompt_tokens_est,
                     completion_tokens=completion_tokens,
-                    load_time=0.0,
+                    load_time=load_time,
                     time_to_first_token=wall_time,
-                    total_time=wall_time
+                    total_time=wall_time,
+                    model_name=backend.actual_model_name
                 )
             except Exception as stat_err:
                 print(f"Failed to record LLM inference stats: {stat_err}")

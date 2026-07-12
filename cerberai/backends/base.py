@@ -92,6 +92,11 @@ class BaseBackend(ABC):
         """Check if the model is currently active/loaded."""
         return self._is_loaded
 
+    @property
+    def actual_model_name(self) -> str:
+        """Return the actual model file/name/repo identifier."""
+        return self.config.get("filename", self.config.get("model_name", self.config.get("repo_id", self.model_id)))
+
     def get_diagnostics(self) -> Dict[str, Any]:
         """Retrieve diagnostics statistics for this model backend."""
         return {
