@@ -78,6 +78,24 @@ def init_db():
     )
     """)
     
+    # 6. Model Registry table
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS model_registry (
+        id TEXT PRIMARY KEY,
+        function_id TEXT,
+        display_name TEXT,
+        model_type TEXT,
+        backend TEXT,
+        purpose TEXT,
+        vram_estimate_gb REAL,
+        filename TEXT,
+        repo_id TEXT,
+        first_seen REAL,
+        last_seen REAL,
+        is_active INTEGER DEFAULT 1
+    )
+    """)
+    
     conn.commit()
     conn.close()
 
@@ -268,3 +286,180 @@ def db_get_telegram_history() -> List[Dict[str, Any]]:
     rows = cursor.fetchall()
     conn.close()
     return [dict(r) for r in rows]
+
+# ==========================================================================
+# INFERENCE STATS OPERATIONS
+# ==========================================================================
+def db_add_inference_stat(
+    model_id: str,
+    prompt_tokens: int,
+    completion_tokens: int,
+    load_time: float,
+    time_to_first_token: float,
+    total_time: float
+):
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("""
+    INSERT INTO inference_stats (model_id, prompt_tokens, completion_tokens, load_time, time_to_first_token, total_time, timestamp)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
+    """, (model_id, prompt_tokens, completion_tokens, load_time, time_to_first_token, total_time, time.time()))
+    conn.commit()
+    conn.close()
+
+def db_get_aggregated_stats(session_start: float) -> Dict[str, Any]:
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    intervals = {
+        "session": session_start,
+        "daily": time.time() - 86400,
+        "weekly": time.time() - 7 * 86400,
+        "monthly": time.time() - 30 * 86400,
+        "all_time": 0
+    }
+    
+    report = {}
+    for name, start_ts in intervals.items():
+        cursor.execute("""
+            SELECT model_id, prompt_tokens, completion_tokens, load_time, time_to_first_token, total_time, timestamp
+            FROM inference_stats
+            WHERE timestamp >= ?
+        """, (start_ts,))
+        rows = [dict(r) for r in cursor.fetchall()]
+        
+        # Aggregate
+        total_requests = len(rows)
+        total_prompt_tokens = sum(r["prompt_tokens"] for r in rows)
+        total_completion_tokens = sum(r["completion_tokens"] for r in rows)
+        
+        # Calculate tokens/sec safely (sum of completion_tokens / sum of generation time)
+        total_generation_time = sum(r["total_time"] - r["load_time"] for r in rows)
+        if total_generation_time <= 0:
+            total_generation_time = sum(r["total_time"] for r in rows)
+            
+        avg_tokens_sec = 0.0
+        if total_generation_time > 0:
+            avg_tokens_sec = total_completion_tokens / total_generation_time
+            
+        avg_load_time = 0.0
+        if total_requests > 0:
+            avg_load_time = sum(r["load_time"] for r in rows) / total_requests
+            
+        avg_ttft = 0.0
+        if total_requests > 0:
+            avg_ttft = sum(r["time_to_first_token"] for r in rows) / total_requests
+            
+        # Model level usage
+        model_usage = {}
+        for r in rows:
+            m_id = r["model_id"]
+            if m_id not in model_usage:
+                model_usage[m_id] = {
+                    "requests": 0,
+                    "prompt_tokens": 0,
+                    "completion_tokens": 0,
+                    "total_load_time": 0.0,
+                    "total_ttft": 0.0,
+                    "total_generation_time": 0.0
+                }
+            u = model_usage[m_id]
+            u["requests"] += 1
+            u["prompt_tokens"] += r["prompt_tokens"]
+            u["completion_tokens"] += r["completion_tokens"]
+            u["total_load_time"] += r["load_time"]
+            u["total_ttft"] += r["time_to_first_token"]
+            gen_time = r["total_time"] - r["load_time"]
+            if gen_time <= 0:
+                gen_time = r["total_time"]
+            u["total_generation_time"] += gen_time
+            
+        # Finalize models data
+        models_data = []
+        for m_id, u in model_usage.items():
+            avg_m_tps = 0.0
+            if u["total_generation_time"] > 0:
+                avg_m_tps = u["completion_tokens"] / u["total_generation_time"]
+                
+            models_data.append({
+                "model_id": m_id,
+                "requests": u["requests"],
+                "prompt_tokens": u["prompt_tokens"],
+                "completion_tokens": u["completion_tokens"],
+                "avg_tokens_sec": avg_m_tps,
+                "avg_load_time": u["total_load_time"] / u["requests"],
+                "avg_time_to_first_token": u["total_ttft"] / u["requests"]
+            })
+            
+        report[name] = {
+            "total_requests": total_requests,
+            "total_prompt_tokens": total_prompt_tokens,
+            "total_completion_tokens": total_completion_tokens,
+            "avg_tokens_sec": avg_tokens_sec,
+            "avg_load_time": avg_load_time,
+            "avg_time_to_first_token": avg_ttft,
+            "models": models_data
+        }
+        
+    conn.close()
+    return report
+
+# ==========================================================================
+# MODEL REGISTRY OPERATIONS
+# ==========================================================================
+def db_upsert_model_registry(
+    function_id: str,
+    display_name: str,
+    model_type: str,
+    backend: str,
+    purpose: str,
+    vram_estimate_gb: float,
+    filename: str,
+    repo_id: str
+):
+    """Insert or update a model in the registry. Updates last_seen and marks as active."""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    now = time.time()
+    
+    # Check if exists
+    cursor.execute("SELECT id FROM model_registry WHERE function_id = ? AND filename = ?", (function_id, filename))
+    row = cursor.fetchone()
+    
+    if row:
+        cursor.execute("""
+        UPDATE model_registry SET display_name=?, model_type=?, backend=?, purpose=?, 
+        vram_estimate_gb=?, repo_id=?, last_seen=?, is_active=1 WHERE id=?
+        """, (display_name, model_type, backend, purpose, vram_estimate_gb, repo_id, now, row["id"]))
+    else:
+        import uuid
+        item_id = str(uuid.uuid4())
+        cursor.execute("""
+        INSERT INTO model_registry (id, function_id, display_name, model_type, backend, purpose, vram_estimate_gb, filename, repo_id, first_seen, last_seen, is_active)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
+        """, (item_id, function_id, display_name, model_type, backend, purpose, vram_estimate_gb, filename, repo_id, now, now))
+    
+    conn.commit()
+    conn.close()
+
+def db_get_model_registry() -> List[Dict[str, Any]]:
+    """Get all models from the registry, ordered by active status then last_seen."""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM model_registry ORDER BY is_active DESC, last_seen DESC")
+    rows = cursor.fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+def db_mark_inactive_models(active_function_ids: List[str]):
+    """Mark models not in the current config as inactive."""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    if active_function_ids:
+        placeholders = ','.join('?' * len(active_function_ids))
+        cursor.execute(f"UPDATE model_registry SET is_active=0 WHERE function_id NOT IN ({placeholders})", active_function_ids)
+    else:
+        cursor.execute("UPDATE model_registry SET is_active=0")
+    conn.commit()
+    conn.close()
+

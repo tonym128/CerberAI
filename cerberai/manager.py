@@ -24,6 +24,35 @@ class DynamicModelManager:
             if backend_instance:
                 self.backends[m_cfg.id] = backend_instance
 
+        # Sync model registry with current config
+        self._sync_model_registry()
+
+    def _sync_model_registry(self):
+        """Sync current model configuration to the persistent model registry."""
+        try:
+            from .database import db_upsert_model_registry, db_mark_inactive_models
+            active_ids = []
+            for m_cfg in self.config.models:
+                bc = m_cfg.backend_config
+                filename = bc.get("filename", bc.get("model_name", ""))
+                repo_id = bc.get("repo_id", "")
+                display_name = filename.replace(".gguf", "").replace("_", " ").replace("-", " ") if filename else m_cfg.id
+                
+                db_upsert_model_registry(
+                    function_id=m_cfg.id,
+                    display_name=display_name,
+                    model_type=m_cfg.type,
+                    backend=m_cfg.backend,
+                    purpose=m_cfg.purpose or "",
+                    vram_estimate_gb=m_cfg.vram_estimate_gb,
+                    filename=filename,
+                    repo_id=repo_id
+                )
+                active_ids.append(m_cfg.id)
+            db_mark_inactive_models(active_ids)
+        except Exception as e:
+            print(f"Warning: Failed to sync model registry: {e}")
+
     def _create_backend(self, model_cfg: ModelConfig) -> Optional[BaseBackend]:
         b_type = model_cfg.backend.lower()
         backend_config = dict(model_cfg.backend_config)

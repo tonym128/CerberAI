@@ -140,6 +140,7 @@
                     <button class="tab-btn active" data-tab="chat-pane">💬 Chat</button>
                     <button class="tab-btn" data-tab="automations-pane">⚡ Automations</button>
                     <button class="tab-btn" data-tab="telegram-pane">📡 Telegram Log</button>
+                    <button class="tab-btn" data-tab="stats-pane">📊 Stats</button>
                 </nav>
 
                 <div class="header-actions">
@@ -438,6 +439,99 @@
                             </div>
                             <div id="telegram-history-list" class="log-list" style="flex-grow: 1; overflow-y: auto;">
                                 <!-- Populated dynamically -->
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 4. Stats Dashboard Pane -->
+                <div id="stats-pane" class="tab-pane">
+                    <div class="stats-dashboard">
+                        <div class="stats-header">
+                            <h2>📊 Performance Analytics</h2>
+                            <div class="stats-period-selector">
+                                <button class="stats-period-btn active" data-period="session">Session</button>
+                                <button class="stats-period-btn" data-period="daily">Today</button>
+                                <button class="stats-period-btn" data-period="weekly">Week</button>
+                                <button class="stats-period-btn" data-period="monthly">Month</button>
+                                <button class="stats-period-btn" data-period="all_time">All Time</button>
+                            </div>
+                        </div>
+
+                        <!-- Overall Stats Cards -->
+                        <div class="stats-overview-grid">
+                            <div class="stats-card">
+                                <div class="stats-card-icon">🔢</div>
+                                <div class="stats-card-content">
+                                    <span class="stats-card-label">Total Requests</span>
+                                    <span id="stat-total-requests" class="stats-card-value">0</span>
+                                </div>
+                            </div>
+                            <div class="stats-card">
+                                <div class="stats-card-icon">📝</div>
+                                <div class="stats-card-content">
+                                    <span class="stats-card-label">Prompt Tokens</span>
+                                    <span id="stat-prompt-tokens" class="stats-card-value">0</span>
+                                </div>
+                            </div>
+                            <div class="stats-card">
+                                <div class="stats-card-icon">💬</div>
+                                <div class="stats-card-content">
+                                    <span class="stats-card-label">Completion Tokens</span>
+                                    <span id="stat-completion-tokens" class="stats-card-value">0</span>
+                                </div>
+                            </div>
+                            <div class="stats-card">
+                                <div class="stats-card-icon">⚡</div>
+                                <div class="stats-card-content">
+                                    <span class="stats-card-label">Avg Tokens/sec</span>
+                                    <span id="stat-avg-tps" class="stats-card-value">0.0</span>
+                                </div>
+                            </div>
+                            <div class="stats-card">
+                                <div class="stats-card-icon">⏱️</div>
+                                <div class="stats-card-content">
+                                    <span class="stats-card-label">Avg Load Time</span>
+                                    <span id="stat-avg-load" class="stats-card-value">0.0s</span>
+                                </div>
+                            </div>
+                            <div class="stats-card">
+                                <div class="stats-card-icon">🎯</div>
+                                <div class="stats-card-content">
+                                    <span class="stats-card-label">Avg Time to First Token</span>
+                                    <span id="stat-avg-ttft" class="stats-card-value">0.0s</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Per-Model Usage Table -->
+                        <div class="stats-section">
+                            <h3>Model Usage Breakdown</h3>
+                            <div class="stats-table-container">
+                                <table class="stats-table">
+                                    <thead>
+                                        <tr>
+                                            <th>Model</th>
+                                            <th>Requests</th>
+                                            <th>Prompt Tokens</th>
+                                            <th>Completion Tokens</th>
+                                            <th>Avg Tok/s</th>
+                                            <th>Avg Load</th>
+                                            <th>Avg TTFT</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="stats-model-tbody">
+                                        <tr><td colspan="7" style="text-align:center; color: var(--text-secondary); padding: 40px;">No data yet. Start chatting to see stats.</td></tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+
+                        <!-- Model Registry -->
+                        <div class="stats-section">
+                            <h3>Model Registry (Current & Historical)</h3>
+                            <div id="model-registry-grid" class="model-registry-grid">
+                                <div style="text-align:center; color: var(--text-secondary); padding: 40px;">Loading model registry...</div>
                             </div>
                         </div>
                     </div>

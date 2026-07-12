@@ -2818,5 +2818,144 @@ async function deleteMedia(itemId) {
     }
 }
 
+// -------------------------------------------------------------------------
+// STATS DASHBOARD CONTROLLER
+// -------------------------------------------------------------------------
+let currentStatsPeriod = "session";
+let cachedStatsData = null;
+
+// Period selector click handlers
+document.querySelectorAll(".stats-period-btn").forEach(btn => {
+    btn.addEventListener("click", () => {
+        document.querySelectorAll(".stats-period-btn").forEach(b => b.classList.remove("active"));
+        btn.classList.add("active");
+        currentStatsPeriod = btn.getAttribute("data-period");
+        if (cachedStatsData) {
+            renderStatsForPeriod(cachedStatsData, currentStatsPeriod);
+        }
+    });
+});
+
+async function loadStatsDashboard() {
+    try {
+        const [statsRes, registryRes] = await Promise.all([
+            fetch("/api/stats"),
+            fetch("/api/models/registry")
+        ]);
+        const statsData = await statsRes.json();
+        const registryData = await registryRes.json();
+        
+        cachedStatsData = statsData;
+        renderStatsForPeriod(statsData, currentStatsPeriod);
+        renderModelRegistry(registryData);
+    } catch (err) {
+        console.error("Failed to load stats dashboard:", err);
+    }
+}
+
+function formatNumber(n) {
+    if (n >= 1000000) return (n / 1000000).toFixed(1) + "M";
+    if (n >= 1000) return (n / 1000).toFixed(1) + "K";
+    return n.toLocaleString();
+}
+
+function renderStatsForPeriod(allData, period) {
+    const data = allData[period];
+    if (!data) return;
+    
+    document.getElementById("stat-total-requests").textContent = formatNumber(data.total_requests);
+    document.getElementById("stat-prompt-tokens").textContent = formatNumber(data.total_prompt_tokens);
+    document.getElementById("stat-completion-tokens").textContent = formatNumber(data.total_completion_tokens);
+    document.getElementById("stat-avg-tps").textContent = data.avg_tokens_sec.toFixed(1);
+    document.getElementById("stat-avg-load").textContent = data.avg_load_time.toFixed(2) + "s";
+    document.getElementById("stat-avg-ttft").textContent = data.avg_time_to_first_token.toFixed(2) + "s";
+    
+    // Render per-model table
+    const tbody = document.getElementById("stats-model-tbody");
+    if (!data.models || data.models.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="7" style="text-align:center; color: var(--text-secondary); padding: 40px;">No model usage data for this period.</td></tr>`;
+        return;
+    }
+    
+    // Sort by requests descending
+    const sorted = [...data.models].sort((a, b) => b.requests - a.requests);
+    let html = "";
+    sorted.forEach(m => {
+        html += `
+            <tr>
+                <td class="stats-model-id">${m.model_id}</td>
+                <td>${formatNumber(m.requests)}</td>
+                <td>${formatNumber(m.prompt_tokens)}</td>
+                <td>${formatNumber(m.completion_tokens)}</td>
+                <td class="stats-tps-value">${m.avg_tokens_sec.toFixed(1)}</td>
+                <td>${m.avg_load_time.toFixed(2)}s</td>
+                <td>${m.avg_time_to_first_token.toFixed(2)}s</td>
+            </tr>
+        `;
+    });
+    tbody.innerHTML = html;
+}
+
+function renderModelRegistry(models) {
+    const container = document.getElementById("model-registry-grid");
+    if (!models || models.length === 0) {
+        container.innerHTML = `<div style="text-align:center; color: var(--text-secondary); padding: 40px; grid-column: 1/-1;">No models registered yet. Models are registered when the server starts.</div>`;
+        return;
+    }
+    
+    const typeIcons = {
+        "llm": "🧠",
+        "image": "🎨",
+        "vision": "👁️",
+        "tts": "🔊",
+        "stt": "🎙️",
+        "video": "🎬"
+    };
+    
+    let html = "";
+    models.forEach(m => {
+        const isActive = m.is_active === 1;
+        const badgeClass = isActive ? "active" : "historical";
+        const badgeLabel = isActive ? "Active" : "Historical";
+        const cardClass = isActive ? "" : "inactive";
+        const icon = typeIcons[m.model_type] || "📦";
+        const firstSeen = m.first_seen ? new Date(m.first_seen * 1000).toLocaleDateString() : "Unknown";
+        const lastSeen = m.last_seen ? new Date(m.last_seen * 1000).toLocaleDateString() : "Unknown";
+        
+        html += `
+            <div class="registry-card ${cardClass}">
+                <div class="registry-card-header">
+                    <span class="registry-card-name">${icon} ${m.display_name}</span>
+                    <span class="registry-card-badge ${badgeClass}">${badgeLabel}</span>
+                </div>
+                <div class="registry-card-meta">
+                    <span>🏷️ Function: <strong>${m.function_id}</strong></span>
+                    <span>⚙️ Backend: <strong>${m.backend}</strong></span>
+                    <span>📐 VRAM: <strong>${m.vram_estimate_gb.toFixed(1)} GB</strong></span>
+                    <span>📅 First Seen: <strong>${firstSeen}</strong></span>
+                    <span>🕐 Last Seen: <strong>${lastSeen}</strong></span>
+                </div>
+                ${m.purpose ? `<div class="registry-card-purpose">${m.purpose}</div>` : ''}
+            </div>
+        `;
+    });
+    container.innerHTML = html;
+}
+
+// Auto-load stats when Stats tab is activated
+// Hook into existing tab click logic
+const statsTabObserver = new MutationObserver(() => {
+    const statsPane = document.getElementById("stats-pane");
+    if (statsPane && statsPane.classList.contains("active")) {
+        loadStatsDashboard();
+    }
+});
+
+const statsPane = document.getElementById("stats-pane");
+if (statsPane) {
+    statsTabObserver.observe(statsPane, { attributes: true, attributeFilter: ["class"] });
+}
+
+
 
 

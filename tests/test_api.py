@@ -397,5 +397,27 @@ class TestAPI(unittest.TestCase):
         self.assertEqual(data["status"], "success")
         mock_unlink.assert_called_once()
 
+    @patch("cerberai.database.db_get_aggregated_stats")
+    def test_get_inference_stats(self, mock_stats):
+        mock_stats.return_value = {
+            "session": {"total_requests": 5, "total_prompt_tokens": 100, "total_completion_tokens": 150, "avg_tokens_sec": 12.5, "avg_load_time": 0.5, "avg_time_to_first_token": 0.2, "models": []}
+        }
+        response = self.client.get("/api/stats")
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertIn("session", data)
+        self.assertEqual(data["session"]["total_requests"], 5)
+
+    @patch("cerberai.database.db_get_model_registry")
+    def test_get_model_registry(self, mock_registry):
+        mock_registry.return_value = [
+            {"function_id": "general", "display_name": "Qwen3", "is_active": 1}
+        ]
+        response = self.client.get("/api/models/registry")
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertEqual(len(data), 1)
+        self.assertEqual(data[0]["function_id"], "general")
+
 if __name__ == "__main__":
     unittest.main()

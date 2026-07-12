@@ -184,9 +184,16 @@ async def list_models():
     })
     return {"object": "list", "data": data}
 
+STARTUP_TIME = time.time()
+
 from typing import AsyncIterator
 
-async def stream_with_metrics(generator: AsyncIterator[bytes], model_id: str) -> AsyncIterator[bytes]:
+async def stream_with_metrics(
+    generator: AsyncIterator[bytes],
+    model_id: str,
+    load_time: float = 0.0,
+    prompt_tokens: int = 0
+) -> AsyncIterator[bytes]:
     start_time = time.time()
     first_token_time = None
     total_tokens = 0
@@ -234,6 +241,20 @@ async def stream_with_metrics(generator: AsyncIterator[bytes], model_id: str) ->
         "tokens_per_second": tps
     }
     
+    try:
+        from .database import db_add_inference_stat
+        ttft = (first_token_time - start_time) if first_token_time else wall_time
+        db_add_inference_stat(
+            model_id=model_id,
+            prompt_tokens=prompt_tokens,
+            completion_tokens=total_tokens,
+            load_time=load_time,
+            time_to_first_token=ttft,
+            total_time=wall_time
+        )
+    except Exception as stat_err:
+        print(f"Failed to record stream stats: {stat_err}")
+        
     yield f"data: {json.dumps({'metrics': metrics})}\n\n".encode("utf-8")
 
 @app.post("/v1/chat/completions")
@@ -509,6 +530,19 @@ async def chat_completions(request: Request):
                     "tokens_per_second": tps
                 }
                 result["metrics"] = metrics
+                try:
+                    from .database import db_add_inference_stat
+                    prompt_tokens_est = sum(len(str(m.get('content', ''))) // 4 for m in payload.get('messages', []))
+                    db_add_inference_stat(
+                        model_id=target_model_id,
+                        prompt_tokens=prompt_tokens_est,
+                        completion_tokens=completion_tokens,
+                        load_time=0.0,
+                        time_to_first_token=wall_time,
+                        total_time=wall_time
+                    )
+                except Exception as stat_err:
+                    print(f"Failed to record vision inference stats: {stat_err}")
                 return JSONResponse(content=result)
             except Exception as e:
                 raise HTTPException(status_code=500, detail=f"Vision inference error: {str(e)}")
@@ -815,6 +849,19 @@ async def chat_completions(request: Request):
                 "tokens_per_second": tps
             }
             result["metrics"] = metrics
+            try:
+                from .database import db_add_inference_stat
+                prompt_tokens_est = sum(len(str(m.get('content', ''))) // 4 for m in payload.get('messages', []))
+                db_add_inference_stat(
+                    model_id=target_model_id,
+                    prompt_tokens=prompt_tokens_est,
+                    completion_tokens=completion_tokens,
+                    load_time=0.0,
+                    time_to_first_token=wall_time,
+                    total_time=wall_time
+                )
+            except Exception as stat_err:
+                print(f"Failed to record LLM inference stats: {stat_err}")
             return JSONResponse(content=result)
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"Inference error: {str(e)}")
@@ -1168,6 +1215,24 @@ async def delete_image_file(filename: str):
         return {"status": "success", "message": f"Image '{filename}' deleted from disk."}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/stats")
+async def get_inference_stats():
+    """Retrieve aggregated inference statistics across all time intervals."""
+    from .database import db_get_aggregated_stats
+    try:
+        return JSONResponse(content=db_get_aggregated_stats(STARTUP_TIME))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to retrieve stats: {str(e)}")
+
+@app.get("/api/models/registry")
+async def get_model_registry():
+    """Retrieve the full model registry including historical models."""
+    from .database import db_get_model_registry
+    try:
+        return JSONResponse(content=db_get_model_registry())
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to retrieve model registry: {str(e)}")
 
 @app.get("/api/config")
 async def get_current_config():
