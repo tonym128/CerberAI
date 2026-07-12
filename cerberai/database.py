@@ -592,4 +592,44 @@ def db_get_next_pending_job() -> Optional[Dict[str, Any]]:
         return item
     return None
 
+def db_delete_job(job_id: str) -> bool:
+    """Delete a job from the queue database."""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("DELETE FROM job_queue WHERE id = ?", (job_id,))
+    conn.commit()
+    conn.close()
+    return True
+
+def db_move_job(job_id: str, direction: str) -> bool:
+    """Move a pending job up or down in the queue by swapping created_at timestamps."""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT id, created_at FROM job_queue WHERE status = 'pending' ORDER BY created_at ASC")
+    rows = cursor.fetchall()
+    jobs = [dict(r) for r in rows]
+    idx = -1
+    for i, job in enumerate(jobs):
+        if job["id"] == job_id:
+            idx = i
+            break
+    if idx == -1:
+        conn.close()
+        return False
+    swap_idx = -1
+    if direction == "up" and idx > 0:
+        swap_idx = idx - 1
+    elif direction == "down" and idx < len(jobs) - 1:
+        swap_idx = idx + 1
+    if swap_idx != -1:
+        t1 = jobs[idx]["created_at"]
+        t2 = jobs[swap_idx]["created_at"]
+        cursor.execute("UPDATE job_queue SET created_at = ? WHERE id = ?", (t2, jobs[idx]["id"]))
+        cursor.execute("UPDATE job_queue SET created_at = ? WHERE id = ?", (t1, jobs[swap_idx]["id"]))
+        conn.commit()
+        conn.close()
+        return True
+    conn.close()
+    return False
+
 

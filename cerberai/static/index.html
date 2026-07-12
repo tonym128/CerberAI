@@ -427,30 +427,36 @@
                             <div id="schedules-list-container" class="schedules-list">
                                 <!-- Populated dynamically -->
                             </div>
-                        <!-- Agent Job Queue Monitor -->
-                        <div class="automation-card" style="grid-column: 1 / -1; margin-top: 24px;">
-                            <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border-color); padding-bottom: 12px; margin-bottom: 16px;">
-                                <h3 class="auto-header" style="margin: 0; font-size: 15px; display: flex; align-items: center; gap: 8px;">⏳ Orchestrator Agent Job Queue</h3>
+                        </div> <!-- End Scheduled Automations Card -->
+                    </div> <!-- End Automations Grid -->
+                    
+                    <!-- Agent Job Queue Monitor Card -->
+                    <div class="automation-card" style="margin-top: 24px;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border-color); padding-bottom: 12px; margin-bottom: 16px; flex-wrap: wrap; gap: 10px;">
+                            <h3 class="auto-header" style="margin: 0; font-size: 15px; display: flex; align-items: center; gap: 8px;">⏳ Agent Orchestrator & Job Queue</h3>
+                            <div style="display: flex; gap: 8px; align-items: center;">
+                                <button type="button" id="btn-toggle-queue" class="btn btn-secondary font-semi" style="font-size: 11px; padding: 6px 12px; background: rgba(245, 158, 11, 0.1); color: #f59e0b; border: 1px solid rgba(245, 158, 11, 0.25);">⏸️ Pause Queue</button>
                                 <button type="button" id="btn-refresh-jobs" class="btn btn-secondary font-semi" style="font-size: 11px; padding: 6px 12px;">🔄 Refresh Queue</button>
                             </div>
-                            <div class="stats-table-container">
-                                <table class="stats-table" style="font-size: 12px;">
-                                    <thead>
-                                        <tr>
-                                            <th>Task Type</th>
-                                            <th>Status</th>
-                                            <th>Progress</th>
-                                            <th>VRAM Req.</th>
-                                            <th>Created At</th>
-                                            <th>Duration</th>
-                                            <th>Target/Topic</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody id="orchestrator-jobs-tbody">
-                                        <tr><td colspan="7" style="text-align:center; color: var(--text-secondary); padding: 20px;">No jobs enqueued yet. Start an automation to trigger a job.</td></tr>
-                                    </tbody>
-                                </table>
-                            </div>
+                        </div>
+                        <div class="stats-table-container">
+                            <table class="stats-table" style="font-size: 12px;">
+                                <thead>
+                                    <tr>
+                                        <th>Task Type</th>
+                                        <th>Status</th>
+                                        <th>Progress</th>
+                                        <th>VRAM Req.</th>
+                                        <th>Created At</th>
+                                        <th>Duration</th>
+                                        <th>Target/Topic</th>
+                                        <th style="text-align: center;">Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="orchestrator-jobs-tbody">
+                                    <tr><td colspan="8" style="text-align:center; color: var(--text-secondary); padding: 20px;">No jobs enqueued yet. Start an automation to trigger a job.</td></tr>
+                                </tbody>
+                            </table>
                         </div>
                     </div>
                 </div>

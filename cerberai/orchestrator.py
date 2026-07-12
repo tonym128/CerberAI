@@ -26,6 +26,7 @@ class Orchestrator:
         self.running_jobs: Dict[str, asyncio.Task] = {}
         self._loop_task: Optional[asyncio.Task] = None
         self._running = False
+        self.paused = False
 
     def start(self):
         self._running = True
@@ -56,6 +57,9 @@ class Orchestrator:
             try:
                 await asyncio.sleep(2.0)
                 self._cleanup_finished_jobs()
+                
+                if self.paused:
+                    continue
                 
                 # Check if we can run another job
                 job = db_get_next_pending_job()

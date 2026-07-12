@@ -856,12 +856,12 @@ if (btnNewsVideo) {
             if (!res.ok) return;
             const data = await res.json();
 
-            if (data.status === "running") {
+            if (data.status === "running" || data.status === "pending") {
                 btnNewsVideo.disabled = true;
                 btnNewsVideo.textContent = "Processing...";
                 newsVideoStatusContainer.classList.remove("hidden");
-                newsVideoProgress.style.width = `${data.progress}%`;
-                newsVideoStatusMsg.textContent = data.message;
+                newsVideoProgress.style.width = `${data.progress || 0}%`;
+                newsVideoStatusMsg.textContent = data.message || "Enqueued in Orchestrator...";
                 
                 // If pollInterval is not active, start it
                 if (!pollInterval) {
@@ -1104,12 +1104,12 @@ if (btnStartResearch) {
             if (!res.ok) return;
             const data = await res.json();
 
-            if (data.status === "running") {
+            if (data.status === "running" || data.status === "pending") {
                 btnStartResearch.disabled = true;
                 btnStartResearch.textContent = "Researching...";
                 researchStatusContainer.classList.remove("hidden");
-                researchProgress.style.width = `${data.progress}%`;
-                researchStatusMsg.textContent = data.message;
+                researchProgress.style.width = `${data.progress || 0}%`;
+                researchStatusMsg.textContent = data.message || "Enqueued in Orchestrator...";
                 
                 // If pollInterval is not active, start it
                 if (!researchPollInterval) {
@@ -1280,12 +1280,12 @@ if (btnStartPodcast) {
             if (!res.ok) return;
             const data = await res.json();
 
-            if (data.status === "running") {
+            if (data.status === "running" || data.status === "pending") {
                 btnStartPodcast.disabled = true;
                 btnStartPodcast.textContent = "Generating...";
                 podcastStatusContainer.classList.remove("hidden");
-                podcastProgress.style.width = `${data.progress}%`;
-                podcastStatusMsg.textContent = data.message;
+                podcastProgress.style.width = `${data.progress || 0}%`;
+                podcastStatusMsg.textContent = data.message || "Enqueued in Orchestrator...";
                 
                 // If pollInterval is not active, start it
                 if (!podcastPollInterval) {
@@ -3181,14 +3181,84 @@ if (mcpPane) {
 // -------------------------------------------------------------------------
 // AGENT JOB QUEUE CONTROLLER
 // -------------------------------------------------------------------------
+const btnToggleQueue = document.getElementById("btn-toggle-queue");
+
+async function checkQueueStatus() {
+    try {
+        const res = await fetch("/api/jobs/queue/status");
+        if (!res.ok) return;
+        const data = await res.json();
+        updateQueueToggleButton(data.paused);
+    } catch (err) {
+        console.error("Failed to check queue status:", err);
+    }
+}
+
+function updateQueueToggleButton(isPaused) {
+    if (!btnToggleQueue) return;
+    if (isPaused) {
+        btnToggleQueue.textContent = "▶️ Resume Queue";
+        btnToggleQueue.style.background = "rgba(16, 185, 129, 0.1)";
+        btnToggleQueue.style.color = "#10b981";
+        btnToggleQueue.style.borderColor = "rgba(16, 185, 129, 0.25)";
+    } else {
+        btnToggleQueue.textContent = "⏸️ Pause Queue";
+        btnToggleQueue.style.background = "rgba(245, 158, 11, 0.1)";
+        btnToggleQueue.style.color = "#f59e0b";
+        btnToggleQueue.style.borderColor = "rgba(245, 158, 11, 0.25)";
+    }
+}
+
+if (btnToggleQueue) {
+    btnToggleQueue.addEventListener("click", async () => {
+        try {
+            const res = await fetch("/api/jobs/queue/toggle", { method: "POST" });
+            if (!res.ok) return;
+            const data = await res.json();
+            updateQueueToggleButton(data.paused);
+            loadOrchestratorJobs();
+        } catch (err) {
+            console.error("Failed to toggle queue state:", err);
+        }
+    });
+}
+
 async function loadOrchestratorJobs() {
     try {
         const response = await fetch("/api/jobs");
         if (!response.ok) return;
         const jobs = await response.json();
         renderOrchestratorJobs(jobs);
+        checkQueueStatus();
     } catch (err) {
         console.error("Failed to load orchestrator jobs:", err);
+    }
+}
+
+async function cancelOrRemoveJob(jobId) {
+    if (!confirm("Are you sure you want to cancel/remove this job?")) return;
+    try {
+        const res = await fetch(`/api/jobs/${jobId}/cancel`, { method: "POST" });
+        if (res.ok) {
+            loadOrchestratorJobs();
+        }
+    } catch (err) {
+        console.error("Failed to cancel job:", err);
+    }
+}
+
+async function moveJob(jobId, direction) {
+    try {
+        const res = await fetch(`/api/jobs/${jobId}/move`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ direction })
+        });
+        if (res.ok) {
+            loadOrchestratorJobs();
+        }
+    } catch (err) {
+        console.error("Failed to move job:", err);
     }
 }
 
@@ -3197,7 +3267,7 @@ function renderOrchestratorJobs(jobs) {
     if (!tbody) return;
     
     if (jobs.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="7" style="text-align:center; color: var(--text-secondary); padding: 20px;">No jobs enqueued yet. Start an automation to trigger a job.</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="8" style="text-align:center; color: var(--text-secondary); padding: 20px;">No jobs enqueued yet. Start an automation to trigger a job.</td></tr>`;
         return;
     }
     
@@ -3236,6 +3306,24 @@ function renderOrchestratorJobs(jobs) {
         
         const topic = job.parameters.topic || job.parameters.query || "-";
         
+        let actionsHtml = `<div style="display:flex; gap:6px; justify-content:center;">`;
+        if (job.status === "pending") {
+            actionsHtml += `
+                <button type="button" class="btn btn-secondary" style="padding: 2px 6px; font-size:10px;" onclick="moveJob('${job.id}', 'up')" title="Move Up">🔼</button>
+                <button type="button" class="btn btn-secondary" style="padding: 2px 6px; font-size:10px;" onclick="moveJob('${job.id}', 'down')" title="Move Down">🔽</button>
+            `;
+        }
+        if (job.status === "pending" || job.status === "running") {
+            actionsHtml += `
+                <button type="button" class="btn btn-secondary" style="padding: 2px 6px; font-size:10px; color:#ef4444; border-color:rgba(239,68,68,0.15); background:rgba(239,68,68,0.05);" onclick="cancelOrRemoveJob('${job.id}')" title="Cancel/Remove">❌</button>
+            `;
+        } else {
+            actionsHtml += `
+                <button type="button" class="btn btn-secondary" style="padding: 2px 6px; font-size:10px; opacity: 0.6;" onclick="cancelOrRemoveJob('${job.id}')" title="Delete Log">🗑️</button>
+            `;
+        }
+        actionsHtml += `</div>`;
+        
         html += `
             <tr>
                 <td style="font-weight:600; color:var(--text-primary);">${job.task_type}</td>
@@ -3244,12 +3332,16 @@ function renderOrchestratorJobs(jobs) {
                 <td style="font-family:var(--font-mono); font-weight:600; color:var(--primary);">${job.vram_required.toFixed(1)} GB</td>
                 <td>${createdDate}</td>
                 <td>${durationStr}</td>
-                <td style="max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${topic}">${topic}</td>
+                <td style="max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${topic}">${topic}</td>
+                <td>${actionsHtml}</td>
             </tr>
         `;
     });
     tbody.innerHTML = html;
 }
+
+window.moveJob = moveJob;
+window.cancelOrRemoveJob = cancelOrRemoveJob;
 
 const btnRefreshJobs = document.getElementById("btn-refresh-jobs");
 if (btnRefreshJobs) {

@@ -397,7 +397,7 @@ async def chat_completions(request: Request):
 
         # Sliding context window check to fit within model n_ctx limit
         n_ctx = model_cfg.n_ctx or 16384
-        safe_limit = max(2000, n_ctx - 2000)
+        safe_limit = max(3000, n_ctx - 3000)
         
         system_msg = None
         other_msgs = []
@@ -413,7 +413,7 @@ async def chat_completions(request: Request):
                 content = m.get("content", "")
                 if isinstance(content, str):
                     total_chars += len(content)
-            return total_chars // 4
+            return total_chars // 3
             
         sys_tokens = est_tokens([system_msg]) if system_msg else 0
         while other_msgs and (sys_tokens + est_tokens(other_msgs) > safe_limit):
@@ -427,7 +427,7 @@ async def chat_completions(request: Request):
         payload["messages"] = messages
         
         # Re-estimate prompt tokens after pruning
-        prompt_tokens_est = sum(len(str(m.get('content', ''))) // 4 for m in messages)
+        prompt_tokens_est = sum(len(str(m.get('content', ''))) // 3 for m in messages)
 
     if model_cfg and model_cfg.type == "image":
         try:
@@ -1460,6 +1460,64 @@ async def get_job(job_id: str):
         if not job:
             raise HTTPException(status_code=404, detail="Job not found")
         return JSONResponse(content=job)
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/jobs/queue/status")
+async def get_queue_status():
+    """Get the current paused status of the orchestrator queue."""
+    return JSONResponse(content={"paused": orchestrator.paused})
+
+@app.post("/api/jobs/queue/toggle")
+async def toggle_queue():
+    """Toggle the orchestrator queue between active and paused."""
+    orchestrator.paused = not orchestrator.paused
+    print(f"Orchestrator queue paused state toggled to: {orchestrator.paused}")
+    return JSONResponse(content={"paused": orchestrator.paused})
+
+@app.post("/api/jobs/{job_id}/cancel")
+async def cancel_job(job_id: str):
+    """Cancel a running job or delete a pending job from the queue."""
+    from .database import db_get_job, db_update_job_status, db_delete_job
+    try:
+        job = db_get_job(job_id)
+        if not job:
+            raise HTTPException(status_code=404, detail="Job not found")
+        
+        status = job["status"]
+        if status == "running":
+            if job_id in orchestrator.running_jobs:
+                task = orchestrator.running_jobs[job_id]
+                task.cancel()
+                db_update_job_status(job_id, "failed", progress=0.0, error="Cancelled by user")
+            else:
+                db_update_job_status(job_id, "failed", progress=0.0, error="Cancelled by user")
+        elif status == "pending":
+            db_delete_job(job_id)
+            
+        return JSONResponse(content={"success": True, "message": "Job cancelled and removed."})
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/jobs/{job_id}/move")
+async def move_job(job_id: str, request: Request):
+    """Move a pending job up or down in the queue."""
+    from .database import db_move_job
+    try:
+        body = await request.json()
+        direction = body.get("direction")
+        if direction not in ("up", "down"):
+            raise HTTPException(status_code=400, detail="Direction must be 'up' or 'down'")
+            
+        success = db_move_job(job_id, direction)
+        if not success:
+            raise HTTPException(status_code=400, detail="Failed to move job (e.g. not pending or already at end)")
+            
+        return JSONResponse(content={"success": True})
     except HTTPException:
         raise
     except Exception as e:
