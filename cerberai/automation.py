@@ -271,7 +271,7 @@ async def generate_yesterday_news_video(manager, agent, topic: str = None, date_
         return
 
     # Get tts backend (image/video models loaded lazily to save memory)
-    tts_backend = await manager.get_model("tts-offline")
+    tts_backend = await manager.get_model("tts")
     
     temp_dir = tempfile.mkdtemp()
     total_stories = len(stories)
@@ -319,7 +319,7 @@ async def generate_yesterday_news_video(manager, agent, topic: str = None, date_
         if do_image_to_video or (not do_text_to_video and video_mode != "image"):
             try:
                 # First generate the static image as the input
-                img_backend = await manager.get_model("image-lcm")
+                img_backend = await manager.get_model("image")
                 img_res = await img_backend.handle_image_generation({"prompt": story["image_prompt"]})
                 b64_data = img_res["data"][0]["b64_json"]
                 with open(img_temp_raw, "wb") as f:
@@ -353,7 +353,7 @@ async def generate_yesterday_news_video(manager, agent, topic: str = None, date_
         # 3. Traditional static image generation
         if video_mode == "image" and not use_video_stream:
             try:
-                img_backend = await manager.get_model("image-lcm")
+                img_backend = await manager.get_model("image")
                 img_res = await img_backend.handle_image_generation({"prompt": story["image_prompt"]})
                 b64_data = img_res["data"][0]["b64_json"]
                 with open(img_temp_raw, "wb") as f:
@@ -707,7 +707,7 @@ async def generate_deep_research_report(manager, agent, query: str):
     
     sub_queries = []
     try:
-        backend = await manager.get_model("general-llama3")
+        backend = await manager.get_model(manager.config.router.fallback_model)
         payload = {
             "messages": [{"role": "user", "content": sub_queries_prompt}],
             "temperature": 0.2
@@ -788,7 +788,7 @@ async def generate_deep_research_report(manager, agent, query: str):
     )
     
     try:
-        backend = await manager.get_model("general-llama3")
+        backend = await manager.get_model(manager.config.router.fallback_model)
         payload = {
             "messages": [{"role": "user", "content": report_prompt}],
             "temperature": 0.4
@@ -967,7 +967,7 @@ async def generate_daily_podcast(manager, agent, topic: str = None, date_str: st
     
     script = []
     try:
-        backend = await manager.get_model("general-llama3")
+        backend = await manager.get_model(manager.config.router.fallback_model)
         payload = {
             "messages": [{"role": "user", "content": script_prompt}],
             "temperature": 0.5
@@ -1020,7 +1020,7 @@ async def generate_daily_podcast(manager, agent, topic: str = None, date_str: st
     # 4. Synthesize speaker turns
     turn_files = []
     try:
-        tts_backend = await manager.get_model("tts-offline")
+        tts_backend = await manager.get_model("tts")
         await tts_backend.load()
         
         for idx, turn in enumerate(script):

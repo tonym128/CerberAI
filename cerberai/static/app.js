@@ -1401,7 +1401,7 @@ if (openSetupBtn && setupModal) {
         card.dataset.type = model.type;
         
         if (model.type === "llm") {
-            const isFallback = (model.id === "general-llama3");
+            const isFallback = (model.id === "general-llama3" || model.id === "general-qwen3");
             const removeBtnHtml = isFallback ? "" : `<button type="button" class="btn-remove-model" style="background: rgba(239, 68, 68, 0.15); color: var(--accent-red); padding: 4px 10px; border-radius: 6px; border: 1px solid rgba(239, 68, 68, 0.3); font-size: 11px; cursor: pointer; float: right;">Remove Model</button>`;
 
             card.innerHTML = `
@@ -1981,7 +1981,7 @@ if (openSetupBtn && setupModal) {
             router: {
                 model_type: document.getElementById("setup-router-type").value,
                 model_name: document.getElementById("setup-router-type").value === "llm" ? document.getElementById("setup-router-model").value : null,
-                fallback_model: "general-llama3"
+                fallback_model: "general-qwen3"
             },
             search: {
                 provider: document.getElementById("setup-search-provider").value,

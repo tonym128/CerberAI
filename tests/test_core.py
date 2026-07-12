@@ -13,7 +13,7 @@ class TestConfig(unittest.TestCase):
         # When config file doesn't exist, it should fallback gracefully
         cfg = load_config("nonexistent_config.yaml")
         self.assertIsNotNone(cfg)
-        self.assertEqual(cfg.router.fallback_model, "general-llama3")
+        self.assertEqual(cfg.router.fallback_model, "general")
         self.assertEqual(len(cfg.models), 8)
 
 class TestRouter(unittest.TestCase):

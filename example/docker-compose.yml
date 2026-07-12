@@ -61,7 +61,7 @@ services:
       - IMAGE_GENERATION_ENGINE=openai
       - IMAGES_OPENAI_API_BASE_URL=http://127.0.0.1:8000/v1
       - IMAGES_OPENAI_API_KEY=cerberai
-      - IMAGE_GENERATION_MODEL=image-lcm
+      - IMAGE_GENERATION_MODEL=image
 
 volumes:
   open-webui-data:

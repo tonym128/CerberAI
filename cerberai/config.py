@@ -52,7 +52,7 @@ def load_config(config_path: str = "config.yaml") -> AppConfig:
         "hf_token": None,
         "models": [
             {
-                "id": "general-llama3",
+                "id": "general",
                 "type": "llm",
                 "backend": "llama.cpp",
                 "backend_config": {
@@ -65,7 +65,7 @@ def load_config(config_path: str = "config.yaml") -> AppConfig:
                 "purpose": "general reasoning"
             },
             {
-                "id": "coding-qwen",
+                "id": "coding",
                 "type": "llm",
                 "backend": "llama.cpp",
                 "backend_config": {
@@ -78,7 +78,7 @@ def load_config(config_path: str = "config.yaml") -> AppConfig:
                 "purpose": "general coding"
             },
             {
-                "id": "stt-whisper",
+                "id": "stt",
                 "type": "stt",
                 "backend": "whisper",
                 "backend_config": {
@@ -87,7 +87,7 @@ def load_config(config_path: str = "config.yaml") -> AppConfig:
                 "vram_estimate_gb": 4.0
             },
             {
-                "id": "tts-offline",
+                "id": "tts",
                 "type": "tts",
                 "backend": "tts",
                 "backend_config": {
@@ -97,7 +97,7 @@ def load_config(config_path: str = "config.yaml") -> AppConfig:
                 "vram_estimate_gb": 0.5
             },
             {
-                "id": "image-lcm",
+                "id": "image",
                 "type": "image",
                 "backend": "diffusers",
                 "backend_config": {
@@ -106,7 +106,7 @@ def load_config(config_path: str = "config.yaml") -> AppConfig:
                 "vram_estimate_gb": 5.5
             },
             {
-                "id": "vision-qwen",
+                "id": "vision",
                 "type": "vision",
                 "backend": "llama.cpp",
                 "backend_config": {
@@ -121,7 +121,7 @@ def load_config(config_path: str = "config.yaml") -> AppConfig:
                 "purpose": "image-to-text vision analysis"
             },
             {
-                "id": "routing-phi",
+                "id": "routing",
                 "type": "llm",
                 "backend": "llama.cpp",
                 "backend_config": {
@@ -135,7 +135,7 @@ def load_config(config_path: str = "config.yaml") -> AppConfig:
                 "purpose": "routing classification"
             },
             {
-                "id": "video-generation",
+                "id": "video",
                 "type": "video",
                 "backend": "video",
                 "backend_config": {
@@ -151,8 +151,8 @@ def load_config(config_path: str = "config.yaml") -> AppConfig:
             "eviction_strategy": "lru"
         },
         "router": {
-            "fallback_model": "general-llama3",
-            "model_name": "routing-phi",
+            "fallback_model": "general",
+            "model_name": "routing",
             "model_type": "llm"
         },
         "search": {

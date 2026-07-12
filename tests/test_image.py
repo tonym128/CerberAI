@@ -31,14 +31,14 @@ class TestImageAPI(unittest.TestCase):
         response = self.client.post("/v1/images/generations", json=payload)
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()["data"][0]["b64_json"], "mock-base64-data")
-        mock_get_model.assert_called_once_with("image-lcm")
+        mock_get_model.assert_called_once_with("image")
 
     def test_diffusers_backend_queues_calls(self):
         import asyncio
         from cerberai.backends.diffusers import DiffusersBackend
         
         # Setup backend
-        backend = DiffusersBackend("image-lcm", {"model_name": "mock-lcm"}, 4.0)
+        backend = DiffusersBackend("image", {"model_name": "mock-lcm"}, 4.0)
         
         # Mock pipeline call with a slow function
         active_calls = 0

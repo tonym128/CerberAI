@@ -46,19 +46,19 @@ class TestAPI(unittest.TestCase):
         data = response.json()
         self.assertEqual(data["object"], "list")
         self.assertTrue(any(model["id"] == "auto" for model in data["data"]))
-        self.assertTrue(any(model["id"] == "general-llama3" for model in data["data"]))
+        self.assertTrue(any(model["id"] == "general" for model in data["data"]))
 
     @patch("cerberai.main.manager.get_model")
     @patch("cerberai.main.router.route_chat")
     def test_chat_completions_endpoint(self, mock_route_chat, mock_get_model):
         # Mock routing and backend handling
-        mock_route_chat.return_value = "general-llama3"
+        mock_route_chat.return_value = "general"
         mock_backend = AsyncMock()
         mock_backend.handle_chat_completion.return_value = {
             "id": "chatcmpl-123",
             "object": "chat.completion",
             "created": 1677600000,
-            "model": "general-llama3",
+            "model": "general",
             "choices": [{
                 "index": 0,
                 "message": {
@@ -79,12 +79,12 @@ class TestAPI(unittest.TestCase):
         response = self.client.post("/v1/chat/completions", json=payload)
         self.assertEqual(response.status_code, 200)
         data = response.json()
-        self.assertEqual(data["model"], "general-llama3")
+        self.assertEqual(data["model"], "general")
         self.assertEqual(data["choices"][0]["message"]["content"], "Hello! I am your general model.")
         
         # Verify routing and manager were called correctly
         mock_route_chat.assert_called_once_with([{"role": "user", "content": "Hello!"}], "auto", unittest.mock.ANY)
-        mock_get_model.assert_called_once_with("general-llama3")
+        mock_get_model.assert_called_once_with("general")
 
     @patch("cerberai.main.manager.get_model")
     @patch("cerberai.main.router.route_chat")
@@ -290,9 +290,9 @@ class TestAPI(unittest.TestCase):
             # Mock file contents for load_config reading
             import yaml
             mock_config_data = {
-                "models": [{"id": "general-llama3", "type": "llm", "backend": "llama.cpp"}],
+                "models": [{"id": "general", "type": "llm", "backend": "llama.cpp"}],
                 "resource_limits": {"max_vram_gb": 12.0, "max_ram_gb": 16.0, "eviction_strategy": "lru"},
-                "router": {"fallback_model": "general-llama3", "model_type": "heuristics"},
+                "router": {"fallback_model": "general", "model_type": "heuristics"},
                 "search": {"provider": "duckduckgo"},
                 "server": {"host": "127.0.0.1", "port": 8000}
             }
@@ -320,7 +320,7 @@ class TestAPI(unittest.TestCase):
         mock_get_model.return_value = mock_backend
 
         payload = {
-            "model": "general-llama3",
+            "model": "general",
             "messages": [
                 {"role": "user", "content": [{"type": "text", "text": "hello coding agent"}]}
             ],
@@ -345,7 +345,7 @@ class TestAPI(unittest.TestCase):
 
         # Prepare payload with tools (meaning client wants to manage tools itself)
         payload = {
-            "model": "general-llama3",
+            "model": "general",
             "messages": [{"role": "user", "content": "list the files"}],
             "tools": [{
                 "type": "function",

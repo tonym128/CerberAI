@@ -211,7 +211,7 @@ async def handle_telegram_multimodal(config, manager, agent, caption: str, mime_
         if reply_with_tts:
             try:
                 await send_telegram_message(config, "🎤 Synthesizing voice response...")
-                tts_backend = await manager.get_model("tts-offline")
+                tts_backend = await manager.get_model("tts")
                 wav_bytes = await tts_backend.handle_audio_speech({"input": ans})
                 ogg_bytes = await convert_wav_to_ogg(wav_bytes)
                 await send_telegram_voice(config, ogg_bytes, f"Voice analysis reply")
@@ -324,7 +324,7 @@ async def handle_telegram_message(text: str, config, manager, agent, reply_with_
             if reply_with_tts:
                 try:
                     await send_telegram_message(config, "🎤 Synthesizing voice response...")
-                    tts_backend = await manager.get_model("tts-offline")
+                    tts_backend = await manager.get_model("tts")
                     wav_bytes = await tts_backend.handle_audio_speech({"input": ans})
                     ogg_bytes = await convert_wav_to_ogg(wav_bytes)
                     await send_telegram_voice(config, ogg_bytes, f"Voice response ({target_model_id})")
@@ -558,7 +558,7 @@ async def start_telegram_loop(config, manager, agent):
                                                 wav_bytes = await convert_ogg_to_wav(ogg_bytes)
                                                 
                                                 # Transcribe WAV to text
-                                                whisper_backend = await manager.get_model("stt-whisper")
+                                                whisper_backend = await manager.get_model("stt")
                                                 stt_res = await whisper_backend.handle_audio_transcription(wav_bytes, "voice.wav", {})
                                                 transcribed = stt_res.get("text", "").strip()
                                                 

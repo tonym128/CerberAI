@@ -29,7 +29,7 @@ class TestAudioAPI(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.content, b"mock-audio-bytes")
         self.assertEqual(response.headers["content-type"], "audio/mpeg")
-        mock_get_model.assert_called_once_with("tts-offline")
+        mock_get_model.assert_called_once_with("tts")
 
     @patch("cerberai.main.manager.get_model")
     def test_audio_transcriptions_endpoint(self, mock_get_model):
@@ -49,7 +49,7 @@ class TestAudioAPI(unittest.TestCase):
         response = self.client.post("/v1/audio/transcriptions", files=files, data=data)
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json(), {"text": "Transcribed hello."})
-        mock_get_model.assert_called_once_with("stt-whisper")
+        mock_get_model.assert_called_once_with("stt")
 
 if __name__ == "__main__":
     unittest.main()
