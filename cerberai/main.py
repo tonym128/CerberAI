@@ -1140,7 +1140,7 @@ async def save_config(request: Request):
         # Update the agent executor references
         agent.config = config
         agent.manager = manager
-        agent.tools = agent._scan_and_load_tools()  # Rescan tools if models changed
+        agent.reload_tools()  # Rescan tools if models changed
         
         return JSONResponse(content={"message": "Configuration updated and reloaded successfully!"})
     except Exception as e:

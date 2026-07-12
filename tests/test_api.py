@@ -8,6 +8,11 @@ from fastapi.testclient import TestClient
 with patch("cerberai.manager.DynamicModelManager._create_backend") as mock_init:
     mock_backend = AsyncMock()
     mock_backend.is_loaded = AsyncMock(return_value=False)
+    
+    # get_diagnostics is a synchronous method, so mock it with MagicMock
+    from unittest.mock import MagicMock
+    mock_backend.get_diagnostics = MagicMock(return_value={})
+    
     mock_init.return_value = mock_backend
     from cerberai.main import app
 
@@ -91,10 +96,11 @@ class TestAPI(unittest.TestCase):
         }
         mock_get_model.return_value = mock_backend
         
-        # Inject video-generation into config models
+        # Inject video-generation into config models if not present
         from cerberai.main import config
         from cerberai.config import ModelConfig
-        config.models.append(ModelConfig(id="video-generation", type="video", backend="video"))
+        if not any(m.id == "video-generation" for m in config.models):
+            config.models.append(ModelConfig(id="video-generation", type="video", backend="video"))
 
         payload = {
             "model": "auto",
@@ -120,6 +126,12 @@ class TestAPI(unittest.TestCase):
             "b64_json": "bW9jay12aWRlbw=="
         }
         mock_get_model.return_value = mock_backend
+        
+        # Inject video-generation into config models if not present
+        from cerberai.main import config
+        from cerberai.config import ModelConfig
+        if not any(m.id == "video-generation" for m in config.models):
+            config.models.append(ModelConfig(id="video-generation", type="video", backend="video"))
         
         payload = {
             "model": "video-generation",
@@ -263,6 +275,41 @@ class TestAPI(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         data = response.json()
         self.assertTrue(isinstance(data, list))
+
+    @patch("builtins.open")
+    @patch("cerberai.main.manager.unload_all")
+    def test_save_config_endpoint(self, mock_unload_all, mock_open):
+        mock_unload_all.return_value = None
+        
+        import cerberai.main
+        orig_config = cerberai.main.config
+        orig_manager = cerberai.main.manager
+        orig_agent = cerberai.main.agent
+        
+        try:
+            # Mock file contents for load_config reading
+            import yaml
+            mock_config_data = {
+                "models": [{"id": "general-llama3", "type": "llm", "backend": "llama.cpp"}],
+                "resource_limits": {"max_vram_gb": 12.0, "max_ram_gb": 16.0, "eviction_strategy": "lru"},
+                "router": {"fallback_model": "general-llama3", "model_type": "heuristics"},
+                "search": {"provider": "duckduckgo"},
+                "server": {"host": "127.0.0.1", "port": 8000}
+            }
+            yaml_content = yaml.safe_dump(mock_config_data)
+            
+            # Mock file handling
+            mock_file = unittest.mock.mock_open(read_data=yaml_content)
+            mock_open.side_effect = mock_file
+            
+            response = self.client.post("/api/config", json=mock_config_data)
+            self.assertEqual(response.status_code, 200)
+            self.assertEqual(response.json()["message"], "Configuration updated and reloaded successfully!")
+        finally:
+            # Restore original globals
+            cerberai.main.config = orig_config
+            cerberai.main.manager = orig_manager
+            cerberai.main.agent = orig_agent
 
 if __name__ == "__main__":
     unittest.main()

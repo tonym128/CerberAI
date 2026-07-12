@@ -14,7 +14,7 @@ class TestConfig(unittest.TestCase):
         cfg = load_config("nonexistent_config.yaml")
         self.assertIsNotNone(cfg)
         self.assertEqual(cfg.router.fallback_model, "general-llama3")
-        self.assertEqual(len(cfg.models), 1)
+        self.assertEqual(len(cfg.models), 8)
 
 class TestRouter(unittest.TestCase):
     def setUp(self):

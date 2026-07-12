@@ -30,6 +30,12 @@ class AgentExecutor:
         # 2. Load Local Skills as Tools
         self.load_skills()
 
+    def reload_tools(self):
+        """Reload all built-in and dynamic skill tools."""
+        self.tools.clear()
+        self.register_builtin_tools()
+        self.load_skills()
+
     def register_builtin_tools(self):
         """Register default tools like Web Search."""
         self.tools["web_search"] = {
