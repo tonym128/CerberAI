@@ -1584,112 +1584,112 @@ if (openSetupBtn && setupModal) {
             vram: 4.0,
             ram: 16.0,
             router_type: "llm",
-            router_model: "routing-phi",
+            router_model: "routing",
             models: [
-                { id: "general-llama3", type: "llm", backend: "llama.cpp", backend_config: { repo_id: "Qwen/Qwen2.5-1.5B-Instruct-GGUF", filename: "qwen2.5-1.5b-instruct-q4_k_m.gguf", port: 8081, n_gpu_layers: 99 }, vram_estimate_gb: 1.2, purpose: "general reasoning", n_ctx: null },
-                { id: "coding-qwen", type: "llm", backend: "llama.cpp", backend_config: { repo_id: "Qwen/Qwen2.5-Coder-1.5B-Instruct-GGUF", filename: "qwen2.5-coder-1.5b-instruct-q4_k_m.gguf", port: 8082, n_gpu_layers: 99 }, vram_estimate_gb: 1.2, purpose: "general coding", n_ctx: null },
-                { id: "image-lcm", type: "image", backend: "diffusers", backend_config: { model_name: "Lykon/dreamshaper-8-lcm" }, vram_estimate_gb: 4.0 },
-                { id: "stt-whisper", type: "stt", backend: "whisper", backend_config: { model_name: "tiny" }, vram_estimate_gb: 0.5 },
-                { id: "tts-offline", type: "tts", backend: "tts", backend_config: { engine: "kokoro", voice: "af_sarah" }, vram_estimate_gb: 0.5 },
-                { id: "routing-phi", type: "llm", backend: "llama.cpp", backend_config: { repo_id: "microsoft/Phi-3-mini-4k-instruct-gguf", filename: "Phi-3-mini-4k-instruct-q4.gguf", port: 8083, n_gpu_layers: 99 }, vram_estimate_gb: 2.2, purpose: "routing classification", n_ctx: 4096 }
+                { id: "general", type: "llm", backend: "llama.cpp", backend_config: { repo_id: "Qwen/Qwen3-1.5B-Instruct-GGUF", filename: "qwen3-1.5b-instruct-q4_k_m.gguf", port: 8081, n_gpu_layers: 99 }, vram_estimate_gb: 1.2, purpose: "general reasoning", n_ctx: null },
+                { id: "coding", type: "llm", backend: "llama.cpp", backend_config: { repo_id: "Qwen/Qwen3-Coder-1.5B-Instruct-GGUF", filename: "qwen3-coder-1.5b-instruct-q4_k_m.gguf", port: 8082, n_gpu_layers: 99 }, vram_estimate_gb: 1.2, purpose: "general coding", n_ctx: null },
+                { id: "image", type: "image", backend: "diffusers", backend_config: { model_name: "Lykon/dreamshaper-8-lcm" }, vram_estimate_gb: 4.0 },
+                { id: "stt", type: "stt", backend: "whisper", backend_config: { model_name: "tiny" }, vram_estimate_gb: 0.5 },
+                { id: "tts", type: "tts", backend: "tts", backend_config: { engine: "kokoro", voice: "af_sarah" }, vram_estimate_gb: 0.5 },
+                { id: "routing", type: "llm", backend: "llama.cpp", backend_config: { repo_id: "microsoft/Phi-3-mini-4k-instruct-gguf", filename: "Phi-3-mini-4k-instruct-q4.gguf", port: 8083, n_gpu_layers: 99 }, vram_estimate_gb: 2.2, purpose: "routing classification", n_ctx: 4096 }
             ]
         },
         "6": {
             vram: 6.0,
             ram: 16.0,
             router_type: "llm",
-            router_model: "routing-phi",
+            router_model: "routing",
             models: [
-                { id: "general-llama3", type: "llm", backend: "llama.cpp", backend_config: { repo_id: "Qwen/Qwen2.5-3B-Instruct-GGUF", filename: "qwen2.5-3b-instruct-q4_k_m.gguf", port: 8081, n_gpu_layers: 99 }, vram_estimate_gb: 2.2, purpose: "general reasoning", n_ctx: null },
-                { id: "coding-qwen", type: "llm", backend: "llama.cpp", backend_config: { repo_id: "Qwen/Qwen2.5-Coder-3B-Instruct-GGUF", filename: "qwen2.5-coder-3b-instruct-q4_k_m.gguf", port: 8082, n_gpu_layers: 99 }, vram_estimate_gb: 2.2, purpose: "general coding", n_ctx: null },
-                { id: "image-lcm", type: "image", backend: "diffusers", backend_config: { model_name: "Lykon/dreamshaper-8-lcm" }, vram_estimate_gb: 4.0 },
-                { id: "stt-whisper", type: "stt", backend: "whisper", backend_config: { model_name: "base" }, vram_estimate_gb: 0.7 },
-                { id: "tts-offline", type: "tts", backend: "tts", backend_config: { engine: "kokoro", voice: "af_sarah" }, vram_estimate_gb: 0.5 },
-                { id: "routing-phi", type: "llm", backend: "llama.cpp", backend_config: { repo_id: "microsoft/Phi-3-mini-4k-instruct-gguf", filename: "Phi-3-mini-4k-instruct-q4.gguf", port: 8083, n_gpu_layers: 99 }, vram_estimate_gb: 2.2, purpose: "routing classification", n_ctx: 4096 }
+                { id: "general", type: "llm", backend: "llama.cpp", backend_config: { repo_id: "Qwen/Qwen3-3B-Instruct-GGUF", filename: "qwen3-3b-instruct-q4_k_m.gguf", port: 8081, n_gpu_layers: 99 }, vram_estimate_gb: 2.2, purpose: "general reasoning", n_ctx: null },
+                { id: "coding", type: "llm", backend: "llama.cpp", backend_config: { repo_id: "Qwen/Qwen3-Coder-3B-Instruct-GGUF", filename: "qwen3-coder-3b-instruct-q4_k_m.gguf", port: 8082, n_gpu_layers: 99 }, vram_estimate_gb: 2.2, purpose: "general coding", n_ctx: null },
+                { id: "image", type: "image", backend: "diffusers", backend_config: { model_name: "Lykon/dreamshaper-8-lcm" }, vram_estimate_gb: 4.0 },
+                { id: "stt", type: "stt", backend: "whisper", backend_config: { model_name: "base" }, vram_estimate_gb: 0.7 },
+                { id: "tts", type: "tts", backend: "tts", backend_config: { engine: "kokoro", voice: "af_sarah" }, vram_estimate_gb: 0.5 },
+                { id: "routing", type: "llm", backend: "llama.cpp", backend_config: { repo_id: "microsoft/Phi-3-mini-4k-instruct-gguf", filename: "Phi-3-mini-4k-instruct-q4.gguf", port: 8083, n_gpu_layers: 99 }, vram_estimate_gb: 2.2, purpose: "routing classification", n_ctx: 4096 }
             ]
         },
         "8": {
             vram: 8.0,
             ram: 16.0,
             router_type: "llm",
-            router_model: "routing-phi",
+            router_model: "routing",
             models: [
-                { id: "general-llama3", type: "llm", backend: "llama.cpp", backend_config: { repo_id: "QuantFactory/Meta-Llama-3.1-8B-Instruct-GGUF", filename: "Meta-Llama-3.1-8B-Instruct.Q4_K_M.gguf", port: 8081, n_gpu_layers: 99 }, vram_estimate_gb: 4.8, purpose: "general reasoning", n_ctx: null },
-                { id: "coding-qwen", type: "llm", backend: "llama.cpp", backend_config: { repo_id: "Qwen/Qwen2.5-Coder-7B-Instruct-GGUF", filename: "qwen2.5-coder-7b-instruct-q4_k_m.gguf", port: 8082, n_gpu_layers: 99 }, vram_estimate_gb: 4.7, purpose: "general coding", n_ctx: null },
-                { id: "image-lcm", type: "image", backend: "diffusers", backend_config: { model_name: "Lykon/dreamshaper-8-lcm" }, vram_estimate_gb: 4.0 },
-                { id: "stt-whisper", type: "stt", backend: "whisper", backend_config: { model_name: "small" }, vram_estimate_gb: 1.5 },
-                { id: "tts-offline", type: "tts", backend: "tts", backend_config: { engine: "kokoro", voice: "af_sarah" }, vram_estimate_gb: 0.5 },
-                { id: "routing-phi", type: "llm", backend: "llama.cpp", backend_config: { repo_id: "microsoft/Phi-3-mini-4k-instruct-gguf", filename: "Phi-3-mini-4k-instruct-q4.gguf", port: 8083, n_gpu_layers: 99 }, vram_estimate_gb: 2.2, purpose: "routing classification", n_ctx: 4096 }
+                { id: "general", type: "llm", backend: "llama.cpp", backend_config: { repo_id: "bartowski/granite-3.1-8b-instruct-GGUF", filename: "granite-3.1-8b-instruct-Q8_0.gguf", port: 8081, n_gpu_layers: 99 }, vram_estimate_gb: 4.8, purpose: "general reasoning", n_ctx: null },
+                { id: "coding", type: "llm", backend: "llama.cpp", backend_config: { repo_id: "Qwen/Qwen3-Coder-7B-Instruct-GGUF", filename: "qwen3-coder-7b-instruct-q4_k_m.gguf", port: 8082, n_gpu_layers: 99 }, vram_estimate_gb: 4.7, purpose: "general coding", n_ctx: null },
+                { id: "image", type: "image", backend: "diffusers", backend_config: { model_name: "Lykon/dreamshaper-8-lcm" }, vram_estimate_gb: 4.0 },
+                { id: "stt", type: "stt", backend: "whisper", backend_config: { model_name: "small" }, vram_estimate_gb: 1.5 },
+                { id: "tts", type: "tts", backend: "tts", backend_config: { engine: "kokoro", voice: "af_sarah" }, vram_estimate_gb: 0.5 },
+                { id: "routing", type: "llm", backend: "llama.cpp", backend_config: { repo_id: "microsoft/Phi-3-mini-4k-instruct-gguf", filename: "Phi-3-mini-4k-instruct-q4.gguf", port: 8083, n_gpu_layers: 99 }, vram_estimate_gb: 2.2, purpose: "routing classification", n_ctx: 4096 }
             ]
         },
         "16": {
             vram: 16.0,
             ram: 16.0,
             router_type: "llm",
-            router_model: "routing-phi",
+            router_model: "routing",
             models: [
-                { id: "general-llama3", type: "llm", backend: "llama.cpp", backend_config: { repo_id: "bartowski/Qwen2.5-14B-Instruct-GGUF", filename: "Qwen2.5-14B-Instruct-Q4_K_M.gguf", port: 8081, n_gpu_layers: 99 }, vram_estimate_gb: 9.5, purpose: "general reasoning", n_ctx: null },
-                { id: "coding-qwen", type: "llm", backend: "llama.cpp", backend_config: { repo_id: "Qwen/Qwen2.5-Coder-14B-Instruct-GGUF", filename: "qwen2.5-coder-14b-instruct-q4_k_m.gguf", port: 8082, n_gpu_layers: 99 }, vram_estimate_gb: 9.5, purpose: "general coding", n_ctx: null },
-                { id: "image-lcm", type: "image", backend: "diffusers", backend_config: { model_name: "stabilityai/sdxl-turbo" }, vram_estimate_gb: 5.5 },
-                { id: "stt-whisper", type: "stt", backend: "whisper", backend_config: { model_name: "large-v3" }, vram_estimate_gb: 4.8 },
-                { id: "tts-offline", type: "tts", backend: "tts", backend_config: { engine: "kokoro", voice: "af_sarah" }, vram_estimate_gb: 0.5 },
-                { id: "routing-phi", type: "llm", backend: "llama.cpp", backend_config: { repo_id: "microsoft/Phi-3-mini-4k-instruct-gguf", filename: "Phi-3-mini-4k-instruct-q4.gguf", port: 8083, n_gpu_layers: 99 }, vram_estimate_gb: 2.2, purpose: "routing classification", n_ctx: 4096 }
+                { id: "general", type: "llm", backend: "llama.cpp", backend_config: { repo_id: "bartowski/Qwen_Qwen3-14B-GGUF", filename: "Qwen_Qwen3-14B-Q5_K_M.gguf", port: 8081, n_gpu_layers: 99 }, vram_estimate_gb: 11.5, purpose: "general reasoning", n_ctx: null },
+                { id: "coding", type: "llm", backend: "llama.cpp", backend_config: { repo_id: "bartowski/Qwen3-Coder-14B-Instruct-GGUF", filename: "Qwen3-Coder-14B-Instruct-Q5_K_M.gguf", port: 8082, n_gpu_layers: 99 }, vram_estimate_gb: 11.5, purpose: "general coding", n_ctx: null },
+                { id: "image", type: "image", backend: "diffusers", backend_config: { model_name: "stabilityai/sdxl-turbo" }, vram_estimate_gb: 5.5 },
+                { id: "stt", type: "stt", backend: "whisper", backend_config: { model_name: "large-v3" }, vram_estimate_gb: 4.8 },
+                { id: "tts", type: "tts", backend: "tts", backend_config: { engine: "kokoro", voice: "af_sarah" }, vram_estimate_gb: 0.5 },
+                { id: "routing", type: "llm", backend: "llama.cpp", backend_config: { repo_id: "microsoft/Phi-3-mini-4k-instruct-gguf", filename: "Phi-3-mini-4k-instruct-q4.gguf", port: 8083, n_gpu_layers: 99 }, vram_estimate_gb: 2.2, purpose: "routing classification", n_ctx: 4096 }
             ]
         },
         "24": {
             vram: 24.0,
             ram: 32.0,
             router_type: "llm",
-            router_model: "routing-phi",
+            router_model: "routing",
             models: [
-                { id: "general-llama3", type: "llm", backend: "llama.cpp", backend_config: { repo_id: "bartowski/Qwen2.5-32B-Instruct-GGUF", filename: "Qwen2.5-32B-Instruct-Q4_K_M.gguf", port: 8081, n_gpu_layers: 99 }, vram_estimate_gb: 20.3, purpose: "general reasoning", n_ctx: null },
-                { id: "coding-qwen", type: "llm", backend: "llama.cpp", backend_config: { repo_id: "Qwen/Qwen2.5-Coder-32B-Instruct-GGUF", filename: "qwen2.5-coder-32b-instruct-q4_k_m.gguf", port: 8082, n_gpu_layers: 99 }, vram_estimate_gb: 20.3, purpose: "general coding", n_ctx: null },
-                { id: "image-lcm", type: "image", backend: "diffusers", backend_config: { model_name: "black-forest-labs/FLUX.1-schnell" }, vram_estimate_gb: 11.5 },
-                { id: "stt-whisper", type: "stt", backend: "whisper", backend_config: { model_name: "large-v3" }, vram_estimate_gb: 4.8 },
-                { id: "tts-offline", type: "tts", backend: "tts", backend_config: { engine: "kokoro", voice: "af_sarah" }, vram_estimate_gb: 0.5 },
-                { id: "routing-phi", type: "llm", backend: "llama.cpp", backend_config: { repo_id: "microsoft/Phi-3-mini-4k-instruct-gguf", filename: "Phi-3-mini-4k-instruct-q4.gguf", port: 8083, n_gpu_layers: 99 }, vram_estimate_gb: 2.2, purpose: "routing classification", n_ctx: 4096 }
+                { id: "general", type: "llm", backend: "llama.cpp", backend_config: { repo_id: "bartowski/Qwen3-32B-Instruct-GGUF", filename: "Qwen3-32B-Instruct-Q4_K_M.gguf", port: 8081, n_gpu_layers: 99 }, vram_estimate_gb: 20.3, purpose: "general reasoning", n_ctx: null },
+                { id: "coding", type: "llm", backend: "llama.cpp", backend_config: { repo_id: "bartowski/Qwen3-Coder-32B-Instruct-GGUF", filename: "Qwen3-Coder-32B-Instruct-Q4_K_M.gguf", port: 8082, n_gpu_layers: 99 }, vram_estimate_gb: 20.3, purpose: "general coding", n_ctx: null },
+                { id: "image", type: "image", backend: "diffusers", backend_config: { model_name: "black-forest-labs/FLUX.1-schnell" }, vram_estimate_gb: 11.5 },
+                { id: "stt", type: "stt", backend: "whisper", backend_config: { model_name: "large-v3" }, vram_estimate_gb: 4.8 },
+                { id: "tts", type: "tts", backend: "tts", backend_config: { engine: "kokoro", voice: "af_sarah" }, vram_estimate_gb: 0.5 },
+                { id: "routing", type: "llm", backend: "llama.cpp", backend_config: { repo_id: "microsoft/Phi-3-mini-4k-instruct-gguf", filename: "Phi-3-mini-4k-instruct-q4.gguf", port: 8083, n_gpu_layers: 99 }, vram_estimate_gb: 2.2, purpose: "routing classification", n_ctx: 4096 }
             ]
         },
         "32": {
             vram: 32.0,
             ram: 32.0,
             router_type: "llm",
-            router_model: "routing-phi",
+            router_model: "routing",
             models: [
-                { id: "general-llama3", type: "llm", backend: "llama.cpp", backend_config: { repo_id: "bartowski/Qwen2.5-32B-Instruct-GGUF", filename: "Qwen2.5-32B-Instruct-Q5_K_M.gguf", port: 8081, n_gpu_layers: 99 }, vram_estimate_gb: 24.5, purpose: "general reasoning", n_ctx: null },
-                { id: "coding-qwen", type: "llm", backend: "llama.cpp", backend_config: { repo_id: "Qwen/Qwen2.5-Coder-32B-Instruct-GGUF", filename: "qwen2.5-coder-32b-instruct-q5_k_m.gguf", port: 8082, n_gpu_layers: 99 }, vram_estimate_gb: 24.5, purpose: "general coding", n_ctx: null },
-                { id: "image-lcm", type: "image", backend: "diffusers", backend_config: { model_name: "black-forest-labs/FLUX.1-dev" }, vram_estimate_gb: 12.0 },
-                { id: "stt-whisper", type: "stt", backend: "whisper", backend_config: { model_name: "large-v3" }, vram_estimate_gb: 4.8 },
-                { id: "tts-offline", type: "tts", backend: "tts", backend_config: { engine: "kokoro", voice: "af_sarah" }, vram_estimate_gb: 0.5 },
-                { id: "routing-phi", type: "llm", backend: "llama.cpp", backend_config: { repo_id: "microsoft/Phi-3-mini-4k-instruct-gguf", filename: "Phi-3-mini-4k-instruct-q4.gguf", port: 8083, n_gpu_layers: 99 }, vram_estimate_gb: 2.2, purpose: "routing classification", n_ctx: 4096 }
+                { id: "general", type: "llm", backend: "llama.cpp", backend_config: { repo_id: "bartowski/Qwen3-32B-Instruct-GGUF", filename: "Qwen3-32B-Instruct-Q5_K_M.gguf", port: 8081, n_gpu_layers: 99 }, vram_estimate_gb: 24.5, purpose: "general reasoning", n_ctx: null },
+                { id: "coding", type: "llm", backend: "llama.cpp", backend_config: { repo_id: "bartowski/Qwen3-Coder-32B-Instruct-GGUF", filename: "Qwen3-Coder-32B-Instruct-Q5_K_M.gguf", port: 8082, n_gpu_layers: 99 }, vram_estimate_gb: 24.5, purpose: "general coding", n_ctx: null },
+                { id: "image", type: "image", backend: "diffusers", backend_config: { model_name: "black-forest-labs/FLUX.1-dev" }, vram_estimate_gb: 12.0 },
+                { id: "stt", type: "stt", backend: "whisper", backend_config: { model_name: "large-v3" }, vram_estimate_gb: 4.8 },
+                { id: "tts", type: "tts", backend: "tts", backend_config: { engine: "kokoro", voice: "af_sarah" }, vram_estimate_gb: 0.5 },
+                { id: "routing", type: "llm", backend: "llama.cpp", backend_config: { repo_id: "microsoft/Phi-3-mini-4k-instruct-gguf", filename: "Phi-3-mini-4k-instruct-q4.gguf", port: 8083, n_gpu_layers: 99 }, vram_estimate_gb: 2.2, purpose: "routing classification", n_ctx: 4096 }
             ]
         },
         "64": {
             vram: 64.0,
             ram: 64.0,
             router_type: "llm",
-            router_model: "routing-phi",
+            router_model: "routing",
             models: [
-                { id: "general-llama3", type: "llm", backend: "llama.cpp", backend_config: { repo_id: "bartowski/Llama-3.3-70B-Instruct-GGUF", filename: "Llama-3.3-70B-Instruct-Q5_K_S.gguf", port: 8081, n_gpu_layers: 99 }, vram_estimate_gb: 48.0, purpose: "general reasoning", n_ctx: null },
-                { id: "coding-qwen", type: "llm", backend: "llama.cpp", backend_config: { repo_id: "Qwen/Qwen2.5-Coder-32B-Instruct-GGUF", filename: "qwen2.5-coder-32b-instruct-q8_0.gguf", port: 8082, n_gpu_layers: 99 }, vram_estimate_gb: 35.0, purpose: "general coding", n_ctx: null },
-                { id: "image-lcm", type: "image", backend: "diffusers", backend_config: { model_name: "black-forest-labs/FLUX.1-dev" }, vram_estimate_gb: 16.0 },
-                { id: "stt-whisper", type: "stt", backend: "whisper", backend_config: { model_name: "large-v3" }, vram_estimate_gb: 4.8 },
-                { id: "tts-offline", type: "tts", backend: "tts", backend_config: { engine: "kokoro", voice: "af_sarah" }, vram_estimate_gb: 0.5 },
-                { id: "routing-phi", type: "llm", backend: "llama.cpp", backend_config: { repo_id: "microsoft/Phi-3-mini-4k-instruct-gguf", filename: "Phi-3-mini-4k-instruct-q4.gguf", port: 8083, n_gpu_layers: 99 }, vram_estimate_gb: 2.2, purpose: "routing classification", n_ctx: 4096 }
+                { id: "general", type: "llm", backend: "llama.cpp", backend_config: { repo_id: "bartowski/Llama-3.3-70B-Instruct-GGUF", filename: "Llama-3.3-70B-Instruct-Q5_K_S.gguf", port: 8081, n_gpu_layers: 99 }, vram_estimate_gb: 48.0, purpose: "general reasoning", n_ctx: null },
+                { id: "coding", type: "llm", backend: "llama.cpp", backend_config: { repo_id: "bartowski/Qwen3-Coder-32B-Instruct-GGUF", filename: "Qwen3-Coder-32B-Instruct-Q8_0.gguf", port: 8082, n_gpu_layers: 99 }, vram_estimate_gb: 35.0, purpose: "general coding", n_ctx: null },
+                { id: "image", type: "image", backend: "diffusers", backend_config: { model_name: "black-forest-labs/FLUX.1-dev" }, vram_estimate_gb: 16.0 },
+                { id: "stt", type: "stt", backend: "whisper", backend_config: { model_name: "large-v3" }, vram_estimate_gb: 4.8 },
+                { id: "tts", type: "tts", backend: "tts", backend_config: { engine: "kokoro", voice: "af_sarah" }, vram_estimate_gb: 0.5 },
+                { id: "routing", type: "llm", backend: "llama.cpp", backend_config: { repo_id: "microsoft/Phi-3-mini-4k-instruct-gguf", filename: "Phi-3-mini-4k-instruct-q4.gguf", port: 8083, n_gpu_layers: 99 }, vram_estimate_gb: 2.2, purpose: "routing classification", n_ctx: 4096 }
             ]
         },
         "128": {
             vram: 128.0,
             ram: 128.0,
             router_type: "llm",
-            router_model: "routing-phi",
+            router_model: "routing",
             models: [
-                { id: "general-llama3", type: "llm", backend: "llama.cpp", backend_config: { repo_id: "bartowski/Llama-3.3-70B-Instruct-GGUF", filename: "Llama-3.3-70B-Instruct-Q5_K_S.gguf", port: 8081, n_gpu_layers: 99 }, vram_estimate_gb: 48.0, purpose: "general reasoning", n_ctx: null },
-                { id: "coding-qwen", type: "llm", backend: "llama.cpp", backend_config: { repo_id: "Qwen/Qwen2.5-Coder-32B-Instruct-GGUF", filename: "qwen2.5-coder-32b-instruct-q8_0.gguf", port: 8082, n_gpu_layers: 99 }, vram_estimate_gb: 35.0, purpose: "general coding", n_ctx: null },
-                { id: "image-lcm", type: "image", backend: "diffusers", backend_config: { model_name: "black-forest-labs/FLUX.1-dev" }, vram_estimate_gb: 22.0 },
-                { id: "stt-whisper", type: "stt", backend: "whisper", backend_config: { model_name: "large-v3" }, vram_estimate_gb: 4.8 },
-                { id: "tts-offline", type: "tts", backend: "tts", backend_config: { engine: "kokoro", voice: "af_sarah" }, vram_estimate_gb: 0.5 },
-                { id: "routing-phi", type: "llm", backend: "llama.cpp", backend_config: { repo_id: "microsoft/Phi-3-mini-4k-instruct-gguf", filename: "Phi-3-mini-4k-instruct-q4.gguf", port: 8083, n_gpu_layers: 99 }, vram_estimate_gb: 2.2, purpose: "routing classification", n_ctx: 4096 }
+                { id: "general", type: "llm", backend: "llama.cpp", backend_config: { repo_id: "bartowski/Llama-3.3-70B-Instruct-GGUF", filename: "Llama-3.3-70B-Instruct-Q5_K_S.gguf", port: 8081, n_gpu_layers: 99 }, vram_estimate_gb: 48.0, purpose: "general reasoning", n_ctx: null },
+                { id: "coding", type: "llm", backend: "llama.cpp", backend_config: { repo_id: "bartowski/Qwen3-Coder-32B-Instruct-GGUF", filename: "Qwen3-Coder-32B-Instruct-Q8_0.gguf", port: 8082, n_gpu_layers: 99 }, vram_estimate_gb: 35.0, purpose: "general coding", n_ctx: null },
+                { id: "image", type: "image", backend: "diffusers", backend_config: { model_name: "black-forest-labs/FLUX.1-dev" }, vram_estimate_gb: 22.0 },
+                { id: "stt", type: "stt", backend: "whisper", backend_config: { model_name: "large-v3" }, vram_estimate_gb: 4.8 },
+                { id: "tts", type: "tts", backend: "tts", backend_config: { engine: "kokoro", voice: "af_sarah" }, vram_estimate_gb: 0.5 },
+                { id: "routing", type: "llm", backend: "llama.cpp", backend_config: { repo_id: "microsoft/Phi-3-mini-4k-instruct-gguf", filename: "Phi-3-mini-4k-instruct-q4.gguf", port: 8083, n_gpu_layers: 99 }, vram_estimate_gb: 2.2, purpose: "routing classification", n_ctx: 4096 }
             ]
         }
     };
