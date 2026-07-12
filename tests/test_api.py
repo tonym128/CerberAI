@@ -366,5 +366,36 @@ class TestAPI(unittest.TestCase):
         self.assertIn("tools", call_args)
         self.assertEqual(call_args["tools"][0]["function"]["name"], "list_files")
 
+    @patch("cerberai.database.db_delete_media_history")
+    @patch("pathlib.Path.exists")
+    @patch("pathlib.Path.unlink")
+    def test_delete_media_item(self, mock_unlink, mock_exists, mock_delete_media_history):
+        mock_delete_media_history.return_value = {
+            "type": "video",
+            "filename": "video_1.mp4",
+            "md_filename": None,
+            "pdf_filename": None
+        }
+        mock_exists.return_value = True
+
+        response = self.client.delete("/api/media/test-id-123")
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertEqual(data["status"], "success")
+        self.assertIn("video_1.mp4", data["files"])
+        mock_delete_media_history.assert_called_once_with("test-id-123")
+        mock_unlink.assert_called_once()
+
+    @patch("pathlib.Path.exists")
+    @patch("pathlib.Path.unlink")
+    def test_delete_image_file(self, mock_unlink, mock_exists):
+        mock_exists.return_value = True
+
+        response = self.client.delete("/api/images/test_image.png")
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertEqual(data["status"], "success")
+        mock_unlink.assert_called_once()
+
 if __name__ == "__main__":
     unittest.main()

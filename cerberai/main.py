@@ -1130,6 +1130,45 @@ async def list_generated_images():
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+@app.delete("/api/media/{item_id}")
+async def delete_media_item(item_id: str):
+    """Delete a media history item (video, report, podcast) and its files from disk."""
+    from .database import db_delete_media_history
+    from pathlib import Path
+    try:
+        item = db_delete_media_history(item_id)
+        if not item:
+            raise HTTPException(status_code=404, detail="Media item not found.")
+        
+        # Delete files from static/generated
+        gen_dir = Path("cerberai/static/generated")
+        deleted_files = []
+        for key in ("filename", "md_filename", "pdf_filename"):
+            fname = item.get(key)
+            if fname:
+                filepath = gen_dir / fname
+                if filepath.exists():
+                    filepath.unlink()
+                    deleted_files.append(fname)
+        return {"status": "success", "message": "Media item and files deleted.", "files": deleted_files}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.delete("/api/images/{filename}")
+async def delete_image_file(filename: str):
+    """Delete a generated image file from the disk."""
+    from pathlib import Path
+    if "/" in filename or "\\" in filename:
+        raise HTTPException(status_code=400, detail="Invalid filename.")
+    try:
+        filepath = Path("cerberai/static/generated") / filename
+        if not filepath.exists():
+            raise HTTPException(status_code=404, detail="Image not found on disk.")
+        filepath.unlink()
+        return {"status": "success", "message": f"Image '{filename}' deleted from disk."}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 @app.get("/api/config")
 async def get_current_config():
     """Retrieve the raw configuration values directly from config.yaml."""

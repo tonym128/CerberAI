@@ -64,6 +64,20 @@ def init_db():
     )
     """)
     
+    # 5. Inference Stats table
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS inference_stats (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        model_id TEXT,
+        prompt_tokens INTEGER,
+        completion_tokens INTEGER,
+        load_time REAL,
+        time_to_first_token REAL,
+        total_time REAL,
+        timestamp REAL
+    )
+    """)
+    
     conn.commit()
     conn.close()
 
@@ -219,6 +233,20 @@ def db_get_media_history(item_type: str) -> List[Dict[str, Any]]:
             
         results.append(d)
     return results
+
+def db_delete_media_history(item_id: str) -> Optional[Dict[str, Any]]:
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT type, filename, md_filename, pdf_filename FROM media_history WHERE id = ?", (item_id,))
+    row = cursor.fetchone()
+    if not row:
+        conn.close()
+        return None
+    item = dict(row)
+    cursor.execute("DELETE FROM media_history WHERE id = ?", (item_id,))
+    conn.commit()
+    conn.close()
+    return item
 
 # ==========================================================================
 # TELEGRAM HISTORY OPERATIONS

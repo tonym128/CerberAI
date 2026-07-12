@@ -18,6 +18,22 @@
     --shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
 }
 
+:root.light-theme {
+    --bg-app: #f4f5f8;
+    --bg-sidebar: #ffffff;
+    --bg-card: rgba(255, 255, 255, 0.85);
+    --border-color: rgba(0, 0, 0, 0.08);
+    --text-primary: #1f2937;
+    --text-secondary: #4b5563;
+    --primary: #7c3aed;
+    --primary-glow: rgba(124, 58, 237, 0.15);
+    --secondary: #2563eb;
+    --accent: #059669;
+    --accent-red: #dc2626;
+    --accent-orange: #d97706;
+    --shadow: 0 4px 20px 0 rgba(0, 0, 0, 0.05);
+}
+
 * {
     box-sizing: border-box;
     margin: 0;
@@ -2016,3 +2032,221 @@ body {
         width: 100vw;
     }
 }
+
+/* ==========================================================================
+   THEME TOGGLE & LIGHT MODE OVERRIDES
+   ========================================================================== */
+.theme-toggle-btn {
+    margin-left: auto;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid var(--border-color);
+    cursor: pointer;
+    color: var(--text-primary);
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 8px;
+    transition: all 0.2s ease;
+}
+
+.theme-toggle-btn:hover {
+    background: rgba(255, 255, 255, 0.08);
+    border-color: rgba(255, 255, 255, 0.15);
+}
+
+.theme-toggle-btn svg {
+    stroke: var(--text-primary);
+    fill: none;
+}
+
+/* Light theme overrides */
+:root.light-theme .theme-toggle-btn {
+    background: rgba(0, 0, 0, 0.03);
+}
+
+:root.light-theme .theme-toggle-btn:hover {
+    background: rgba(0, 0, 0, 0.06);
+    border-color: rgba(0, 0, 0, 0.15);
+}
+
+:root.light-theme ::-webkit-scrollbar-track {
+    background: rgba(0, 0, 0, 0.02);
+}
+
+:root.light-theme ::-webkit-scrollbar-thumb {
+    background: rgba(0, 0, 0, 0.15);
+}
+
+:root.light-theme ::-webkit-scrollbar-thumb:hover {
+    background: rgba(0, 0, 0, 0.25);
+}
+
+:root.light-theme .catalog-item,
+:root.light-theme .suggestion-card,
+:root.light-theme .conv-item,
+:root.light-theme .catalog-card,
+:root.light-theme .drawer-img-card,
+:root.light-theme .drawer-item-card {
+    background: rgba(0, 0, 0, 0.02) !important;
+}
+
+:root.light-theme .catalog-item:hover,
+:root.light-theme .suggestion-card:hover,
+:root.light-theme .conv-item:hover,
+:root.light-theme .catalog-card:hover,
+:root.light-theme .drawer-img-card:hover,
+:root.light-theme .drawer-item-card:hover {
+    background: rgba(0, 0, 0, 0.04) !important;
+    border-color: rgba(0, 0, 0, 0.12) !important;
+}
+
+:root.light-theme .conv-item.active {
+    background: rgba(124, 58, 237, 0.15) !important;
+    border-color: var(--primary) !important;
+    color: var(--primary) !important;
+}
+
+:root.light-theme .catalog-card.active {
+    background: rgba(124, 58, 237, 0.08) !important;
+    border-color: var(--primary) !important;
+}
+
+:root.light-theme .msg-bubble pre {
+    background-color: #f9fafb;
+    border-color: rgba(0, 0, 0, 0.08);
+    color: #111827;
+}
+
+:root.light-theme .msg-bubble code {
+    background-color: rgba(0, 0, 0, 0.04);
+    color: #b91c1c;
+}
+
+:root.light-theme .form-group input,
+:root.light-theme .form-group select,
+:root.light-theme .form-group textarea {
+    background-color: rgba(0, 0, 0, 0.02);
+    color: var(--text-primary);
+}
+
+:root.light-theme .form-group input:focus,
+:root.light-theme .form-group select:focus,
+:root.light-theme .form-group textarea:focus {
+    background-color: #ffffff;
+}
+
+:root.light-theme .logo-glow {
+    opacity: 0.15;
+}
+
+:root.light-theme .badge {
+    background: rgba(0, 0, 0, 0.05);
+    color: var(--text-secondary);
+}
+
+:root.light-theme .collapsible-header {
+    background: rgba(0, 0, 0, 0.02);
+    color: var(--text-primary);
+}
+
+:root.light-theme .collapsible-header:hover {
+    background: rgba(0, 0, 0, 0.04);
+}
+
+:root.light-theme .collapsible-content {
+    border-color: rgba(0, 0, 0, 0.05);
+}
+
+/* Modal and Backdrop Overrides */
+:root.light-theme .modal {
+    background-color: rgba(255, 255, 255, 0.6) !important;
+    backdrop-filter: blur(8px) !important;
+    -webkit-backdrop-filter: blur(8px) !important;
+}
+
+:root.light-theme .modal-content {
+    background-color: #ffffff !important;
+    border-color: rgba(0, 0, 0, 0.1) !important;
+    color: #1f2937 !important;
+}
+
+/* Dropdown Options */
+:root.light-theme select option {
+    background-color: #ffffff !important;
+    color: #1f2937 !important;
+}
+
+/* Chat Header Overrides */
+:root.light-theme .chat-header {
+    background: rgba(255, 255, 255, 0.8) !important;
+    backdrop-filter: blur(20px) !important;
+    -webkit-backdrop-filter: blur(20px) !important;
+    border-bottom: 1px solid rgba(0, 0, 0, 0.08) !important;
+}
+
+/* Chat Input Form */
+:root.light-theme .chat-input-area form {
+    background: #ffffff !important;
+    border: 1px solid rgba(0, 0, 0, 0.08) !important;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.06) !important;
+}
+
+/* Progress bar backgrounds */
+:root.light-theme .progress-bar-bg {
+    background: rgba(0, 0, 0, 0.08) !important;
+}
+
+:root.light-theme .metrics-grid,
+:root.light-theme .sidebar-footer {
+    border-top: 1px solid rgba(0, 0, 0, 0.08) !important;
+}
+
+/* Media Drawer Overrides */
+:root.light-theme .media-drawer {
+    background: rgba(255, 255, 255, 0.8) !important;
+    border-left: 1px solid rgba(0, 0, 0, 0.08) !important;
+    box-shadow: -4px 0 20px rgba(0, 0, 0, 0.05) !important;
+}
+
+/* Delete controls inside Media Drawer cards */
+.drawer-delete-btn {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    width: 24px;
+    height: 24px;
+    background: rgba(239, 68, 68, 0.12);
+    color: var(--accent-red);
+    border: 1px solid rgba(239, 68, 68, 0.25);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+    font-weight: bold;
+    cursor: pointer;
+    z-index: 10;
+    transition: all 0.15s ease;
+    line-height: 1;
+    padding: 0;
+}
+
+.drawer-delete-btn:hover {
+    background: var(--accent-red);
+    color: #ffffff;
+    transform: scale(1.1);
+    box-shadow: 0 2px 8px rgba(239, 68, 68, 0.4);
+}
+
+.drawer-img-card .drawer-delete-btn {
+    opacity: 0;
+}
+
+.drawer-img-card:hover .drawer-delete-btn {
+    opacity: 1;
+}
+
+
+

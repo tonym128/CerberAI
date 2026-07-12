@@ -44,6 +44,46 @@ promptInput.addEventListener("keydown", (e) => {
         sendBtn.click();
     }
 });
+// Theme management (Dark / Light mode toggle)
+function initTheme() {
+    const themeToggle = document.getElementById("theme-toggle");
+    const sunIcon = document.getElementById("sun-icon");
+    const moonIcon = document.getElementById("moon-icon");
+    
+    if (!themeToggle) return;
+    
+    // Check saved preference or default to dark (since app is dark by default)
+    const savedTheme = localStorage.getItem("theme") || "dark";
+    
+    if (savedTheme === "light") {
+        document.documentElement.classList.add("light-theme");
+        if (sunIcon) sunIcon.style.display = "none";
+        if (moonIcon) moonIcon.style.display = "block";
+    } else {
+        document.documentElement.classList.remove("light-theme");
+        if (sunIcon) sunIcon.style.display = "block";
+        if (moonIcon) moonIcon.style.display = "none";
+    }
+    
+    themeToggle.addEventListener("click", () => {
+        const isCurrentlyLight = document.documentElement.classList.contains("light-theme");
+        
+        if (isCurrentlyLight) {
+            // Switch to Dark Theme
+            document.documentElement.classList.remove("light-theme");
+            localStorage.setItem("theme", "dark");
+            if (sunIcon) sunIcon.style.display = "block";
+            if (moonIcon) moonIcon.style.display = "none";
+        } else {
+            // Switch to Light Theme
+            document.documentElement.classList.add("light-theme");
+            localStorage.setItem("theme", "light");
+            if (sunIcon) sunIcon.style.display = "none";
+            if (moonIcon) moonIcon.style.display = "block";
+        }
+    });
+}
+
 function adjustTextareaHeight() {
     promptInput.style.height = "auto";
     promptInput.style.height = (promptInput.scrollHeight) + "px";
@@ -51,6 +91,7 @@ function adjustTextareaHeight() {
 
 // Initialize on load
 window.addEventListener("DOMContentLoaded", () => {
+    initTheme();
     fetchModels();
     pollStatus();
     setInterval(pollStatus, 3000);
@@ -2658,8 +2699,9 @@ async function loadDrawerTab(tab) {
             let html = `<div class="drawer-grid">`;
             images.forEach(img => {
                 html += `
-                    <div class="drawer-img-card" onclick="window.open('${img.url}', '_blank')">
+                    <div class="drawer-img-card" style="position: relative;" onclick="window.open('${img.url}', '_blank')">
                         <img src="${img.url}" alt="${img.name}" title="Generated on: ${new Date(img.created * 1000).toLocaleString()}">
+                        <button class="drawer-delete-btn" onclick="event.stopPropagation(); deleteImage('${img.name}')" title="Delete image">&times;</button>
                     </div>
                 `;
             });
@@ -2676,7 +2718,8 @@ async function loadDrawerTab(tab) {
             videos.forEach(vid => {
                 const fileUrl = `/static/generated/${vid.filename}`;
                 html += `
-                    <div class="drawer-item-card">
+                    <div class="drawer-item-card" style="position: relative;">
+                        <button class="drawer-delete-btn" onclick="deleteMedia('${vid.id}')" title="Delete video">&times;</button>
                         <span class="drawer-item-title" title="${vid.topic || 'General News'}">${vid.topic || 'General News'}</span>
                         <video src="${fileUrl}" controls style="width: 100%; border-radius: 6px; background: #000;"></video>
                         <div class="drawer-item-meta">
@@ -2697,7 +2740,8 @@ async function loadDrawerTab(tab) {
             let html = "";
             reports.forEach(rep => {
                 html += `
-                    <div class="drawer-item-card">
+                    <div class="drawer-item-card" style="position: relative;">
+                        <button class="drawer-delete-btn" onclick="deleteMedia('${rep.id}')" title="Delete report">&times;</button>
                         <span class="drawer-item-title" title="${rep.query}">${rep.query}</span>
                         <div class="drawer-item-meta">
                             <span>Research Report</span>
@@ -2721,7 +2765,8 @@ async function loadDrawerTab(tab) {
             podcasts.forEach(pod => {
                 const fileUrl = `/static/generated/${pod.filename}`;
                 html += `
-                    <div class="drawer-item-card">
+                    <div class="drawer-item-card" style="position: relative;">
+                        <button class="drawer-delete-btn" onclick="deleteMedia('${pod.id}')" title="Delete podcast">&times;</button>
                         <span class="drawer-item-title" title="${pod.topic || 'General briefing'}">${pod.topic || 'General briefing'}</span>
                         <audio src="${fileUrl}" controls style="width: 100%; height: 32px; outline: none;"></audio>
                         <div class="drawer-item-meta">
@@ -2736,6 +2781,40 @@ async function loadDrawerTab(tab) {
     } catch (err) {
         console.error(err);
         drawerContentPane.innerHTML = `<div style="color: var(--accent-red); text-align: center; padding: 20px; font-size: 13px;">Failed to load assets: ${err.message}</div>`;
+    }
+}
+
+async function deleteImage(filename) {
+    if (!confirm(`Are you sure you want to delete the image "${filename}"? This will delete the file from disk permanently.`)) {
+        return;
+    }
+    try {
+        const res = await fetch(`/api/images/${filename}`, { method: "DELETE" });
+        const data = await res.json();
+        if (res.ok && data.status === "success") {
+            loadDrawerTab("images");
+        } else {
+            alert("Delete failed: " + (data.detail || data.message));
+        }
+    } catch (e) {
+        alert("Error deleting image: " + e.message);
+    }
+}
+
+async function deleteMedia(itemId) {
+    if (!confirm(`Are you sure you want to delete this media briefing? This will remove it from database history and delete all associated files from disk permanently.`)) {
+        return;
+    }
+    try {
+        const res = await fetch(`/api/media/${itemId}`, { method: "DELETE" });
+        const data = await res.json();
+        if (res.ok && data.status === "success") {
+            loadDrawerTab(activeDrawerTab);
+        } else {
+            alert("Delete failed: " + (data.detail || data.message));
+        }
+    } catch (e) {
+        alert("Error deleting media: " + e.message);
     }
 }
 
