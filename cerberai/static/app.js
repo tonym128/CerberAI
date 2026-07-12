@@ -3178,6 +3178,105 @@ if (mcpPane) {
     mcpTabObserver.observe(mcpPane, { attributes: true, attributeFilter: ["class"] });
 }
 
+// -------------------------------------------------------------------------
+// AGENT JOB QUEUE CONTROLLER
+// -------------------------------------------------------------------------
+async function loadOrchestratorJobs() {
+    try {
+        const response = await fetch("/api/jobs");
+        if (!response.ok) return;
+        const jobs = await response.json();
+        renderOrchestratorJobs(jobs);
+    } catch (err) {
+        console.error("Failed to load orchestrator jobs:", err);
+    }
+}
+
+function renderOrchestratorJobs(jobs) {
+    const tbody = document.getElementById("orchestrator-jobs-tbody");
+    if (!tbody) return;
+    
+    if (jobs.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="7" style="text-align:center; color: var(--text-secondary); padding: 20px;">No jobs enqueued yet. Start an automation to trigger a job.</td></tr>`;
+        return;
+    }
+    
+    let html = "";
+    jobs.forEach(job => {
+        let statusBadge = `<span class="mcp-status-badge inactive">${job.status}</span>`;
+        if (job.status === "completed") {
+            statusBadge = `<span class="mcp-status-badge active" style="background:rgba(16, 185, 129, 0.12); color:var(--accent); border:1px solid rgba(16, 185, 129, 0.25);">completed</span>`;
+        } else if (job.status === "running") {
+            statusBadge = `<span class="mcp-status-badge active" style="background:rgba(245, 158, 11, 0.12); color:#f59e0b; border:1px solid rgba(245, 158, 11, 0.25);">running</span>`;
+        } else if (job.status === "pending") {
+            statusBadge = `<span class="mcp-status-badge inactive" style="background:rgba(255,255,255,0.05); color:var(--text-secondary); border:1px solid var(--border-color);">pending</span>`;
+        } else if (job.status === "failed") {
+            statusBadge = `<span class="mcp-status-badge inactive" style="background:rgba(239, 68, 68, 0.12); color:#ef4444; border:1px solid rgba(239, 68, 68, 0.25);" title="${job.error || ''}">failed</span>`;
+        }
+        
+        const progPct = Math.round(job.progress * 100);
+        const progressHtml = `
+            <div style="display:flex; align-items:center; gap:8px;">
+                <div class="progress-bar-bg" style="width: 80px; height: 6px; margin: 0; background:rgba(255,255,255,0.05); border-radius:3px; overflow:hidden;">
+                    <div class="progress-bar" style="width: ${progPct}%; height: 100%; background:var(--primary); transition: width 0.3s ease;"></div>
+                </div>
+                <span style="font-size:11px; font-weight:600; color:var(--text-secondary);">${progPct}%</span>
+            </div>
+        `;
+        
+        const createdDate = new Date(job.created_at * 1000).toLocaleTimeString();
+        let durationStr = "-";
+        if (job.started_at) {
+            const end = job.completed_at || (Date.now() / 1000);
+            const durSec = Math.max(0, Math.round(end - job.started_at));
+            const min = Math.floor(durSec / 60);
+            const sec = durSec % 60;
+            durationStr = min > 0 ? `${min}m ${sec}s` : `${sec}s`;
+        }
+        
+        const topic = job.parameters.topic || job.parameters.query || "-";
+        
+        html += `
+            <tr>
+                <td style="font-weight:600; color:var(--text-primary);">${job.task_type}</td>
+                <td>${statusBadge}</td>
+                <td>${progressHtml}</td>
+                <td style="font-family:var(--font-mono); font-weight:600; color:var(--primary);">${job.vram_required.toFixed(1)} GB</td>
+                <td>${createdDate}</td>
+                <td>${durationStr}</td>
+                <td style="max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${topic}">${topic}</td>
+            </tr>
+        `;
+    });
+    tbody.innerHTML = html;
+}
+
+const btnRefreshJobs = document.getElementById("btn-refresh-jobs");
+if (btnRefreshJobs) {
+    btnRefreshJobs.addEventListener("click", loadOrchestratorJobs);
+}
+
+let jobsInterval = null;
+const automationsTabObserver = new MutationObserver(() => {
+    const autoPane = document.getElementById("automations-pane");
+    if (autoPane && autoPane.classList.contains("active")) {
+        loadOrchestratorJobs();
+        if (!jobsInterval) {
+            jobsInterval = setInterval(loadOrchestratorJobs, 3000);
+        }
+    } else {
+        if (jobsInterval) {
+            clearInterval(jobsInterval);
+            jobsInterval = null;
+        }
+    }
+});
+
+const autoPane = document.getElementById("automations-pane");
+if (autoPane) {
+    automationsTabObserver.observe(autoPane, { attributes: true, attributeFilter: ["class"] });
+}
+
 
 
 

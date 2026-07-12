@@ -48,6 +48,8 @@ router = IntentRouter(config.router, config.models)
 agent = AgentExecutor(config)
 from .mcp import MCPManager
 mcp_manager = MCPManager(getattr(config, "mcp_servers", {}))
+from .orchestrator import Orchestrator
+orchestrator = Orchestrator(config, manager, agent)
 cleanup_task = None
 scheduler_task = None
 telegram_task = None
@@ -72,6 +74,9 @@ async def lifespan(app: FastAPI):
     print("Initializing MCP Manager and booting servers...")
     await mcp_manager.start_all()
     
+    print("Starting Agent Orchestrator task runner...")
+    orchestrator.start()
+    
     print("CerberAI Started. Cleanup, Scheduler, and Telegram loops active.")
     yield
     # Shutdown: cancel background tasks and unload all active models
@@ -82,6 +87,9 @@ async def lifespan(app: FastAPI):
                 await task
             except asyncio.CancelledError:
                 pass
+            
+    print("Stopping Agent Orchestrator task runner...")
+    await orchestrator.stop()
             
     print("Stopping MCP servers...")
     await mcp_manager.stop_all()
@@ -386,7 +394,40 @@ async def chat_completions(request: Request):
                 msg_copy["content"] = "\n".join(text_parts)
             sanitized_messages.append(msg_copy)
         messages = sanitized_messages
+
+        # Sliding context window check to fit within model n_ctx limit
+        n_ctx = model_cfg.n_ctx or 16384
+        safe_limit = max(2000, n_ctx - 2000)
+        
+        system_msg = None
+        other_msgs = []
+        for msg in messages:
+            if msg.get("role") == "system":
+                system_msg = msg
+            else:
+                other_msgs.append(msg)
+                
+        def est_tokens(msgs):
+            total_chars = 0
+            for m in msgs:
+                content = m.get("content", "")
+                if isinstance(content, str):
+                    total_chars += len(content)
+            return total_chars // 4
+            
+        sys_tokens = est_tokens([system_msg]) if system_msg else 0
+        while other_msgs and (sys_tokens + est_tokens(other_msgs) > safe_limit):
+            other_msgs.pop(0)
+            
+        pruned_messages = []
+        if system_msg:
+            pruned_messages.append(system_msg)
+        pruned_messages.extend(other_msgs)
+        messages = pruned_messages
         payload["messages"] = messages
+        
+        # Re-estimate prompt tokens after pruning
+        prompt_tokens_est = sum(len(str(m.get('content', ''))) // 4 for m in messages)
 
     if model_cfg and model_cfg.type == "image":
         try:
@@ -1004,13 +1045,14 @@ async def image_generations(request: Request):
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/v1/automate/news-video")
-async def start_news_video_automation(request: Request, background_tasks: BackgroundTasks):
-    """Trigger the news video generation workflow in the background."""
-    from .automation import generate_yesterday_news_video, get_status, update_status
+async def start_news_video_automation(request: Request):
+    """Trigger the news video generation workflow by enqueuing a job in the Orchestrator."""
+    from .automation import get_status, update_status
+    from .database import db_create_job
     
     current_status = get_status()
-    if current_status["status"] == "running":
-        return JSONResponse(content={"message": "Automation is already running.", "status": current_status})
+    if current_status["status"] in ("running", "pending"):
+        return JSONResponse(content={"message": "Automation is already running or queued.", "status": current_status})
         
     topic = None
     date_str = None
@@ -1023,9 +1065,9 @@ async def start_news_video_automation(request: Request, background_tasks: Backgr
     except Exception:
         pass
         
-    update_status("running", 0, "Starting automation task...")
-    background_tasks.add_task(generate_yesterday_news_video, manager, agent, topic, date_str, video_mode)
-    return JSONResponse(content={"message": "Automation started successfully.", "status": get_status()})
+    update_status("pending", 0, "Job enqueued in Orchestrator...")
+    job_id = db_create_job("news-video", {"topic": topic, "date": date_str, "video_mode": video_mode}, vram_required=10.0)
+    return JSONResponse(content={"message": "Automation job enqueued successfully.", "job_id": job_id, "status": get_status()})
 
 @app.get("/v1/automate/news-video/status")
 async def get_news_video_automation_status():
@@ -1044,13 +1086,14 @@ async def get_news_video_history():
 
 
 @app.post("/v1/automate/deep-research")
-async def start_deep_research_automation(request: Request, background_tasks: BackgroundTasks):
-    """Trigger the recursive deep research report workflow in the background."""
-    from .automation import generate_deep_research_report, get_research_status, update_research_status
+async def start_deep_research_automation(request: Request):
+    """Trigger the recursive deep research report workflow by enqueuing a job in the Orchestrator."""
+    from .automation import get_research_status, update_research_status
+    from .database import db_create_job
     
     current_status = get_research_status()
-    if current_status["status"] == "running":
-        return JSONResponse(content={"message": "Research task is already running.", "status": current_status})
+    if current_status["status"] in ("running", "pending"):
+        return JSONResponse(content={"message": "Research task is already running or queued.", "status": current_status})
         
     query = None
     try:
@@ -1062,9 +1105,9 @@ async def start_deep_research_automation(request: Request, background_tasks: Bac
     if not query:
         raise HTTPException(status_code=400, detail="Query parameter is required.")
         
-    update_research_status("running", 0, "Initializing deep research agent loop...", query=query)
-    background_tasks.add_task(generate_deep_research_report, manager, agent, query)
-    return JSONResponse(content={"message": "Deep Research automation started.", "status": get_research_status()})
+    update_research_status("pending", 0, "Job enqueued in Orchestrator...", query=query)
+    job_id = db_create_job("deep-research", {"topic": query}, vram_required=8.0)
+    return JSONResponse(content={"message": "Deep Research job enqueued successfully.", "job_id": job_id, "status": get_research_status()})
 
 @app.get("/v1/automate/deep-research/status")
 async def get_deep_research_status_endpoint():
@@ -1083,13 +1126,14 @@ async def get_deep_research_history():
 
 
 @app.post("/v1/automate/podcast")
-async def start_podcast_automation(request: Request, background_tasks: BackgroundTasks):
-    """Trigger the daily podcast news briefing generation in the background."""
-    from .automation import generate_daily_podcast, get_podcast_status, update_podcast_status
+async def start_podcast_automation(request: Request):
+    """Trigger the daily podcast news briefing generation by enqueuing a job in the Orchestrator."""
+    from .automation import get_podcast_status, update_podcast_status
+    from .database import db_create_job
     
     current_status = get_podcast_status()
-    if current_status["status"] == "running":
-        return JSONResponse(content={"message": "Podcast briefing task is already running.", "status": current_status})
+    if current_status["status"] in ("running", "pending"):
+        return JSONResponse(content={"message": "Podcast briefing task is already running or queued.", "status": current_status})
         
     topic = None
     date_str = None
@@ -1100,9 +1144,9 @@ async def start_podcast_automation(request: Request, background_tasks: Backgroun
     except Exception:
         pass
         
-    update_podcast_status("running", 0, "Initializing multi-speaker podcast generation...", query=topic)
-    background_tasks.add_task(generate_daily_podcast, manager, agent, topic, date_str)
-    return JSONResponse(content={"message": "Podcast briefing automation started.", "status": get_podcast_status()})
+    update_podcast_status("pending", 0, "Job enqueued in Orchestrator...", query=topic)
+    job_id = db_create_job("podcast", {"topic": topic, "date": date_str}, vram_required=8.0)
+    return JSONResponse(content={"message": "Podcast job enqueued successfully.", "job_id": job_id, "status": get_podcast_status()})
 
 @app.get("/v1/automate/podcast/status")
 async def get_podcast_status_endpoint():
@@ -1395,6 +1439,29 @@ async def call_mcp_tool(request: Request):
             
         result = await mcp_manager.call_tool(server_name, tool_name, arguments)
         return JSONResponse(content=result)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/jobs")
+async def get_jobs():
+    """Retrieve list of all enqueued and running agent jobs."""
+    from .database import db_list_jobs
+    try:
+        return JSONResponse(content=db_list_jobs())
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/jobs/{job_id}")
+async def get_job(job_id: str):
+    """Retrieve details for a specific orchestrator job."""
+    from .database import db_get_job
+    try:
+        job = db_get_job(job_id)
+        if not job:
+            raise HTTPException(status_code=404, detail="Job not found")
+        return JSONResponse(content=job)
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

@@ -427,6 +427,30 @@
                             <div id="schedules-list-container" class="schedules-list">
                                 <!-- Populated dynamically -->
                             </div>
+                        <!-- Agent Job Queue Monitor -->
+                        <div class="automation-card" style="grid-column: 1 / -1; margin-top: 24px;">
+                            <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border-color); padding-bottom: 12px; margin-bottom: 16px;">
+                                <h3 class="auto-header" style="margin: 0; font-size: 15px; display: flex; align-items: center; gap: 8px;">⏳ Orchestrator Agent Job Queue</h3>
+                                <button type="button" id="btn-refresh-jobs" class="btn btn-secondary font-semi" style="font-size: 11px; padding: 6px 12px;">🔄 Refresh Queue</button>
+                            </div>
+                            <div class="stats-table-container">
+                                <table class="stats-table" style="font-size: 12px;">
+                                    <thead>
+                                        <tr>
+                                            <th>Task Type</th>
+                                            <th>Status</th>
+                                            <th>Progress</th>
+                                            <th>VRAM Req.</th>
+                                            <th>Created At</th>
+                                            <th>Duration</th>
+                                            <th>Target/Topic</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="orchestrator-jobs-tbody">
+                                        <tr><td colspan="7" style="text-align:center; color: var(--text-secondary); padding: 20px;">No jobs enqueued yet. Start an automation to trigger a job.</td></tr>
+                                    </tbody>
+                                </table>
+                            </div>
                         </div>
                     </div>
                 </div>

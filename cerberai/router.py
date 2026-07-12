@@ -234,6 +234,9 @@ class IntentRouter:
 
     async def _route_with_llm(self, prompt: str, manager=None) -> str:
         """Call a local router model to categorize the request based on dynamic purposes."""
+        # Truncate prompt to a safe limit to avoid context size overflow of the routing model
+        prompt = prompt[:2048] if len(prompt) > 2048 else prompt
+        
         # Gather all LLM and image models and their purposes dynamically
         options = []
         for m in self.models:

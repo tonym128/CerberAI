@@ -9,6 +9,9 @@ from typing import List, Dict, Any, Optional
 import httpx
 from .config import AppConfig
 
+import sys
+import tempfile
+
 # Simple decorator for python tools
 def tool(name: str, description: str):
     def decorator(func):
@@ -47,6 +50,11 @@ class AgentExecutor:
             "name": "web_fetch",
             "description": "web_fetch(url: str) - Fetch the clean readable text content of a specific web page/URL.",
             "func": self.web_fetch_tool
+        }
+        self.tools["execute_python_code"] = {
+            "name": "execute_python_code",
+            "description": "execute_python_code(code: str) - Execute a snippet of Python code locally in a secure, isolated process. Returns stdout and stderr.",
+            "func": self.execute_python_code_tool
         }
 
     async def web_fetch_tool(self, url: str) -> str:
@@ -93,6 +101,55 @@ class AgentExecutor:
                 return clean_text
         except Exception as e:
             return f"Fetch error: {e}"
+
+    async def execute_python_code_tool(self, code: str) -> str:
+        """
+        Execute python code in a separate process, capturing stdout/stderr and enforcing timeouts.
+        """
+        # Write code to a temp file
+        with tempfile.NamedTemporaryFile(suffix=".py", delete=False, mode="w") as f:
+            f.write(code)
+            temp_path = f.name
+            
+        try:
+            # We run it in a subprocess using the current interpreter path
+            # and set a strict timeout of 10.0 seconds
+            proc = await asyncio.create_subprocess_exec(
+                sys.executable,
+                temp_path,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE
+            )
+            
+            try:
+                stdout_bytes, stderr_bytes = await asyncio.wait_for(proc.communicate(), timeout=10.0)
+                stdout = stdout_bytes.decode("utf-8", errors="replace")
+                stderr = stderr_bytes.decode("utf-8", errors="replace")
+                
+                result = []
+                if stdout.strip():
+                    result.append(f"--- STDOUT ---\n{stdout}")
+                if stderr.strip():
+                    result.append(f"--- STDERR ---\n{stderr}")
+                    
+                if not result:
+                    return "Execution finished with no output (exit code 0)."
+                    
+                return "\n".join(result)
+            except asyncio.TimeoutError:
+                try:
+                    proc.kill()
+                    await proc.wait()
+                except Exception:
+                    pass
+                return "Error: Python execution timed out after 10 seconds."
+        except Exception as e:
+            return f"Error executing Python code: {e}"
+        finally:
+            try:
+                os.unlink(temp_path)
+            except Exception:
+                pass
 
     async def web_search_tool(self, query: str) -> str:
         """Query the configured search provider (DuckDuckGo, SearXNG, Tavily, Google)."""

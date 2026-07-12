@@ -120,5 +120,20 @@ class TestManager(unittest.TestCase):
 
         asyncio.run(run_scenario())
 
+class TestAgentExecutor(unittest.TestCase):
+    def test_execute_python_code_tool(self):
+        from cerberai.agent import AgentExecutor
+        from cerberai.config import load_config
+        cfg = load_config()
+        executor = AgentExecutor(cfg)
+        
+        code = "print('Hello from Sandbox!')"
+        res = asyncio.run(executor.execute_python_code_tool(code))
+        self.assertIn("Hello from Sandbox!", res)
+
+        timeout_code = "import time\ntime.sleep(12)"
+        res_timeout = asyncio.run(executor.execute_python_code_tool(timeout_code))
+        self.assertIn("Error: Python execution timed out", res_timeout)
+
 if __name__ == "__main__":
     unittest.main()

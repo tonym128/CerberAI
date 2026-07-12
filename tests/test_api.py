@@ -212,8 +212,8 @@ class TestAPI(unittest.TestCase):
         response = self.client.post("/v1/automate/news-video")
         self.assertEqual(response.status_code, 200)
         data = response.json()
-        self.assertEqual(data["message"], "Automation started successfully.")
-        self.assertEqual(data["status"]["status"], "running")
+        self.assertEqual(data["message"], "Automation job enqueued successfully.")
+        self.assertEqual(data["status"]["status"], "pending")
         
         # Reset to idle to test payload parsing
         update_status("idle", 0, "")
@@ -223,7 +223,7 @@ class TestAPI(unittest.TestCase):
         response = self.client.post("/v1/automate/news-video", json=payload)
         self.assertEqual(response.status_code, 200)
         data = response.json()
-        self.assertEqual(data["message"], "Automation started successfully.")
+        self.assertEqual(data["message"], "Automation job enqueued successfully.")
 
     def test_news_video_history_endpoint(self):
         response = self.client.get("/v1/automate/news-video/history")
@@ -432,6 +432,55 @@ class TestAPI(unittest.TestCase):
         data = response.json()
         self.assertIn("tools", data)
         self.assertTrue(isinstance(data["tools"], list))
+
+    def test_jobs_endpoints(self):
+        response = self.client.get("/api/jobs")
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertTrue(isinstance(data, list))
+
+        payload = {"topic": "AI News"}
+        response = self.client.post("/v1/automate/news-video", json=payload)
+        self.assertEqual(response.status_code, 200)
+        start_data = response.json()
+        self.assertIn("job_id", start_data)
+        job_id = start_data["job_id"]
+
+        response = self.client.get(f"/api/jobs/{job_id}")
+        self.assertEqual(response.status_code, 200)
+        job_data = response.json()
+        self.assertEqual(job_data["id"], job_id)
+        self.assertEqual(job_data["task_type"], "news-video")
+
+    @patch("cerberai.main.manager.get_model")
+    @patch("cerberai.main.router.route_chat")
+    def test_sliding_context_window_pruning(self, mock_route_chat, mock_get_model):
+        mock_route_chat.return_value = "general"
+        mock_backend = AsyncMock()
+        mock_backend.handle_chat_completion.return_value = {
+            "choices": [{"message": {"role": "assistant", "content": "hello response"}, "finish_reason": "stop"}]
+        }
+        mock_get_model.return_value = mock_backend
+
+        large_msg_content = "X" * 10000
+        messages = [{"role": "system", "content": "You are a system assistant."}]
+        for i in range(10):
+            messages.append({"role": "user", "content": f"msg {i}: {large_msg_content}"})
+
+        payload = {
+            "model": "general",
+            "messages": messages,
+            "stream": False
+        }
+
+        response = self.client.post("/v1/chat/completions", json=payload)
+        self.assertEqual(response.status_code, 200)
+
+        call_args = mock_backend.handle_chat_completion.call_args[0][0]
+        called_messages = call_args["messages"]
+        
+        self.assertEqual(called_messages[0]["role"], "system")
+        self.assertTrue(len(called_messages) < 11)
 
 if __name__ == "__main__":
     unittest.main()

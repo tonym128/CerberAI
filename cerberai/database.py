@@ -102,6 +102,23 @@ def init_db():
     )
     """)
     
+    # 7. Job Queue table for Async Orchestration
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS job_queue (
+        id TEXT PRIMARY KEY,
+        task_type TEXT,
+        parameters TEXT,
+        status TEXT,
+        progress REAL DEFAULT 0.0,
+        result TEXT,
+        error TEXT,
+        vram_required REAL DEFAULT 0.0,
+        created_at REAL,
+        started_at REAL,
+        completed_at REAL
+    )
+    """)
+    
     conn.commit()
     conn.close()
 
@@ -474,4 +491,105 @@ def db_mark_inactive_models(active_function_ids: List[str]):
         cursor.execute("UPDATE model_registry SET is_active=0")
     conn.commit()
     conn.close()
+
+# ==========================================================================
+# ASYNC JOB QUEUE OPERATIONS
+# ==========================================================================
+def db_create_job(task_type: str, parameters: Dict[str, Any], vram_required: float) -> str:
+    """Enqueue a new agent job."""
+    import uuid
+    job_id = str(uuid.uuid4())
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    now = time.time()
+    cursor.execute("""
+    INSERT INTO job_queue (id, task_type, parameters, status, progress, created_at, vram_required)
+    VALUES (?, ?, ?, 'pending', 0.0, ?, ?)
+    """, (job_id, task_type, json.dumps(parameters), now, vram_required))
+    conn.commit()
+    conn.close()
+    return job_id
+
+def db_update_job_status(
+    job_id: str,
+    status: str,
+    progress: float = None,
+    result: Dict[str, Any] = None,
+    error: str = None
+):
+    """Update job state, progress, output, or execution error log."""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    now = time.time()
+    
+    updates = ["status = ?"]
+    params = [status]
+    
+    if status == "running":
+        updates.append("started_at = ?")
+        params.append(now)
+    elif status in ("completed", "failed"):
+        updates.append("completed_at = ?")
+        params.append(now)
+        
+    if progress is not None:
+        updates.append("progress = ?")
+        params.append(progress)
+    if result is not None:
+        updates.append("result = ?")
+        params.append(json.dumps(result))
+    if error is not None:
+        updates.append("error = ?")
+        params.append(error)
+        
+    params.append(job_id)
+    query = f"UPDATE job_queue SET {', '.join(updates)} WHERE id = ?"
+    cursor.execute(query, tuple(params))
+    conn.commit()
+    conn.close()
+
+def db_get_job(job_id: str) -> Optional[Dict[str, Any]]:
+    """Retrieve details of a specific job."""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM job_queue WHERE id = ?", (job_id,))
+    row = cursor.fetchone()
+    conn.close()
+    if row:
+        res = dict(row)
+        res["parameters"] = json.loads(res["parameters"]) if res["parameters"] else {}
+        res["result"] = json.loads(res["result"]) if res["result"] else None
+        return res
+    return None
+
+def db_list_jobs(limit: int = 50) -> List[Dict[str, Any]]:
+    """List recent jobs in queue."""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM job_queue ORDER BY created_at DESC LIMIT ?", (limit,))
+    rows = cursor.fetchall()
+    conn.close()
+    
+    results = []
+    for r in rows:
+        item = dict(r)
+        item["parameters"] = json.loads(item["parameters"]) if item["parameters"] else {}
+        item["result"] = json.loads(item["result"]) if item["result"] else None
+        results.append(item)
+    return results
+
+def db_get_next_pending_job() -> Optional[Dict[str, Any]]:
+    """Retrieve the next pending job."""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM job_queue WHERE status = 'pending' ORDER BY created_at ASC LIMIT 1")
+    row = cursor.fetchone()
+    conn.close()
+    if row:
+        item = dict(row)
+        item["parameters"] = json.loads(item["parameters"]) if item["parameters"] else {}
+        item["result"] = json.loads(item["result"]) if item["result"] else None
+        return item
+    return None
+
 
