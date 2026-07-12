@@ -407,13 +407,22 @@ class AgentExecutor:
                         print(f"Warning: Failed to load skill file {py_file.name}: {e}")
 
     def get_system_prompt_extension(self) -> str:
-        """Inject tool definitions into the LLM system prompt."""
-        if not self.tools:
-            return ""
-            
+        """Inject tool definitions into the LLM system prompt, including dynamic MCP tools."""
         tool_defs = []
         for t in self.tools.values():
             tool_defs.append(f"- {t['description']}")
+            
+        # Dynamically append active MCP tools
+        try:
+            from .main import mcp_manager
+            for client_name, client in mcp_manager.clients.items():
+                for t in client.tools:
+                    tool_defs.append(f"- {client_name}_{t['name']} - {t.get('description', '')}")
+        except Exception:
+            pass
+            
+        if not tool_defs:
+            return ""
             
         tools_str = "\n".join(tool_defs)
         
@@ -471,34 +480,25 @@ class AgentExecutor:
                     # Try to fix single quotes to double quotes
                     if "'" in call_json and '"' not in call_json:
                         try:
-        """Parse and execute a single tool call from the model, supporting MCP tools."""
-        try:
-            # 1. Clean markdown or envelope wrappers
-            cleaned = call_json.strip()
-            if cleaned.startswith("<tool_call>"):
-                cleaned = cleaned[11:]
-            if cleaned.endswith("</tool_call>"):
-                cleaned = cleaned[:-12]
-            cleaned = cleaned.strip()
-            
-            # 2. Resilient JSON parse
-            try:
-                data = json.loads(cleaned)
-            except Exception:
-                # Fallback for LLMs emitting single quotes or trailing brackets
-                cleaned = cleaned.replace("'", '"')
-                data = json.loads(cleaned)
+                            data = json.loads(call_json.replace("'", '"'))
+                        except Exception:
+                            return f"Error: Invalid tool call syntax: {je}. Please try again using exactly: <tool_call>{{\"name\": \"tool_name\", \"arguments\": {{\"arg_name\": \"value\"}}}}</tool_call>"
+                    else:
+                        return f"Error: Invalid tool call syntax: {je}. Please try again using exactly: <tool_call>{{\"name\": \"tool_name\", \"arguments\": {{\"arg_name\": \"value\"}}}}</tool_call>"
+
             
             name = data.get("name")
             args = data.get("arguments", {})
             
             # 4. Resilient arguments resolution
             if not isinstance(args, dict):
+                # If arguments is a raw value rather than a dict, map to query
                 args = {"query": str(args)}
             elif not args:
+                # If arguments is empty, treat all other top-level keys as parameters
                 args = {k: v for k, v in data.items() if k != "name"}
 
-            # Check if this is a built-in or custom skill tool
+            
             if name in self.tools:
                 tool_entry = self.tools[name]
                 func = tool_entry["func"]
@@ -509,6 +509,7 @@ class AgentExecutor:
                 else:
                     loop = asyncio.get_running_loop()
                     result = await loop.run_in_executor(None, lambda: func(**args))
+                    
                 return str(result)
 
             # Check if this is an MCP tool (format: {server_name}_{tool_name})
@@ -528,7 +529,7 @@ class AgentExecutor:
                             return str(res)
             except Exception as mcp_err:
                 print(f"Failed to execute MCP tool delegation: {mcp_err}")
-                
+
             return f"Error: Tool '{name}' is not registered."
         except Exception as e:
             return f"Failed to execute tool: {e}"
