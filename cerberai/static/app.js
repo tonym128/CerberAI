@@ -2989,6 +2989,195 @@ if (statsPane) {
     statsTabObserver.observe(statsPane, { attributes: true, attributeFilter: ["class"] });
 }
 
+// -------------------------------------------------------------------------
+// MCP HUB CONTROLLER
+// -------------------------------------------------------------------------
+let cachedMcpTools = [];
+
+async function loadMcpHub() {
+    try {
+        const [serversRes, toolsRes] = await Promise.all([
+            fetch("/api/mcp/servers"),
+            fetch("/api/mcp/tools")
+        ]);
+        const serversData = await serversRes.json();
+        const toolsData = await toolsRes.json();
+        
+        cachedMcpTools = toolsData.tools || [];
+        renderMcpServers(serversData.servers || []);
+        renderMcpTools(cachedMcpTools);
+    } catch (err) {
+        console.error("Failed to load MCP Hub:", err);
+    }
+}
+
+function renderMcpServers(servers) {
+    const container = document.getElementById("mcp-servers-grid");
+    if (!container) return;
+    
+    if (servers.length === 0) {
+        container.innerHTML = `<div style="text-align:center; color: var(--text-secondary); padding: 40px; grid-column: 1/-1;">No MCP servers configured. Add them under mcp_servers in config.yaml.</div>`;
+        return;
+    }
+    
+    let html = "";
+    servers.forEach(srv => {
+        const statusBadgeClass = srv.is_running ? "active" : "inactive";
+        const statusLabel = srv.is_running ? "Running" : "Stopped";
+        
+        html += `
+            <div class="mcp-server-card">
+                <div class="mcp-server-card-header">
+                    <span class="mcp-server-name">🔌 ${srv.name}</span>
+                    <span class="mcp-status-badge ${statusBadgeClass}">${statusLabel}</span>
+                </div>
+                <div class="mcp-server-details">
+                    <span>Command: <code>${srv.command}</code></span>
+                    <span>Arguments: <code>${srv.args.join(" ")}</code></span>
+                </div>
+            </div>
+        `;
+    });
+    container.innerHTML = html;
+}
+
+function renderMcpTools(tools) {
+    const container = document.getElementById("mcp-tools-list");
+    if (!container) return;
+    
+    if (tools.length === 0) {
+        container.innerHTML = `<div style="text-align:center; color: var(--text-secondary); padding: 40px; grid-column: 1/-1;">No active tools. Boot a server to register tools.</div>`;
+        return;
+    }
+    
+    let html = "";
+    tools.forEach((t, index) => {
+        const schema = t.inputSchema || {};
+        const props = schema.properties || {};
+        const required = schema.required || [];
+        
+        let paramsHtml = "";
+        const propKeys = Object.keys(props);
+        if (propKeys.length > 0) {
+            paramsHtml += `<div class="mcp-tool-params-title">Parameters:</div>`;
+            paramsHtml += `<div class="mcp-tool-params-list">`;
+            propKeys.forEach(k => {
+                const isReq = required.includes(k) ? '<span style="color:#ef4444;" title="Required">*</span>' : '';
+                const pType = props[k].type || "string";
+                const pDesc = props[k].description ? ` - ${props[k].description}` : '';
+                paramsHtml += `
+                    <div class="mcp-tool-param-item">
+                        <span class="mcp-param-name">${k}${isReq}</span>
+                        <span class="mcp-param-type">${pType}${pDesc}</span>
+                    </div>
+                `;
+            });
+            paramsHtml += `</div>`;
+        } else {
+            paramsHtml += `<div class="mcp-tool-params-title">No parameters required.</div>`;
+        }
+        
+        const testPlaceholderObj = {};
+        propKeys.forEach(k => {
+            testPlaceholderObj[k] = props[k].type === "number" ? 0 : props[k].type === "boolean" ? false : "";
+        });
+        const placeholderJson = JSON.stringify(testPlaceholderObj, null, 2);
+        
+        html += `
+            <div class="mcp-tool-card" data-name="${t.name}" data-desc="${t.description || ''}">
+                <div class="mcp-tool-header">
+                    <span class="mcp-tool-title">${t.name}</span>
+                    <span class="mcp-tool-namespace">Server: ${t.server_name}</span>
+                </div>
+                <div class="mcp-tool-desc">${t.description || 'No description provided.'}</div>
+                ${paramsHtml}
+                
+                <!-- Testing Playground -->
+                <div class="mcp-tool-test-area">
+                    <div class="mcp-test-input-group">
+                        <label>Test Arguments (JSON):</label>
+                        <textarea id="test-args-${index}" class="mcp-test-textarea" placeholder='${placeholderJson}'>${placeholderJson}</textarea>
+                    </div>
+                    <button class="mcp-test-submit-btn" onclick="executeMcpToolTest('${t.server_name}', '${t.name}', ${index})">Test Tool</button>
+                    <div id="test-output-${index}" class="mcp-test-output hidden"></div>
+                </div>
+            </div>
+        `;
+    });
+    container.innerHTML = html;
+}
+
+async function executeMcpToolTest(serverName, toolName, index) {
+    const textarea = document.getElementById(`test-args-${index}`);
+    const outputDiv = document.getElementById(`test-output-${index}`);
+    if (!textarea || !outputDiv) return;
+    
+    outputDiv.classList.remove("hidden");
+    outputDiv.textContent = "Executing...";
+    outputDiv.style.color = "var(--accent)";
+    
+    try {
+        let args = {};
+        const val = textarea.value.trim();
+        if (val) {
+            args = JSON.parse(val);
+        }
+        
+        const response = await fetch("/api/mcp/call", {
+            method: "POST",
+            headers: {"Content-Type": "application/json"},
+            body: JSON.stringify({
+                server_name: serverName,
+                tool_name: toolName,
+                arguments: args
+            })
+        });
+        
+        const result = await response.json();
+        
+        if (result.isError) {
+            outputDiv.style.color = "#ef4444";
+        } else {
+            outputDiv.style.color = "var(--accent)";
+        }
+        
+        outputDiv.textContent = JSON.stringify(result, null, 2);
+    } catch (err) {
+        outputDiv.style.color = "#ef4444";
+        outputDiv.textContent = `Error: ${err.message}`;
+    }
+}
+
+// Search filtering logic
+const toolSearchInput = document.getElementById("mcp-tool-search");
+if (toolSearchInput) {
+    toolSearchInput.addEventListener("input", (e) => {
+        const query = e.target.value.toLowerCase().trim();
+        document.querySelectorAll(".mcp-tool-card").forEach(card => {
+            const name = card.getAttribute("data-name").toLowerCase();
+            const desc = card.getAttribute("data-desc").toLowerCase();
+            if (name.includes(query) || desc.includes(query)) {
+                card.style.display = "flex";
+            } else {
+                card.style.display = "none";
+            }
+        });
+    });
+}
+
+// Auto-load MCP tools when MCP tab is activated
+const mcpTabObserver = new MutationObserver(() => {
+    const mcpPane = document.getElementById("mcp-pane");
+    if (mcpPane && mcpPane.classList.contains("active")) {
+        loadMcpHub();
+    }
+});
+
+const mcpPane = document.getElementById("mcp-pane");
+if (mcpPane) {
+    mcpTabObserver.observe(mcpPane, { attributes: true, attributeFilter: ["class"] });
+}
+
 
 
 

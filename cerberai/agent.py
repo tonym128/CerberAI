@@ -471,39 +471,65 @@ class AgentExecutor:
                     # Try to fix single quotes to double quotes
                     if "'" in call_json and '"' not in call_json:
                         try:
-                            data = json.loads(call_json.replace("'", '"'))
-                        except Exception:
-                            return f"Error: Invalid tool call syntax: {je}. Please try again using exactly: <tool_call>{{\"name\": \"tool_name\", \"arguments\": {{\"arg_name\": \"value\"}}}}</tool_call>"
-                    else:
-                        return f"Error: Invalid tool call syntax: {je}. Please try again using exactly: <tool_call>{{\"name\": \"tool_name\", \"arguments\": {{\"arg_name\": \"value\"}}}}</tool_call>"
-
+        """Parse and execute a single tool call from the model, supporting MCP tools."""
+        try:
+            # 1. Clean markdown or envelope wrappers
+            cleaned = call_json.strip()
+            if cleaned.startswith("<tool_call>"):
+                cleaned = cleaned[11:]
+            if cleaned.endswith("</tool_call>"):
+                cleaned = cleaned[:-12]
+            cleaned = cleaned.strip()
+            
+            # 2. Resilient JSON parse
+            try:
+                data = json.loads(cleaned)
+            except Exception:
+                # Fallback for LLMs emitting single quotes or trailing brackets
+                cleaned = cleaned.replace("'", '"')
+                data = json.loads(cleaned)
             
             name = data.get("name")
             args = data.get("arguments", {})
             
             # 4. Resilient arguments resolution
             if not isinstance(args, dict):
-                # If arguments is a raw value rather than a dict, map to query
                 args = {"query": str(args)}
             elif not args:
-                # If arguments is empty, treat all other top-level keys as parameters
                 args = {k: v for k, v in data.items() if k != "name"}
 
-            
-            if name not in self.tools:
-                return f"Error: Tool '{name}' is not registered."
+            # Check if this is a built-in or custom skill tool
+            if name in self.tools:
+                tool_entry = self.tools[name]
+                func = tool_entry["func"]
                 
-            tool_entry = self.tools[name]
-            func = tool_entry["func"]
-            
-            print(f"Executing tool '{name}' with args {args}...")
-            if asyncio.iscoroutinefunction(func):
-                result = await func(**args)
-            else:
-                loop = asyncio.get_running_loop()
-                result = await loop.run_in_executor(None, lambda: func(**args))
+                print(f"Executing tool '{name}' with args {args}...")
+                if asyncio.iscoroutinefunction(func):
+                    result = await func(**args)
+                else:
+                    loop = asyncio.get_running_loop()
+                    result = await loop.run_in_executor(None, lambda: func(**args))
+                return str(result)
+
+            # Check if this is an MCP tool (format: {server_name}_{tool_name})
+            try:
+                from .main import mcp_manager
+                if "_" in name:
+                    server_name, actual_tool_name = name.split("_", 1)
+                    if server_name in mcp_manager.clients:
+                        client = mcp_manager.clients[server_name]
+                        if any(t["name"] == actual_tool_name for t in client.tools):
+                            print(f"Executing MCP tool '{actual_tool_name}' on server '{server_name}' with args {args}...")
+                            res = await mcp_manager.call_tool(server_name, actual_tool_name, args)
+                            
+                            if "content" in res:
+                                texts = [c.get("text", "") for c in res["content"] if c.get("type") == "text"]
+                                return "\n".join(texts)
+                            return str(res)
+            except Exception as mcp_err:
+                print(f"Failed to execute MCP tool delegation: {mcp_err}")
                 
-            return str(result)
+            return f"Error: Tool '{name}' is not registered."
         except Exception as e:
             return f"Failed to execute tool: {e}"
 

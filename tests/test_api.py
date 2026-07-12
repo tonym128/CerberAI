@@ -419,5 +419,19 @@ class TestAPI(unittest.TestCase):
         self.assertEqual(len(data), 1)
         self.assertEqual(data[0]["function_id"], "general")
 
+    def test_mcp_servers_endpoint(self):
+        response = self.client.get("/api/mcp/servers")
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertIn("servers", data)
+        self.assertTrue(any(s["name"] == "filesystem" for s in data["servers"]))
+
+    def test_mcp_tools_endpoint(self):
+        response = self.client.get("/api/mcp/tools")
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertIn("tools", data)
+        self.assertTrue(isinstance(data["tools"], list))
+
 if __name__ == "__main__":
     unittest.main()

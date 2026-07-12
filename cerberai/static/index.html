@@ -142,6 +142,7 @@
                     <button class="tab-btn" data-tab="automations-pane">⚡ Automations</button>
                     <button class="tab-btn" data-tab="telegram-pane">📡 Telegram Log</button>
                     <button class="tab-btn" data-tab="stats-pane">📊 Stats</button>
+                    <button class="tab-btn" data-tab="mcp-pane">🔌 MCP Hub</button>
                 </nav>
 
                 <div class="header-actions">
@@ -533,6 +534,35 @@
                             <h3>Model Registry (Current & Historical)</h3>
                             <div id="model-registry-grid" class="model-registry-grid">
                                 <div style="text-align:center; color: var(--text-secondary); padding: 40px;">Loading model registry...</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 5. MCP Hub Pane -->
+                <div id="mcp-pane" class="tab-pane">
+                    <div class="mcp-dashboard">
+                        <div class="mcp-header">
+                            <h2>🔌 Model Context Protocol (MCP) Hub</h2>
+                            <p class="mcp-subtitle" style="color: var(--text-secondary); margin-top: 4px; font-size: 13px;">Monitor, inspect, and execute tools exposed by active local and remote MCP servers.</p>
+                        </div>
+                        
+                        <!-- Configured Servers -->
+                        <div class="mcp-section" style="margin-top: 24px;">
+                            <h3 style="border-left: 3px solid var(--primary); padding-left: 10px; font-size: 16px; margin-bottom: 16px;">Active MCP Servers</h3>
+                            <div id="mcp-servers-grid" class="mcp-servers-grid">
+                                <div class="mcp-loading-placeholder" style="color: var(--text-secondary); padding: 20px; text-align: center;">Loading MCP servers...</div>
+                            </div>
+                        </div>
+
+                        <!-- Exposed Tools -->
+                        <div class="mcp-section" style="margin-top: 32px; margin-bottom: 32px;">
+                            <div class="tools-header-row" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; flex-wrap: wrap; gap: 12px;">
+                                <h3 style="border-left: 3px solid var(--primary); padding-left: 10px; font-size: 16px; margin: 0;">Exposed Tools Registry</h3>
+                                <input type="text" id="mcp-tool-search" placeholder="🔍 Search tools..." class="mcp-search-input" style="padding: 6px 12px; border-radius: 8px; border: 1px solid var(--border-color); background: rgba(255,255,255,0.03); color: var(--text-primary); font-size: 13px; width: 280px;">
+                            </div>
+                            <div id="mcp-tools-list" class="mcp-tools-list" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(350px, 1fr)); gap: 16px;">
+                                <div class="mcp-loading-placeholder" style="color: var(--text-secondary); padding: 20px; text-align: center; grid-column: 1/-1;">No tools available.</div>
                             </div>
                         </div>
                     </div>

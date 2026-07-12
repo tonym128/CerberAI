@@ -45,6 +45,7 @@ class AppConfig(BaseModel):
     hf_token: Optional[str] = None
     telegram_bot_token: Optional[str] = None
     telegram_chat_id: Optional[str] = None
+    mcp_servers: Dict[str, Any] = Field(default_factory=dict)
 
 def load_config(config_path: str = "config.yaml") -> AppConfig:
     # Safely define the fallback defaults dict
@@ -168,7 +169,8 @@ def load_config(config_path: str = "config.yaml") -> AppConfig:
             "timeout_keep_alive": 300
         },
         "telegram_bot_token": None,
-        "telegram_chat_id": None
+        "telegram_chat_id": None,
+        "mcp_servers": {}
     }
 
     if not os.path.exists(config_path):

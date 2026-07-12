@@ -1,4 +1,5 @@
 import os
+import sys
 import asyncio
 import base64
 import io
@@ -7,6 +8,12 @@ import re
 import time
 import warnings
 warnings.filterwarnings("ignore")
+
+def get_resource_path(relative_path: str) -> str:
+    """Get absolute path to resource, supporting PyInstaller bundles."""
+    if getattr(sys, 'frozen', False) and hasattr(sys, '_MEIPASS'):
+        return os.path.join(sys._MEIPASS, relative_path)
+    return os.path.abspath(relative_path)
 
 
 from contextlib import asynccontextmanager
@@ -39,6 +46,8 @@ if config.hf_token:
 manager = DynamicModelManager(config)
 router = IntentRouter(config.router, config.models)
 agent = AgentExecutor(config)
+from .mcp import MCPManager
+mcp_manager = MCPManager(getattr(config, "mcp_servers", {}))
 cleanup_task = None
 scheduler_task = None
 telegram_task = None
@@ -60,6 +69,9 @@ async def lifespan(app: FastAPI):
     from .telegram import start_telegram_loop
     telegram_task = asyncio.create_task(start_telegram_loop(config, manager, agent))
     
+    print("Initializing MCP Manager and booting servers...")
+    await mcp_manager.start_all()
+    
     print("CerberAI Started. Cleanup, Scheduler, and Telegram loops active.")
     yield
     # Shutdown: cancel background tasks and unload all active models
@@ -70,6 +82,9 @@ async def lifespan(app: FastAPI):
                 await task
             except asyncio.CancelledError:
                 pass
+            
+    print("Stopping MCP servers...")
+    await mcp_manager.stop_all()
             
     print("Unloading all models for shutdown...")
     for model_id, backend in manager.backends.items():
@@ -95,11 +110,11 @@ app.add_middleware(
 )
 
 # Mount static files
-app.mount("/static", StaticFiles(directory="cerberai/static"), name="static")
+app.mount("/static", StaticFiles(directory=get_resource_path("cerberai/static")), name="static")
 
 @app.get("/")
 async def read_index():
-    return FileResponse("cerberai/static/index.html")
+    return FileResponse(get_resource_path("cerberai/static/index.html"))
 
 @app.get("/status")
 async def get_status():
@@ -304,6 +319,11 @@ async def chat_completions(request: Request):
     messages = payload.get("messages", [])
     requested_model = payload.get("model", "auto")
     stream = payload.get("stream", False)
+
+    # Ensure a generous max_tokens limit if not explicitly set by the client
+    # to avoid premature truncation by the backend server.
+    if "max_tokens" not in payload and "max_completion_tokens" not in payload:
+        payload["max_tokens"] = 8192
 
 
     # 1. Route request to appropriate model
@@ -1328,6 +1348,56 @@ async def save_config(request: Request):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to save or reload config: {str(e)}")
 
+@app.get("/api/mcp/servers")
+async def get_mcp_servers():
+    """Retrieve details and running statuses of all configured MCP servers."""
+    try:
+        servers = []
+        for name, client in mcp_manager.clients.items():
+            servers.append({
+                "name": name,
+                "command": client.command,
+                "args": client.args,
+                "is_running": client._running and client.process is not None
+            })
+        for name, cfg in getattr(config, "mcp_servers", {}).items():
+            if name not in mcp_manager.clients:
+                servers.append({
+                    "name": name,
+                    "command": cfg.get("command"),
+                    "args": cfg.get("args", []),
+                    "is_running": False
+                })
+        return JSONResponse(content={"servers": servers})
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/mcp/tools")
+async def get_mcp_tools():
+    """Retrieve all available tools exposed by active MCP servers."""
+    try:
+        tools = await mcp_manager.get_all_tools()
+        return JSONResponse(content={"tools": tools})
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/mcp/call")
+async def call_mcp_tool(request: Request):
+    """Execute a tool call against a specific MCP server."""
+    try:
+        body = await request.json()
+        server_name = body.get("server_name")
+        tool_name = body.get("tool_name")
+        arguments = body.get("arguments", {})
+        
+        if not server_name or not tool_name:
+            raise HTTPException(status_code=400, detail="Missing server_name or tool_name parameters.")
+            
+        result = await mcp_manager.call_tool(server_name, tool_name, arguments)
+        return JSONResponse(content=result)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 @app.get("/api/conversations")
 async def get_conversations_endpoint():
     """List all stored conversations."""
@@ -1380,10 +1450,11 @@ async def delete_conversation_endpoint(conv_id: str):
     raise HTTPException(status_code=404, detail="Conversation not found")
 
 if __name__ == "__main__":
+    is_frozen = getattr(sys, 'frozen', False)
     uvicorn.run(
-        "cerberai.main:app",
+        app if is_frozen else "cerberai.main:app",
         host=config.server.host,
         port=config.server.port,
-        reload=True
+        reload=False if is_frozen else True
     )
 
