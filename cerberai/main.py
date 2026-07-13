@@ -42,6 +42,10 @@ config = load_config()
 if config.hf_token:
     os.environ["HF_TOKEN"] = config.hf_token
 
+# Optimize PyTorch memory allocation to avoid VRAM fragmentation
+if "PYTORCH_CUDA_ALLOC_CONF" not in os.environ:
+    os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
+
 # Initialize managers
 manager = DynamicModelManager(config)
 router = IntentRouter(config.router, config.models)
@@ -199,7 +203,8 @@ async def get_status():
                     else m.backend_config.get("filename", m.backend_config.get("model_name", m.backend_config.get("repo_id", m.id)))
                 ),
                 "diagnostics": manager.backends[m.id].get_diagnostics() if m.id in manager.backends else {},
-                "stats": db_stats.get(m.id, {"calls": 0, "avg_load": 0.0, "avg_ttft": 0.0, "tps": 0.0})
+                "stats": db_stats.get(m.id, {"calls": 0, "avg_load": 0.0, "avg_ttft": 0.0, "tps": 0.0}),
+                "downloaded": _check_model_downloaded(m)
             }
             for m in config.models
         ]
@@ -1297,13 +1302,22 @@ async def delete_media_item(item_id: str):
         if not item:
             raise HTTPException(status_code=404, detail="Media item not found.")
         
-        # Delete files from static/generated
-        gen_dir = Path("cerberai/static/generated")
+        # Determine the directory based on item type
+        item_type = item.get("type")
+        if item_type == "video":
+            target_dir = Path("cerberai/static/videos")
+        elif item_type == "podcast":
+            target_dir = Path("cerberai/static/podcasts")
+        elif item_type == "report":
+            target_dir = Path("cerberai/static/reports")
+        else:
+            target_dir = Path("cerberai/static/generated")
+            
         deleted_files = []
         for key in ("filename", "md_filename", "pdf_filename"):
             fname = item.get(key)
             if fname:
-                filepath = gen_dir / fname
+                filepath = target_dir / fname
                 if filepath.exists():
                     filepath.unlink()
                     deleted_files.append(fname)
@@ -1343,6 +1357,61 @@ async def get_model_registry():
         return JSONResponse(content=db_get_model_registry())
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to retrieve model registry: {str(e)}")
+
+def _check_model_downloaded(m) -> bool:
+    """Check if a model's weights are downloaded locally."""
+    from .downloader import is_model_downloaded
+    return is_model_downloaded(m.backend, m.backend_config)
+
+# Global tracking dict for bulk download progress
+_download_all_status = {"running": False, "total": 0, "completed": 0, "current_model": "", "errors": []}
+
+@app.post("/api/models/download-all")
+async def download_all_models(background_tasks: BackgroundTasks):
+    """Trigger background download of all enabled llama.cpp models that are not yet cached."""
+    from .downloader import is_model_downloaded, ensure_gguf_model
+    global _download_all_status
+    
+    if _download_all_status["running"]:
+        return JSONResponse(content={"message": "A bulk download is already in progress.", "status": _download_all_status})
+    
+    models_to_download = []
+    for m in config.models:
+        if m.backend == "llama.cpp" and not is_model_downloaded(m.backend, m.backend_config):
+            repo_id = m.backend_config.get("repo_id", "")
+            filename = m.backend_config.get("filename", "")
+            if repo_id and filename:
+                models_to_download.append({"id": m.id, "repo_id": repo_id, "filename": filename})
+    
+    if not models_to_download:
+        return JSONResponse(content={"message": "All models are already downloaded.", "status": _download_all_status})
+    
+    _download_all_status = {"running": True, "total": len(models_to_download), "completed": 0, "current_model": "", "errors": []}
+    
+    async def _download_worker():
+        global _download_all_status
+        for entry in models_to_download:
+            _download_all_status["current_model"] = entry["id"]
+            try:
+                print(f"[Download All] Downloading model '{entry['id']}': {entry['repo_id']}/{entry['filename']}...")
+                await ensure_gguf_model(entry["repo_id"], entry["filename"])
+                print(f"[Download All] Finished downloading model '{entry['id']}'.")
+            except Exception as e:
+                err_msg = f"{entry['id']}: {str(e)}"
+                print(f"[Download All] Error downloading model '{entry['id']}': {e}")
+                _download_all_status["errors"].append(err_msg)
+            _download_all_status["completed"] += 1
+        _download_all_status["running"] = False
+        _download_all_status["current_model"] = ""
+        print(f"[Download All] Bulk download complete. {_download_all_status['completed']}/{_download_all_status['total']} models processed.")
+    
+    asyncio.create_task(_download_worker())
+    return JSONResponse(content={"message": f"Started downloading {len(models_to_download)} model(s) in background.", "status": _download_all_status})
+
+@app.get("/api/models/download-all/status")
+async def download_all_status():
+    """Check the progress of a bulk model download."""
+    return JSONResponse(content=_download_all_status)
 
 @app.get("/api/config")
 async def get_current_config():

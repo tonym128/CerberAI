@@ -320,13 +320,22 @@ function renderCatalog(allModels, activeModels, loadingStatus) {
             `;
         }
 
+        const isDownloaded = model.downloaded !== false;
+        let downloadBadge = "";
+        if (!isDownloaded && model.backend === "llama.cpp") {
+            downloadBadge = `<span style="display: inline-flex; align-items: center; gap: 4px; font-size: 10px; padding: 2px 8px; border-radius: 10px; background: rgba(239, 68, 68, 0.1); color: #f87171; border: 1px solid rgba(239, 68, 68, 0.2); font-weight: 600;">⬇ Not Downloaded</span>`;
+        } else if (model.backend === "llama.cpp") {
+            downloadBadge = `<span style="display: inline-flex; align-items: center; gap: 4px; font-size: 10px; padding: 2px 8px; border-radius: 10px; background: rgba(16, 185, 129, 0.1); color: #10b981; border: 1px solid rgba(16, 185, 129, 0.2); font-weight: 600;">✓ Cached</span>`;
+        }
+
         card.innerHTML = `
             <div class="catalog-card-header">
                 <span class="catalog-card-title" title="${model.id}">${model.id}</span>
                 <span class="modality-badge ${modalityClass}">${emoji} ${model.type.toUpperCase()}</span>
             </div>
-            <div style="font-size: 11px; color: var(--text-secondary); margin-bottom: 6px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${model.model_name || ''}">
-                ${model.model_name || ''}
+            <div style="display: flex; align-items: center; gap: 6px; margin-bottom: 6px;">
+                <span style="font-size: 11px; color: var(--text-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1;" title="${model.model_name || ''}">${model.model_name || ''}</span>
+                ${downloadBadge}
             </div>
             <div class="catalog-card-details">
                 <div class="status-indicator">
@@ -1904,6 +1913,83 @@ if (openSetupBtn && setupModal) {
     closeSetupBtn.addEventListener("click", closeModal);
     cancelSetupBtn.addEventListener("click", closeModal);
 
+    // Download All Models Button
+    const btnDownloadAll = document.getElementById("btn-download-all");
+    const downloadAllProgress = document.getElementById("download-all-progress");
+    const downloadAllLabel = document.getElementById("download-all-label");
+    const downloadAllCounter = document.getElementById("download-all-counter");
+    const downloadAllBar = document.getElementById("download-all-bar");
+    const downloadAllDesc = document.getElementById("download-all-desc");
+    let downloadPollInterval = null;
+
+    function pollDownloadStatus() {
+        fetch("/api/models/download-all/status")
+            .then(res => res.json())
+            .then(data => {
+                if (data.total > 0) {
+                    downloadAllProgress.style.display = "block";
+                    downloadAllCounter.textContent = `${data.completed}/${data.total}`;
+                    const pct = (data.completed / data.total) * 100;
+                    downloadAllBar.style.width = `${pct}%`;
+                    
+                    if (data.running && data.current_model) {
+                        downloadAllLabel.textContent = `Downloading: ${data.current_model}...`;
+                        btnDownloadAll.disabled = true;
+                        btnDownloadAll.textContent = "⏳ Downloading...";
+                    }
+                    
+                    if (!data.running) {
+                        clearInterval(downloadPollInterval);
+                        downloadPollInterval = null;
+                        btnDownloadAll.disabled = false;
+                        btnDownloadAll.textContent = "⬇ Download All";
+                        
+                        if (data.errors && data.errors.length > 0) {
+                            downloadAllLabel.textContent = `Done with ${data.errors.length} error(s)`;
+                            downloadAllBar.style.background = "linear-gradient(90deg, #f59e0b 0%, #ef4444 100%)";
+                        } else {
+                            downloadAllLabel.textContent = "All models downloaded successfully!";
+                            downloadAllBar.style.background = "linear-gradient(90deg, #10b981 0%, #3b82f6 100%)";
+                        }
+                        pollStatus(); // Refresh sidebar catalog badges
+                    }
+                }
+            })
+            .catch(err => console.error("Failed to poll download status:", err));
+    }
+
+    if (btnDownloadAll) {
+        btnDownloadAll.addEventListener("click", async () => {
+            btnDownloadAll.disabled = true;
+            btnDownloadAll.textContent = "⏳ Starting...";
+            downloadAllBar.style.background = "linear-gradient(90deg, #8b5cf6 0%, #3b82f6 100%)";
+            
+            try {
+                const res = await fetch("/api/models/download-all", { method: "POST" });
+                const data = await res.json();
+                downloadAllDesc.textContent = data.message;
+                
+                if (data.status && data.status.running) {
+                    downloadAllProgress.style.display = "block";
+                    downloadAllLabel.textContent = "Starting download...";
+                    downloadAllCounter.textContent = `0/${data.status.total}`;
+                    downloadAllBar.style.width = "0%";
+                    
+                    if (!downloadPollInterval) {
+                        downloadPollInterval = setInterval(pollDownloadStatus, 2000);
+                    }
+                } else {
+                    btnDownloadAll.disabled = false;
+                    btnDownloadAll.textContent = "⬇ Download All";
+                }
+            } catch (err) {
+                console.error("Failed to trigger bulk download:", err);
+                btnDownloadAll.disabled = false;
+                btnDownloadAll.textContent = "⬇ Download All";
+            }
+        });
+    }
+
     // Save and Reload Config
     setupForm.addEventListener("submit", async (e) => {
         e.preventDefault();
@@ -2736,7 +2822,7 @@ async function loadDrawerTab(tab) {
             }
             let html = "";
             videos.forEach(vid => {
-                const fileUrl = `/static/generated/${vid.filename}`;
+                const fileUrl = vid.video_url || `/static/videos/${vid.filename}`;
                 html += `
                     <div class="drawer-item-card" style="position: relative;">
                         <button class="drawer-delete-btn" onclick="deleteMedia('${vid.id}')" title="Delete video">&times;</button>
@@ -2759,6 +2845,8 @@ async function loadDrawerTab(tab) {
             }
             let html = "";
             reports.forEach(rep => {
+                const mdUrl = rep.report_url || `/static/reports/${rep.md_filename}`;
+                const pdfUrl = rep.pdf_url || `/static/reports/${rep.pdf_filename}`;
                 html += `
                     <div class="drawer-item-card" style="position: relative;">
                         <button class="drawer-delete-btn" onclick="deleteMedia('${rep.id}')" title="Delete report">&times;</button>
@@ -2766,8 +2854,8 @@ async function loadDrawerTab(tab) {
                         <div class="drawer-item-meta">
                             <span>Research Report</span>
                             <div style="display: flex; gap: 10px;">
-                                <a href="/static/generated/${rep.md_filename}" target="_blank" style="color: var(--primary); text-decoration: none; font-weight: 600;">Markdown</a>
-                                <a href="/static/generated/${rep.pdf_filename}" target="_blank" style="color: var(--secondary); text-decoration: none; font-weight: 600;">PDF</a>
+                                <a href="${mdUrl}" target="_blank" style="color: var(--primary); text-decoration: none; font-weight: 600;">Markdown</a>
+                                <a href="${pdfUrl}" target="_blank" style="color: var(--secondary); text-decoration: none; font-weight: 600;">PDF</a>
                             </div>
                         </div>
                     </div>
@@ -2783,7 +2871,7 @@ async function loadDrawerTab(tab) {
             }
             let html = "";
             podcasts.forEach(pod => {
-                const fileUrl = `/static/generated/${pod.filename}`;
+                const fileUrl = pod.podcast_url || `/static/podcasts/${pod.filename}`;
                 html += `
                     <div class="drawer-item-card" style="position: relative;">
                         <button class="drawer-delete-btn" onclick="deleteMedia('${pod.id}')" title="Delete podcast">&times;</button>
@@ -3306,7 +3394,7 @@ function renderOrchestratorJobs(jobs) {
         
         const topic = job.parameters.topic || job.parameters.query || "-";
         
-        let actionsHtml = `<div style="display:flex; gap:6px; justify-content:center;">`;
+        let actionsHtml = `<div style="display:flex; gap:6px; justify-content:center; align-items:center;">`;
         if (job.status === "pending") {
             actionsHtml += `
                 <button type="button" class="btn btn-secondary" style="padding: 2px 6px; font-size:10px;" onclick="moveJob('${job.id}', 'up')" title="Move Up">🔼</button>
@@ -3318,6 +3406,25 @@ function renderOrchestratorJobs(jobs) {
                 <button type="button" class="btn btn-secondary" style="padding: 2px 6px; font-size:10px; color:#ef4444; border-color:rgba(239,68,68,0.15); background:rgba(239,68,68,0.05);" onclick="cancelOrRemoveJob('${job.id}')" title="Cancel/Remove">❌</button>
             `;
         } else {
+            if (job.status === "completed" && job.result) {
+                let viewUrl = "";
+                let viewLabel = "👁️ View";
+                if (job.task_type === "news-video") {
+                    viewUrl = job.result.video_url;
+                    viewLabel = "🎬 Play";
+                } else if (job.task_type === "deep-research") {
+                    viewUrl = job.result.pdf_url || job.result.report_url;
+                    viewLabel = "📄 PDF";
+                } else if (job.task_type === "podcast") {
+                    viewUrl = job.result.podcast_url;
+                    viewLabel = "🎧 Listen";
+                }
+                if (viewUrl) {
+                    actionsHtml += `
+                        <a href="${viewUrl}" target="_blank" class="btn btn-secondary" style="padding: 2px 6px; font-size:10px; text-decoration: none; color: var(--primary); border-color: rgba(99, 102, 241, 0.25); display: inline-flex; align-items: center; gap: 2px;" title="View Output">${viewLabel}</a>
+                    `;
+                }
+            }
             actionsHtml += `
                 <button type="button" class="btn btn-secondary" style="padding: 2px 6px; font-size:10px; opacity: 0.6;" onclick="cancelOrRemoveJob('${job.id}')" title="Delete Log">🗑️</button>
             `;

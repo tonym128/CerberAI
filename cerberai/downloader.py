@@ -12,6 +12,24 @@ def get_model_cache_path(filename: str) -> Path:
     CACHE_DIR.mkdir(parents=True, exist_ok=True)
     return CACHE_DIR / filename
 
+def is_model_downloaded(backend: str, backend_config: dict) -> bool:
+    """Check if a model's weight files are already cached locally.
+    
+    Returns True if:
+    - llama.cpp backend and the GGUF file exists in the local cache
+    - Other backends (diffusers, whisper, tts, etc.) always return True 
+      since they download on-demand via HuggingFace hub caching
+    """
+    if backend == "llama.cpp":
+        filename = backend_config.get("filename", "")
+        if not filename:
+            return False
+        return (CACHE_DIR / filename).exists()
+    # Diffusers/whisper/tts models are auto-cached by HuggingFace hub
+    # We can't easily check their cache without importing heavy libs,
+    # so we assume they need download only on first use
+    return True
+
 async def download_file(url: str, dest_path: Path, progress_callback=None):
     """Download a file with progress logging."""
     temp_path = dest_path.with_suffix(".tmp")

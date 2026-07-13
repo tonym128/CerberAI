@@ -42,26 +42,66 @@ async def run_scheduled_query(prompt: str, manager, agent, config):
 async def run_scheduled_automation(target: str, params: dict, manager, agent, config):
     try:
         print(f"Running scheduled automation: {target} with params {params}")
+        from .database import db_create_job, db_get_job
         from .telegram import send_telegram_message, send_telegram_document, send_telegram_video
         
+        # 1. Determine vram_required and build parameters
+        topic = params.get("topic")
+        date_str = params.get("date")
+        
         if target == "news-video":
-            from .automation import generate_yesterday_news_video, get_status
-            topic = params.get("topic")
-            date_str = params.get("date")
             video_mode = params.get("video_mode", "image")
+            job_params = {"topic": topic, "date": date_str, "video_mode": video_mode}
+            vram_req = 10.0
+            display_target = "News Video"
+            info_msg = f"Topic: `{topic if topic else 'World News'}`\nDate: `{date_str if date_str else 'Yesterday'}`\nMode: `{video_mode}`"
+        elif target == "deep-research":
+            if not topic:
+                topic = "General Interest"
+            job_params = {"topic": topic}
+            vram_req = 8.0
+            display_target = "Deep Research"
+            info_msg = f"Topic: `{topic}`"
+        elif target == "podcast":
+            job_params = {"topic": topic, "date": date_str}
+            vram_req = 8.0
+            display_target = "Podcast Briefing"
+            info_msg = f"Topic: `{topic if topic else 'World News'}`"
+        else:
+            print(f"Unknown scheduled automation target: {target}")
+            return
+
+        # 2. Enqueue the job in the Orchestrator
+        await send_telegram_message(
+            config, 
+            f"🔔 **Scheduled {display_target} Triggered**\n{info_msg}\nEnqueued in Orchestrator Job Queue..."
+        )
+        
+        job_id = db_create_job(target, job_params, vram_required=vram_req)
+        
+        # 3. Poll the job status until it is completed or failed
+        print(f"Enqueued scheduled job {job_id} for target {target}. Waiting for completion...")
+        while True:
+            await asyncio.sleep(5.0)
+            job = db_get_job(job_id)
+            if not job:
+                await send_telegram_message(config, f"❌ **Scheduled {display_target} Error**: Job {job_id} not found in database.")
+                return
             
-            await send_telegram_message(
-                config, 
-                f"🔔 **Scheduled News Video Triggered**\nTopic: `{topic if topic else 'World News'}`\nDate: `{date_str if date_str else 'Yesterday'}`\nMode: `{video_mode}`\nGenerating video in background..."
-            )
-            
-            await generate_yesterday_news_video(manager, agent, topic, date_str, video_mode)
-            
-            status_data = get_status()
-            if status_data["status"] == "completed":
-                video_url = status_data["video_url"]
+            if job["status"] == "completed":
+                result = job["result"] or {}
+                break
+            elif job["status"] == "failed":
+                error_msg = job.get("error", "Unknown error")
+                await send_telegram_message(config, f"❌ **Scheduled {display_target} Failed**: {error_msg}")
+                return
+
+        # 4. Handle completed job outputs
+        if target == "news-video":
+            video_url = result.get("video_url")
+            if video_url:
                 video_path = video_url.replace("/static/videos/", "cerberai/static/videos/")
-                stories = status_data.get("stories", [])
+                stories = result.get("stories", [])
                 
                 story_links = []
                 for s in stories:
@@ -75,85 +115,47 @@ async def run_scheduled_automation(target: str, params: dict, manager, agent, co
                     config, 
                     f"✅ **Scheduled News Video Completed!**\nTopic: `{topic if topic else 'World News'}`"
                 )
-                
                 await send_telegram_video(
                     config, 
                     video_path, 
                     f"🎬 **Breaking News Briefing:** {topic if topic else 'World News'}{stories_caption}"
                 )
             else:
-                await send_telegram_message(
-                    config, 
-                    f"❌ **Scheduled News Video Failed:** {status_data['message']}"
-                )
+                await send_telegram_message(config, "❌ **Scheduled News Video Failed**: No video URL found in job result.")
 
         elif target == "deep-research":
-            from .automation import generate_deep_research_report, get_research_status
-            topic = params.get("topic")
-            if not topic:
-                topic = "General Interest"
-                
-            await send_telegram_message(
-                config, 
-                f"🔔 **Scheduled Deep Research Triggered**\nTopic: `{topic}`\nGenerating comprehensive report in background..."
-            )
-            
-            await generate_deep_research_report(manager, agent, topic)
-            
-            status_data = get_research_status()
-            if status_data["status"] == "success":
-                pdf_url = status_data["pdf_url"]
+            pdf_url = result.get("pdf_url")
+            report_url = result.get("report_url")
+            if pdf_url:
                 pdf_path = pdf_url.replace("/static/reports/", "cerberai/static/reports/")
-                report_url = status_data["report_url"]
-                
                 await send_telegram_message(
                     config, 
                     f"✅ **Scheduled Deep Research Completed!**\nTopic: `{topic}`\nMarkdown Version: {report_url}"
                 )
-                
                 await send_telegram_document(
                     config,
                     pdf_path,
                     f"🔬 **Deep Research Report:** {topic}"
                 )
             else:
-                await send_telegram_message(
-                    config, 
-                    f"❌ **Scheduled Deep Research Failed:** {status_data['message']}"
-                )
+                await send_telegram_message(config, "❌ **Scheduled Deep Research Failed**: No PDF URL found in job result.")
 
         elif target == "podcast":
-            from .automation import generate_daily_podcast, get_podcast_status
-            topic = params.get("topic")
-            date_str = params.get("date")
-            
-            await send_telegram_message(
-                config, 
-                f"🔔 **Scheduled Podcast Briefing Triggered**\nTopic: `{topic if topic else 'World News'}`\nGenerating audio briefing..."
-            )
-            
-            await generate_daily_podcast(manager, agent, topic, date_str)
-            
-            status_data = get_podcast_status()
-            if status_data["status"] == "success":
-                podcast_url = status_data["podcast_url"]
+            podcast_url = result.get("podcast_url")
+            if podcast_url:
                 podcast_path = podcast_url.replace("/static/podcasts/", "cerberai/static/podcasts/")
-                
                 await send_telegram_message(
                     config, 
                     f"✅ **Scheduled Podcast Briefing Completed!**\nTopic: `{topic if topic else 'World News'}`"
                 )
-                
                 await send_telegram_document(
                     config,
                     podcast_path,
                     f"🎙️ **Daily Audio News Briefing:** {topic if topic else 'World News'}"
                 )
             else:
-                await send_telegram_message(
-                    config, 
-                    f"❌ **Scheduled Podcast Briefing Failed:** {status_data['message']}"
-                )
+                await send_telegram_message(config, "❌ **Scheduled Podcast Briefing Failed**: No podcast URL found in job result.")
+
     except Exception as e:
         print(f"Error running scheduled automation: {e}")
 

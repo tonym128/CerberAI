@@ -117,6 +117,13 @@ class VideoBackend(BaseBackend):
     async def handle_video_generation(self, payload: Dict[str, Any], progress_callback=None) -> Dict[str, Any]:
         """Generate video from text or image input, returning base64 encoded mp4 file."""
         async with self.lock:
+            # Clear CUDA cache and run GC before allocating memory for pipeline
+            import gc
+            import torch
+            gc.collect()
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+                
             image_b64 = payload.get("image")
             
             # Helper to run callback in correct thread context

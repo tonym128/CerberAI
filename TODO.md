@@ -11,3 +11,4 @@
 [ ] - Optimised for all loaded and max processing models (have auto-select based on tasks)
 [ ] - Add more tasks based models and stress test the selection system
 
+[ ] - Show which models haven't been downloaded / button to initiate download

@@ -18,6 +18,9 @@ class DynamicModelManager:
         self.loading_status: Dict[str, Dict[str, Any]] = {}
         self.lock = asyncio.Lock()
         
+        # Clean up any leftover/orphaned processes from previous runs on our configured ports
+        self._cleanup_orphaned_processes()
+        
         # Initialize backends based on config
         for m_cfg in config.models:
             backend_instance = self._create_backend(m_cfg)
@@ -26,6 +29,37 @@ class DynamicModelManager:
 
         # Sync model registry with current config
         self._sync_model_registry()
+
+    def _cleanup_orphaned_processes(self):
+        """Find and terminate any orphaned llama-server processes on ports configured in config.yaml."""
+        import psutil
+        configured_ports = set()
+        for m_cfg in self.config.models:
+            if m_cfg.backend and m_cfg.backend.lower() in ("llama.cpp", "llamacpp"):
+                port = m_cfg.backend_config.get("port")
+                if port:
+                    configured_ports.add(int(port))
+
+        if not configured_ports:
+            return
+
+        print(f"Checking for orphaned llama-server processes on ports: {configured_ports}...")
+        for proc in psutil.process_iter(['pid', 'name']):
+            try:
+                # Check connection ports
+                for conn in proc.connections(kind='inet'):
+                    if conn.laddr.port in configured_ports:
+                        print(f"Found orphaned llama-server process (PID: {proc.info['pid']}, name: {proc.info['name']}) on port {conn.laddr.port}. Terminating...")
+                        try:
+                            proc.terminate()
+                            proc.wait(timeout=2.0)
+                        except psutil.TimeoutExpired:
+                            proc.kill()
+                            proc.wait(timeout=1.0)
+                        except Exception as e:
+                            print(f"Error terminating orphaned process {proc.info['pid']}: {e}")
+            except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
+                pass
 
     def _sync_model_registry(self):
         """Sync current model configuration to the persistent model registry."""
