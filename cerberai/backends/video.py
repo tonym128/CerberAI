@@ -29,30 +29,12 @@ class VideoBackend(BaseBackend):
             
             if torch.cuda.is_available():
                 device = "cuda"
-                torch_dtype = torch.float16
             elif hasattr(torch, "xpu") and torch.xpu.is_available():
                 device = "xpu"
-                torch_dtype = torch.float16
             else:
                 device = "cpu"
-                torch_dtype = torch.float32
 
-            if progress_callback:
-                progress_callback(f"[3/3] Initializing pipeline '{model_name}' on device...")
-            if "svd" in model_name.lower() or "img2vid" in model_name.lower():
-                from diffusers import StableVideoDiffusionPipeline
-                self.pipeline = StableVideoDiffusionPipeline.from_pretrained(
-                    model_name,
-                    torch_dtype=torch_dtype
-                )
-            else:
-                from diffusers import CogVideoXPipeline
-                self.pipeline = CogVideoXPipeline.from_pretrained(
-                    model_name,
-                    torch_dtype=torch_dtype
-                )
-            
-            # Detect AMD GPU (ROCm) and GPU VRAM capacity
+            # Detect AMD GPU (ROCm) and GPU VRAM capacity early
             is_rocm = False
             device_vram_gb = 0.0
             if device == "cuda":
@@ -72,6 +54,61 @@ class VideoBackend(BaseBackend):
 
             if is_rocm:
                 print(f"AMD ROCm GPU detected ({device_vram_gb:.1f} GB VRAM).")
+
+            # Determine appropriate data type (bfloat16 is preferred for newer video DiT models if supported)
+            if device in ["cuda", "xpu"]:
+                use_bf16 = False
+                lower_model_name = model_name.lower()
+                if "cogvideox-5b" in lower_model_name or "wan" in lower_model_name or "ltx" in lower_model_name or "hunyuan" in lower_model_name:
+                    if is_rocm or (hasattr(torch.cuda, "is_bf16_supported") and torch.cuda.is_bf16_supported()):
+                        use_bf16 = True
+                torch_dtype = torch.bfloat16 if use_bf16 else torch.float16
+            else:
+                torch_dtype = torch.float32
+
+            if progress_callback:
+                progress_callback(f"[3/3] Initializing pipeline '{model_name}' on device...")
+            
+            lower_model_name = model_name.lower()
+            if "svd" in lower_model_name or "img2vid" in lower_model_name:
+                from diffusers import StableVideoDiffusionPipeline
+                self.pipeline = StableVideoDiffusionPipeline.from_pretrained(
+                    model_name,
+                    torch_dtype=torch_dtype
+                )
+            elif "wan" in lower_model_name:
+                try:
+                    from diffusers import WanPipeline
+                except ImportError:
+                    raise ImportError("WanPipeline requires a newer version of the diffusers library. Please run: pip install --upgrade diffusers")
+                self.pipeline = WanPipeline.from_pretrained(
+                    model_name,
+                    torch_dtype=torch_dtype
+                )
+            elif "ltx" in lower_model_name:
+                try:
+                    from diffusers import LTXPipeline
+                except ImportError:
+                    raise ImportError("LTXPipeline requires a newer version of the diffusers library. Please run: pip install --upgrade diffusers")
+                self.pipeline = LTXPipeline.from_pretrained(
+                    model_name,
+                    torch_dtype=torch_dtype
+                )
+            elif "hunyuan" in lower_model_name:
+                try:
+                    from diffusers import HunyuanVideoPipeline
+                except ImportError:
+                    raise ImportError("HunyuanVideoPipeline requires a newer version of the diffusers library. Please run: pip install --upgrade diffusers")
+                self.pipeline = HunyuanVideoPipeline.from_pretrained(
+                    model_name,
+                    torch_dtype=torch_dtype
+                )
+            else:
+                from diffusers import CogVideoXPipeline
+                self.pipeline = CogVideoXPipeline.from_pretrained(
+                    model_name,
+                    torch_dtype=torch_dtype
+                )
 
             # Apply memory saving techniques for lower VRAM environments
             if device in ["cuda", "xpu"]:
@@ -201,7 +238,7 @@ class VideoBackend(BaseBackend):
                     
                 video_frames = await loop.run_in_executor(None, run_svd)
             else:
-                # Text-to-Video (CogVideoX)
+                # Text-to-Video (CogVideoX, Wan, LTX, HunyuanVideo)
                 model_to_load = self.model_name
                 await self.load_model(model_to_load)
                 
@@ -209,7 +246,21 @@ class VideoBackend(BaseBackend):
                 if not prompt:
                     raise ValueError("Prompt is required for video generation.")
 
-                num_frames = payload.get("num_frames", 16)
+                # Set model-specific default parameters if not provided in payload
+                lower_model_name = model_to_load.lower()
+                if "wan" in lower_model_name:
+                    num_frames = payload.get("num_frames", 81)
+                    guidance_scale = payload.get("guidance_scale", 6.0)
+                elif "ltx" in lower_model_name:
+                    num_frames = payload.get("num_frames", 49)
+                    guidance_scale = payload.get("guidance_scale", 3.0)
+                elif "hunyuan" in lower_model_name:
+                    num_frames = payload.get("num_frames", 17)
+                    guidance_scale = payload.get("guidance_scale", 6.0)
+                else:
+                    num_frames = payload.get("num_frames", 16)
+                    guidance_scale = payload.get("guidance_scale", 6.0)
+
                 num_steps = payload.get("num_inference_steps", 20)
                 
                 await run_callback("⏳ Step 1: Running text-to-video denoising steps on GPU... Once denoising finishes, 3D VAE decoding will process spatial-temporal frames (runs silently and may take 1-2 minutes).\n")
@@ -217,16 +268,16 @@ class VideoBackend(BaseBackend):
                 import asyncio
                 loop = asyncio.get_running_loop()
                 
-                def run_cogvideo():
+                def run_t2v():
                     output = self.pipeline(
                         prompt=prompt,
                         num_frames=num_frames,
                         num_inference_steps=num_steps,
-                        guidance_scale=6.0
+                        guidance_scale=guidance_scale
                     )
                     return output.frames[0]
 
-                video_frames = await loop.run_in_executor(None, run_cogvideo)
+                video_frames = await loop.run_in_executor(None, run_t2v)
             
             await run_callback("⚙️ Step 2: Denoising and VAE decoding complete! Compiling frames to MP4 video file...\n")
 
