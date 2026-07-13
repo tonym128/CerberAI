@@ -20,4 +20,7 @@ qrcode>=7.4.2
 sentencepiece>=0.1.99
 protobuf>=3.20.0
 opencv-python>=4.8.0
+imageio>=2.33.0
+imageio-ffmpeg>=0.4.9
+
 

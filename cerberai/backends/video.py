@@ -55,14 +55,20 @@ class VideoBackend(BaseBackend):
             if is_rocm:
                 print(f"AMD ROCm GPU detected ({device_vram_gb:.1f} GB VRAM).")
 
-            # Determine appropriate data type (bfloat16 is preferred for newer video DiT models if supported)
+            # Determine appropriate data type (bfloat16 is preferred for video DiT models if supported)
             if device in ["cuda", "xpu"]:
-                use_bf16 = False
                 lower_model_name = model_name.lower()
-                if "cogvideox-5b" in lower_model_name or "wan" in lower_model_name or "ltx" in lower_model_name or "hunyuan" in lower_model_name:
-                    if is_rocm or (hasattr(torch.cuda, "is_bf16_supported") and torch.cuda.is_bf16_supported()):
-                        use_bf16 = True
-                torch_dtype = torch.bfloat16 if use_bf16 else torch.float16
+                is_dit_model = "cogvideox" in lower_model_name or "wan" in lower_model_name or "ltx" in lower_model_name or "hunyuan" in lower_model_name
+                has_bf16_support = is_rocm or (hasattr(torch.cuda, "is_bf16_supported") and torch.cuda.is_bf16_supported())
+                
+                if is_dit_model:
+                    if has_bf16_support:
+                        torch_dtype = torch.bfloat16
+                    else:
+                        print("Warning: DiT video model detected but bfloat16 is not supported by hardware/driver. Falling back to float32 to prevent NaN overflow (green screen).")
+                        torch_dtype = torch.float32
+                else:
+                    torch_dtype = torch.float16
             else:
                 torch_dtype = torch.float32
 
@@ -115,15 +121,16 @@ class VideoBackend(BaseBackend):
                 # Use actual GPU capacity (device_vram_gb) if detected, otherwise fall back to model estimate.
                 effective_vram_gb = device_vram_gb if device_vram_gb > 0.0 else self.vram_estimate_gb
                 
-                # If we have at least 18GB VRAM (e.g. 24GB cards like RTX 3090/4090 or RX 7900 XTX),
-                # we can load the entire model + activations directly into GPU memory.
-                if effective_vram_gb >= 18.0:
+                # If we have at least 14GB VRAM (e.g. 16GB+ cards like RX 9070 XT or RTX 4080),
+                # we can load the entire model + activations directly into GPU memory. This is
+                # highly recommended on ROCm to avoid CPU offloading driver instability/hangs.
+                if effective_vram_gb >= 14.0:
                     print(f"GPU VRAM ({effective_vram_gb:.1f} GB) is sufficient. Loading model directly to GPU...")
                     self.pipeline.to(device)
                 else:
                     if is_rocm:
                         # AMD ROCm requires HSA_ENABLE_SDMA=0 to prevent hangs during CPU offloading.
-                        print(f"GPU VRAM ({effective_vram_gb:.1f} GB) is under 18GB. Enabling model-level CPU offloading...")
+                        print(f"GPU VRAM ({effective_vram_gb:.1f} GB) is under 14GB. Enabling model-level CPU offloading...")
                         print("Note: Sequential CPU offloading is disabled on ROCm to prevent driver hangs.")
                         self.pipeline.enable_model_cpu_offload()
                     else:
@@ -135,7 +142,7 @@ class VideoBackend(BaseBackend):
                             except Exception:
                                 pass
                         else:
-                            print(f"GPU VRAM ({effective_vram_gb:.1f} GB) is under 18GB. Enabling model-level CPU offloading...")
+                            print(f"GPU VRAM ({effective_vram_gb:.1f} GB) is under 14GB. Enabling model-level CPU offloading...")
                             self.pipeline.enable_model_cpu_offload()
 
                 # Prevent GPU scheduling timeouts (TDR resets) by splitting VAE operations at pipeline level
