@@ -52,20 +52,54 @@ class VideoBackend(BaseBackend):
                     torch_dtype=torch_dtype
                 )
             
-            # Apply memory saving techniques for lower VRAM environments
-            if device in ["cuda", "xpu"]:
-                if self.vram_estimate_gb <= 10.0:
-                    print("Enabling model offloading & sequential offloading (saves maximum VRAM, slow execution)...")
-                    self.pipeline.enable_model_cpu_offload()
+            # Detect AMD GPU (ROCm) and GPU VRAM capacity
+            is_rocm = False
+            device_vram_gb = 0.0
+            if device == "cuda":
+                if getattr(torch.version, "hip", None) is not None:
+                    is_rocm = True
+                else:
                     try:
-                        self.pipeline.enable_sequential_cpu_offload()
+                        device_name = torch.cuda.get_device_name(0).lower()
+                        if "amd" in device_name or "radeon" in device_name:
+                            is_rocm = True
                     except Exception:
                         pass
-                elif self.vram_estimate_gb < 18.0:
-                    print("Enabling model-level CPU offloading (saves VRAM, fast execution)...")
-                    self.pipeline.enable_model_cpu_offload()
-                else:
+                try:
+                    device_vram_gb = torch.cuda.get_device_properties(0).total_memory / (1024 ** 3)
+                except Exception:
+                    pass
+
+            if is_rocm:
+                print(f"AMD ROCm GPU detected ({device_vram_gb:.1f} GB VRAM).")
+
+            # Apply memory saving techniques for lower VRAM environments
+            if device in ["cuda", "xpu"]:
+                # Use actual GPU capacity (device_vram_gb) if detected, otherwise fall back to model estimate.
+                effective_vram_gb = device_vram_gb if device_vram_gb > 0.0 else self.vram_estimate_gb
+                
+                # If we have at least 18GB VRAM (e.g. 24GB cards like RTX 3090/4090 or RX 7900 XTX),
+                # we can load the entire model + activations directly into GPU memory.
+                if effective_vram_gb >= 18.0:
+                    print(f"GPU VRAM ({effective_vram_gb:.1f} GB) is sufficient. Loading model directly to GPU...")
                     self.pipeline.to(device)
+                else:
+                    if is_rocm:
+                        # AMD ROCm requires HSA_ENABLE_SDMA=0 to prevent hangs during CPU offloading.
+                        print(f"GPU VRAM ({effective_vram_gb:.1f} GB) is under 18GB. Enabling model-level CPU offloading...")
+                        print("Note: Sequential CPU offloading is disabled on ROCm to prevent driver hangs.")
+                        self.pipeline.enable_model_cpu_offload()
+                    else:
+                        if effective_vram_gb <= 10.0:
+                            print(f"GPU VRAM ({effective_vram_gb:.1f} GB) is very low. Enabling model offloading & sequential offloading...")
+                            self.pipeline.enable_model_cpu_offload()
+                            try:
+                                self.pipeline.enable_sequential_cpu_offload()
+                            except Exception:
+                                pass
+                        else:
+                            print(f"GPU VRAM ({effective_vram_gb:.1f} GB) is under 18GB. Enabling model-level CPU offloading...")
+                            self.pipeline.enable_model_cpu_offload()
 
                 # Prevent GPU scheduling timeouts (TDR resets) by splitting VAE operations at pipeline level
                 try:

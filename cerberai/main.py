@@ -46,6 +46,15 @@ if config.hf_token:
 if "PYTORCH_CUDA_ALLOC_CONF" not in os.environ:
     os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
 
+# Detect AMD ROCm environment at startup and apply safety variables
+if sys.platform.startswith("linux"):
+    is_rocm_env = os.path.exists("/dev/kfd") or any(os.path.exists(p) for p in ["/dev/dri", "/opt/rocm"])
+    if is_rocm_env:
+        # Prevent GPU hangs during frequent host-device VRAM copies (CPU offloading)
+        if "HSA_ENABLE_SDMA" not in os.environ:
+            os.environ["HSA_ENABLE_SDMA"] = "0"
+            print("CerberAI: AMD ROCm detected. Setting HSA_ENABLE_SDMA=0 to prevent GPU hangs/stalls during model offloading.")
+
 # Initialize managers
 manager = DynamicModelManager(config)
 router = IntentRouter(config.router, config.models)
