@@ -2156,7 +2156,6 @@ if (openSetupBtn && setupModal) {
             closeModal();
             
             // Refresh dashboard model catalog & limits
-            fetchModels();
             pollStatus();
         } catch (err) {
             alert(`Failed to save configuration: ${err.message}`);
@@ -2166,6 +2165,224 @@ if (openSetupBtn && setupModal) {
         }
     });
 }
+
+// ==========================================================================
+// SETTINGS MODAL TAB OPERATIONS & DISK CACHE MANAGEMENT
+// ==========================================================================
+const modalTabBtns = document.querySelectorAll(".modal-tab-btn");
+const modalTabContents = document.querySelectorAll(".modal-tab-content");
+const cacheGgufSize = document.getElementById("cache-gguf-size");
+const cacheHfSize = document.getElementById("cache-hf-size");
+const cacheTotalSize = document.getElementById("cache-total-size");
+const cacheSearchInput = document.getElementById("cache-search");
+const cacheFilterConfigured = document.getElementById("cache-filter-configured");
+const cacheFilterDownloaded = document.getElementById("cache-filter-downloaded");
+const cacheSortSelect = document.getElementById("cache-sort");
+const cacheModelsList = document.getElementById("cache-models-list");
+const btnRefreshCache = document.getElementById("btn-refresh-cache");
+
+let cachedModelsData = [];
+
+function formatBytes(bytes) {
+    if (!bytes || bytes === 0) return "0 Bytes";
+    const k = 1024;
+    const sizes = ["Bytes", "KB", "MB", "GB", "TB"];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i];
+}
+
+function formatTimestamp(timestamp) {
+    if (!timestamp) return "Never";
+    const date = new Date(timestamp * (timestamp < 10000000000 ? 1000 : 1));
+    return date.toLocaleDateString() + " " + date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+}
+
+if (modalTabBtns.length > 0) {
+    modalTabBtns.forEach(btn => {
+        btn.addEventListener("click", () => {
+            modalTabBtns.forEach(b => {
+                b.classList.remove("active");
+                b.style.color = "var(--text-secondary)";
+                b.style.borderBottomColor = "transparent";
+            });
+            modalTabContents.forEach(c => c.classList.add("hidden"));
+
+            btn.classList.add("active");
+            btn.style.color = "var(--text-primary)";
+            btn.style.borderBottomColor = "var(--primary)";
+            
+            const targetTab = btn.getAttribute("data-modal-tab");
+            const element = document.getElementById(targetTab);
+            if (element) {
+                element.classList.remove("hidden");
+            }
+
+            if (targetTab === "modal-tab-cache") {
+                loadCacheStats();
+            }
+        });
+    });
+}
+
+async function loadCacheStats() {
+    if (!cacheModelsList) return;
+    cacheModelsList.innerHTML = `<tr><td colspan="6" style="text-align: center; padding: 20px; color: var(--text-secondary);">⏳ Loading cache and model statistics...</td></tr>`;
+    
+    try {
+        const res = await fetch("/api/cache/stats");
+        if (!res.ok) throw new Error("Failed to fetch cache stats.");
+        const data = await res.json();
+        
+        if (cacheGgufSize) cacheGgufSize.textContent = formatBytes(data.total_gguf_size_bytes);
+        if (cacheHfSize) cacheHfSize.textContent = formatBytes(data.total_hf_size_bytes);
+        if (cacheTotalSize) cacheTotalSize.textContent = formatBytes(data.total_cache_size_bytes);
+        
+        cachedModelsData = data.models || [];
+        renderCacheModels();
+    } catch (err) {
+        cacheModelsList.innerHTML = `<tr><td colspan="6" style="text-align: center; padding: 20px; color: var(--accent-red);">❌ Error: ${err.message}</td></tr>`;
+    }
+}
+
+function renderCacheModels() {
+    if (!cacheModelsList) return;
+    
+    const searchQuery = cacheSearchInput ? cacheSearchInput.value.toLowerCase().trim() : "";
+    const configFilter = cacheFilterConfigured ? cacheFilterConfigured.value : "all";
+    const downloadFilter = cacheFilterDownloaded ? cacheFilterDownloaded.value : "all";
+    const sortBy = cacheSortSelect ? cacheSortSelect.value : "size_desc";
+    
+    let filtered = cachedModelsData.filter(model => {
+        const nameMatch = (model.display_name || "").toLowerCase().includes(searchQuery) || 
+                          (model.repo_id || "").toLowerCase().includes(searchQuery) ||
+                          (model.filename || "").toLowerCase().includes(searchQuery) ||
+                          (model.backend || "").toLowerCase().includes(searchQuery) ||
+                          (model.type || "").toLowerCase().includes(searchQuery);
+                          
+        let configMatch = true;
+        if (configFilter === "configured") configMatch = model.is_configured;
+        if (configFilter === "unconfigured") configMatch = !model.is_configured;
+        
+        let downloadMatch = true;
+        if (downloadFilter === "downloaded") downloadMatch = model.is_downloaded;
+        if (downloadFilter === "not_downloaded") downloadMatch = !model.is_downloaded;
+        
+        return nameMatch && configMatch && downloadMatch;
+    });
+    
+    filtered.sort((a, b) => {
+        if (sortBy === "size_desc") {
+            return (b.size_bytes || 0) - (a.size_bytes || 0);
+        }
+        if (sortBy === "size_asc") {
+            return (a.size_bytes || 0) - (b.size_bytes || 0);
+        }
+        if (sortBy === "configured_first") {
+            if (a.is_configured !== b.is_configured) {
+                return a.is_configured ? -1 : 1;
+            }
+            return (b.size_bytes || 0) - (a.size_bytes || 0);
+        }
+        if (sortBy === "last_used_newest") {
+            return (b.last_used || 0) - (a.last_used || 0);
+        }
+        if (sortBy === "last_used_oldest") {
+            return (a.last_used || 9999999999) - (b.last_used || 9999999999);
+        }
+        if (sortBy === "name_asc") {
+            return (a.display_name || "").localeCompare(b.display_name || "");
+        }
+        return 0;
+    });
+    
+    if (filtered.length === 0) {
+        cacheModelsList.innerHTML = `<tr><td colspan="6" style="text-align: center; padding: 20px; color: var(--text-secondary);">No models found matching the filters.</td></tr>`;
+        return;
+    }
+    
+    cacheModelsList.innerHTML = "";
+    filtered.forEach(model => {
+        const tr = document.createElement("tr");
+        tr.style.borderBottom = "1px solid rgba(255,255,255,0.05)";
+        
+        const detailsHtml = `
+            <div style="font-weight: 600; color: var(--text-primary); font-size: 12.5px;">${model.display_name}</div>
+            <div style="font-size: 10px; color: var(--text-secondary); margin-top: 2px; word-break: break-all;">
+                ${model.repo_id ? `HF: ${model.repo_id}` : (model.filename ? `File: ${model.filename}` : 'Local Model')}
+            </div>
+        `;
+        
+        const backendBadge = `<span class="badge" style="background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.1); font-size: 10px; padding: 2px 6px; border-radius: 4px;">${model.backend || model.type}</span>`;
+        
+        const sizeText = model.is_downloaded ? formatBytes(model.size_bytes) : '<span style="color: var(--text-secondary); font-style: italic;">Not Cached</span>';
+        
+        const configBadge = model.is_configured 
+            ? `<span style="background: rgba(16, 185, 129, 0.15); color: #10b981; border: 1px solid rgba(16, 185, 129, 0.3); font-size: 10px; padding: 2px 6px; border-radius: 4px; font-weight: 600;">Yes</span>` 
+            : `<span style="background: rgba(255,255,255,0.05); color: var(--text-secondary); border: 1px solid rgba(255,255,255,0.1); font-size: 10px; padding: 2px 6px; border-radius: 4px;">No</span>`;
+            
+        const lastUsedText = formatTimestamp(model.last_used);
+        
+        let actionHtml = "";
+        if (model.is_configured) {
+            actionHtml = `<button type="button" class="btn btn-secondary" disabled title="Cannot delete configured model" style="font-size: 10px; padding: 4px 8px; opacity: 0.4; cursor: not-allowed; width: 60px;">Active</button>`;
+        } else if (model.is_downloaded) {
+            actionHtml = `<button type="button" class="btn btn-delete-cache" style="font-size: 10px; padding: 4px 8px; background: rgba(239, 68, 68, 0.15); color: var(--accent-red); border: 1px solid rgba(239, 68, 68, 0.3); border-radius: 6px; cursor: pointer; transition: all 0.2s ease; width: 60px;">Delete</button>`;
+        } else {
+            actionHtml = `<span style="color: var(--text-secondary); font-style: italic; font-size: 10px;">None</span>`;
+        }
+        
+        tr.innerHTML = `
+            <td style="padding: 10px 14px; vertical-align: middle;">${detailsHtml}</td>
+            <td style="padding: 10px 14px; vertical-align: middle;">${backendBadge}</td>
+            <td style="padding: 10px 14px; vertical-align: middle; text-align: right; font-family: monospace;">${sizeText}</td>
+            <td style="padding: 10px 14px; vertical-align: middle; text-align: center;">${configBadge}</td>
+            <td style="padding: 10px 14px; vertical-align: middle; color: var(--text-secondary); font-size: 11px;">${lastUsedText}</td>
+            <td style="padding: 10px 14px; vertical-align: middle; text-align: center;">${actionHtml}</td>
+        `;
+        
+        const deleteBtn = tr.querySelector(".btn-delete-cache");
+        if (deleteBtn) {
+            deleteBtn.addEventListener("click", async () => {
+                const confirmMsg = `Are you sure you want to delete the cached files for "${model.display_name}"?\nThis will free up ${formatBytes(model.size_bytes)} of disk space.`;
+                if (confirm(confirmMsg)) {
+                    deleteBtn.disabled = true;
+                    deleteBtn.textContent = "⏳ Deleting";
+                    
+                    try {
+                        const delRes = await fetch("/api/cache/models", {
+                            method: "DELETE",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({
+                                filename: model.filename,
+                                repo_id: model.repo_id
+                            })
+                        });
+                        
+                        if (!delRes.ok) {
+                            const errData = await delRes.json();
+                            throw new Error(errData.detail || "Failed to delete cache files.");
+                        }
+                        
+                        alert(`Successfully freed up ${formatBytes(model.size_bytes)}!`);
+                        loadCacheStats();
+                    } catch (delErr) {
+                        alert(`Error deleting cache: ${delErr.message}`);
+                        deleteBtn.disabled = false;
+                        deleteBtn.textContent = "Delete";
+                    }
+                }
+            });
+        }
+        
+        cacheModelsList.appendChild(tr);
+    });
+}
+
+if (cacheSearchInput) cacheSearchInput.addEventListener("input", renderCacheModels);
+if (cacheFilterConfigured) cacheFilterConfigured.addEventListener("change", renderCacheModels);
+if (cacheFilterDownloaded) cacheFilterDownloaded.addEventListener("change", renderCacheModels);
+if (cacheSortSelect) cacheSortSelect.addEventListener("change", renderCacheModels);
+if (btnRefreshCache) btnRefreshCache.addEventListener("click", loadCacheStats);
 
 // ==========================================================================
 // CONVERSATION HISTORY OPERATIONS

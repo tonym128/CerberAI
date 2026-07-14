@@ -1417,10 +1417,300 @@ async def download_all_models(background_tasks: BackgroundTasks):
     asyncio.create_task(_download_worker())
     return JSONResponse(content={"message": f"Started downloading {len(models_to_download)} model(s) in background.", "status": _download_all_status})
 
-@app.get("/api/models/download-all/status")
-async def download_all_status():
-    """Check the progress of a bulk model download."""
-    return JSONResponse(content=_download_all_status)
+@app.get("/api/cache/stats")
+async def get_cache_stats():
+    """Retrieve cache sizes and status of all cached and configured models."""
+    import os
+    from pathlib import Path
+    from .database import get_db_connection
+    import yaml
+    
+    # 1. Read current config to know active models
+    active_models = []
+    try:
+        with open("config.yaml", "r") as f:
+            cfg = yaml.safe_load(f)
+            active_models = cfg.get("models", [])
+    except Exception:
+        pass
+        
+    active_ids = {m.get("id") for m in active_models if m.get("id")}
+    active_repos = {m.get("backend_config", {}).get("repo_id") for m in active_models if m.get("backend_config", {}).get("repo_id")}
+    active_filenames = {m.get("backend_config", {}).get("filename") for m in active_models if m.get("backend_config", {}).get("filename")}
+
+    # Helper to calculate size
+    def get_path_size(p: Path) -> int:
+        if not p.exists():
+            return 0
+        if p.is_file():
+            return p.stat().st_size
+        total = 0
+        try:
+            for entry in p.rglob('*'):
+                if entry.is_file():
+                    total += entry.stat().st_size
+        except Exception:
+            pass
+        return total
+
+    # 2. Paths
+    GGUF_DIR = Path(os.path.expanduser("~/.cache/cerberai/models"))
+    HF_DIR = Path(os.path.expanduser("~/.cache/huggingface/hub"))
+    
+    # 3. Retrieve database registry
+    registry_models = []
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM model_registry")
+        rows = cursor.fetchall()
+        registry_models = [dict(r) for r in rows]
+        conn.close()
+    except Exception:
+        pass
+        
+    registry_by_repo = {r.get("repo_id"): r for r in registry_models if r.get("repo_id")}
+    registry_by_filename = {r.get("filename"): r for r in registry_models if r.get("filename")}
+
+    # Map of all unique models we discover
+    # Key is repo_id or filename
+    models_dict = {}
+
+    # A. Scan active config models
+    for m in active_models:
+        m_id = m.get("id")
+        backend = m.get("backend")
+        m_type = m.get("type")
+        bc = m.get("backend_config", {})
+        repo_id = bc.get("repo_id")
+        filename = bc.get("filename")
+        purpose = m.get("purpose", "")
+        vram = m.get("vram_estimate_gb", 0.0)
+        
+        key = repo_id if repo_id else filename
+        if not key:
+            continue
+            
+        # Get from registry if exists
+        reg = registry_by_repo.get(repo_id) if repo_id else registry_by_filename.get(filename)
+        last_seen = reg.get("last_seen") if reg else None
+        display_name = reg.get("display_name") if reg else (repo_id or filename)
+
+        # Size estimation
+        size_bytes = 0
+        is_downloaded = False
+        if filename: # GGUF
+            p = GGUF_DIR / filename
+            if p.exists():
+                size_bytes = get_path_size(p)
+                is_downloaded = True
+        elif repo_id: # HF
+            folder_name = f"models--{repo_id.replace('/', '--')}"
+            p = HF_DIR / folder_name
+            if p.exists():
+                size_bytes = get_path_size(p)
+                is_downloaded = True
+
+        models_dict[key] = {
+            "id": m_id,
+            "display_name": display_name,
+            "type": m_type,
+            "backend": backend,
+            "repo_id": repo_id,
+            "filename": filename,
+            "purpose": purpose,
+            "vram_estimate_gb": vram,
+            "is_configured": True,
+            "is_downloaded": is_downloaded,
+            "size_bytes": size_bytes,
+            "last_used": last_seen
+        }
+
+    # B. Scan database registry for historical models not in active config
+    for reg in registry_models:
+        repo_id = reg.get("repo_id")
+        filename = reg.get("filename")
+        key = repo_id if repo_id else filename
+        if not key or key in models_dict:
+            continue
+
+        size_bytes = 0
+        is_downloaded = False
+        if filename:
+            p = GGUF_DIR / filename
+            if p.exists():
+                size_bytes = get_path_size(p)
+                is_downloaded = True
+        elif repo_id:
+            folder_name = f"models--{repo_id.replace('/', '--')}"
+            p = HF_DIR / folder_name
+            if p.exists():
+                size_bytes = get_path_size(p)
+                is_downloaded = True
+
+        models_dict[key] = {
+            "id": reg.get("function_id"),
+            "display_name": reg.get("display_name") or repo_id or filename,
+            "type": reg.get("model_type"),
+            "backend": reg.get("backend"),
+            "repo_id": repo_id,
+            "filename": filename,
+            "purpose": reg.get("purpose", ""),
+            "vram_estimate_gb": reg.get("vram_estimate_gb", 0.0),
+            "is_configured": False,
+            "is_downloaded": is_downloaded,
+            "size_bytes": size_bytes,
+            "last_used": reg.get("last_seen")
+        }
+
+    # C. Scan disk directories for any model files not in config or registry
+    # Check GGUF models
+    if GGUF_DIR.exists():
+        try:
+            for item in GGUF_DIR.glob("*.gguf"):
+                if item.is_file() and item.name not in models_dict:
+                    size_bytes = get_path_size(item)
+                    models_dict[item.name] = {
+                        "id": None,
+                        "display_name": item.name,
+                        "type": "llm",
+                        "backend": "llama.cpp",
+                        "repo_id": None,
+                        "filename": item.name,
+                        "purpose": "Unconfigured GGUF model in cache",
+                        "vram_estimate_gb": 0.0,
+                        "is_configured": False,
+                        "is_downloaded": True,
+                        "size_bytes": size_bytes,
+                        "last_used": item.stat().st_mtime
+                    }
+        except Exception:
+            pass
+
+    # Check HF models
+    if HF_DIR.exists():
+        try:
+            for item in HF_DIR.glob("models--*"):
+                if item.is_dir():
+                    # Parse repo ID
+                    folder_name = item.name
+                    parts = folder_name[8:].split("--")
+                    repo_id = "/".join(parts)
+                    if repo_id not in models_dict:
+                        size_bytes = get_path_size(item)
+                        # Infer type from name
+                        lower_repo = repo_id.lower()
+                        m_type = "llm"
+                        backend = "diffusers"
+                        if "whisper" in lower_repo or "moonshine" in lower_repo:
+                            m_type = "stt"
+                            backend = "whisper"
+                        elif "kokoro" in lower_repo or "tts" in lower_repo:
+                            m_type = "tts"
+                            backend = "tts"
+                        elif "wan" in lower_repo or "cogvideo" in lower_repo or "ltx" in lower_repo or "hunyuan" in lower_repo or "svd" in lower_repo or "img2vid" in lower_repo:
+                            m_type = "video"
+                            backend = "video"
+                        elif "sd" in lower_repo or "flux" in lower_repo or "diffusion" in lower_repo:
+                            m_type = "image"
+                            backend = "diffusers"
+
+                        models_dict[repo_id] = {
+                            "id": None,
+                            "display_name": repo_id,
+                            "type": m_type,
+                            "backend": backend,
+                            "repo_id": repo_id,
+                            "filename": None,
+                            "purpose": "Unconfigured HF model in cache",
+                            "vram_estimate_gb": 0.0,
+                            "is_configured": False,
+                            "is_downloaded": True,
+                            "size_bytes": size_bytes,
+                            "last_used": item.stat().st_mtime
+                        }
+        except Exception:
+            pass
+
+    # Calculate overall cache stats
+    total_gguf_size = 0
+    if GGUF_DIR.exists():
+        total_gguf_size = get_path_size(GGUF_DIR)
+        
+    total_hf_size = 0
+    if HF_DIR.exists():
+        total_hf_size = get_path_size(HF_DIR)
+
+    return JSONResponse(content={
+        "total_gguf_size_bytes": total_gguf_size,
+        "total_hf_size_bytes": total_hf_size,
+        "total_cache_size_bytes": total_gguf_size + total_hf_size,
+        "models": list(models_dict.values())
+    })
+
+@app.delete("/api/cache/models")
+async def delete_model_cache(request: Request):
+    """Delete a cached model's files from disk to free up space."""
+    import os
+    import shutil
+    from pathlib import Path
+    
+    try:
+        payload = await request.json()
+        filename = payload.get("filename")
+        repo_id = payload.get("repo_id")
+        
+        if not filename and not repo_id:
+            raise HTTPException(status_code=400, detail="Either filename or repo_id must be provided.")
+            
+        deleted_size = 0
+        deleted_path = ""
+        
+        if filename: # GGUF
+            GGUF_DIR = Path(os.path.expanduser("~/.cache/cerberai/models"))
+            p = GGUF_DIR / filename
+            if p.exists():
+                deleted_size = p.stat().st_size
+                p.unlink()
+                deleted_path = str(p)
+            else:
+                return JSONResponse(status_code=404, content={"message": f"File {filename} not found in GGUF cache."})
+        elif repo_id: # HF
+            HF_DIR = Path(os.path.expanduser("~/.cache/huggingface/hub"))
+            folder_name = f"models--{repo_id.replace('/', '--')}"
+            p = HF_DIR / folder_name
+            if p.exists():
+                # Helper to count size before deleting
+                def get_dir_size(path: Path) -> int:
+                    total = 0
+                    for entry in path.rglob('*'):
+                        if entry.is_file():
+                            total += entry.stat().st_size
+                    return total
+                deleted_size = get_dir_size(p)
+                shutil.rmtree(p)
+                deleted_path = str(p)
+                
+                # Also delete associated lock file if it exists
+                lock_file = HF_DIR / f".locks/models--{repo_id.replace('/', '--')}"
+                if lock_file.exists():
+                    try:
+                        if lock_file.is_file():
+                            lock_file.unlink()
+                        else:
+                            shutil.rmtree(lock_file)
+                    except Exception:
+                        pass
+            else:
+                return JSONResponse(status_code=404, content={"message": f"Repository {repo_id} not found in Hugging Face cache."})
+                
+        return JSONResponse(content={
+            "success": True,
+            "message": f"Successfully deleted model cache at {deleted_path}",
+            "deleted_size_bytes": deleted_size
+        })
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to delete model cache: {str(e)}")
 
 @app.get("/api/config")
 async def get_current_config():

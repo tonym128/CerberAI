@@ -626,7 +626,14 @@
                 <button id="close-setup" class="close-btn">&times;</button>
             </div>
             <div class="modal-body">
-                 <form id="setup-form">
+                <div class="modal-tabs" style="display: flex; gap: 8px; margin-bottom: 20px; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 10px;">
+                    <button type="button" class="modal-tab-btn active" data-modal-tab="modal-tab-config" style="background: none; border: none; color: var(--text-primary); font-weight: 600; padding: 6px 12px; cursor: pointer; border-bottom: 2px solid var(--primary); font-size: 13px;">⚙️ Model Configuration</button>
+                    <button type="button" class="modal-tab-btn" data-modal-tab="modal-tab-cache" style="background: none; border: none; color: var(--text-secondary); padding: 6px 12px; cursor: pointer; font-size: 13px;">💾 Disk Cache & Stats</button>
+                </div>
+                
+                <!-- Tab 1: Config Form -->
+                <div id="modal-tab-config" class="modal-tab-content">
+                     <form id="setup-form">
                     <!-- Preset Configurations -->
                     <div class="form-section-preset">
                         <h3 style="color: #a78bfa; margin-top: 0; font-size: 14px; font-weight: 700;">⚡ Quick Preset Load</h3>
@@ -780,7 +787,77 @@
                         <button type="button" id="btn-cancel-setup" class="btn btn-secondary">Cancel</button>
                         <button type="submit" class="btn btn-primary">Save & Hot-Reload</button>
                     </div>
-                 </form>
+                  </form>
+                </div> <!-- End Tab 1 -->
+
+                <!-- Tab 2: Cache & Stats -->
+                <div id="modal-tab-cache" class="modal-tab-content hidden" style="color: var(--text-primary);">
+                     <!-- Cache Overview Cards -->
+                     <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin-bottom: 20px;">
+                         <div style="padding: 14px; border-radius: 12px; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.06); text-align: center;">
+                             <div style="font-size: 11px; color: var(--text-secondary); text-transform: uppercase; font-weight: 600; margin-bottom: 4px;">GGUF models Cache</div>
+                             <div id="cache-gguf-size" style="font-size: 18px; font-weight: 700; color: #a78bfa;">0.00 GB</div>
+                         </div>
+                         <div style="padding: 14px; border-radius: 12px; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.06); text-align: center;">
+                             <div style="font-size: 11px; color: var(--text-secondary); text-transform: uppercase; font-weight: 600; margin-bottom: 4px;">HuggingFace Cache</div>
+                             <div id="cache-hf-size" style="font-size: 18px; font-weight: 700; color: #3b82f6;">0.00 GB</div>
+                         </div>
+                         <div style="padding: 14px; border-radius: 12px; background: rgba(139, 92, 246, 0.08); border: 1px solid rgba(139, 92, 246, 0.2); text-align: center;">
+                             <div style="font-size: 11px; color: var(--text-secondary); text-transform: uppercase; font-weight: 600; margin-bottom: 4px;">Total Space Used</div>
+                             <div id="cache-total-size" style="font-size: 20px; font-weight: 700; color: var(--primary);">0.00 GB</div>
+                         </div>
+                     </div>
+
+                     <!-- Filters and Sort controls -->
+                     <div style="display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; background: rgba(255,255,255,0.02); padding: 12px; border-radius: 10px; border: 1px solid rgba(255,255,255,0.04);">
+                         <input type="text" id="cache-search" placeholder="🔍 Search models..." style="flex: 1 1 180px; min-width: 150px; background: rgba(0,0,0,0.2); border: 1px solid rgba(255,255,255,0.1); border-radius: 6px; padding: 6px 10px; font-size: 12px; color: var(--text-primary);">
+                         
+                         <select id="cache-filter-configured" class="custom-select-small" style="flex: 1 1 120px; font-size: 12px; height: 32px; padding: 4px 8px;">
+                             <option value="all">All Configurations</option>
+                             <option value="configured">Configured Only</option>
+                             <option value="unconfigured">Unconfigured Only</option>
+                         </select>
+                         
+                         <select id="cache-filter-downloaded" class="custom-select-small" style="flex: 1 1 120px; font-size: 12px; height: 32px; padding: 4px 8px;">
+                             <option value="all">All Cache Status</option>
+                             <option value="downloaded">Downloaded Only</option>
+                             <option value="not_downloaded">Not Downloaded</option>
+                         </select>
+                         
+                         <select id="cache-sort" class="custom-select-small" style="flex: 1 1 140px; font-size: 12px; height: 32px; padding: 4px 8px;">
+                             <option value="size_desc" selected>Sort by Size (Largest)</option>
+                             <option value="size_asc">Sort by Size (Smallest)</option>
+                             <option value="configured_first">Sort by Configured First</option>
+                             <option value="last_used_newest">Sort by Last Used (Newest)</option>
+                             <option value="last_used_oldest">Sort by Last Used (Oldest)</option>
+                             <option value="name_asc">Sort by Name (A-Z)</option>
+                         </select>
+                     </div>
+
+                     <!-- Models List Table -->
+                     <div style="max-height: 400px; overflow-y: auto; border: 1px solid rgba(255,255,255,0.06); border-radius: 10px; background: rgba(0,0,0,0.15);">
+                         <table style="width: 100%; border-collapse: collapse; text-align: left; font-size: 12px;">
+                             <thead>
+                                 <tr style="border-bottom: 1px solid rgba(255,255,255,0.1); background: rgba(255,255,255,0.03);">
+                                     <th style="padding: 10px 14px; color: var(--text-secondary); font-weight: 600;">Model Details</th>
+                                     <th style="padding: 10px 14px; color: var(--text-secondary); font-weight: 600;">Backend</th>
+                                     <th style="padding: 10px 14px; color: var(--text-secondary); font-weight: 600; text-align: right;">Size</th>
+                                     <th style="padding: 10px 14px; color: var(--text-secondary); font-weight: 600; text-align: center;">Configured</th>
+                                     <th style="padding: 10px 14px; color: var(--text-secondary); font-weight: 600;">Last Used</th>
+                                     <th style="padding: 10px 14px; color: var(--text-secondary); font-weight: 600; text-align: center; width: 80px;">Action</th>
+                                 </tr>
+                             </thead>
+                             <tbody id="cache-models-list">
+                                 <!-- Dynamic items -->
+                             </tbody>
+                         </table>
+                     </div>
+                     
+                     <div style="margin-top: 14px; font-size: 11px; color: var(--text-secondary); display: flex; align-items: center; justify-content: space-between;">
+                         <span>* Configured models cannot be deleted until removed from configurations.</span>
+                         <button type="button" id="btn-refresh-cache" class="btn btn-secondary" style="font-size: 10px; padding: 4px 10px;">🔄 Refresh List</button>
+                     </div>
+                </div> <!-- End Tab 2 -->
             </div>
         </div>
     </div>
