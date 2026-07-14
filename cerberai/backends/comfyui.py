@@ -185,48 +185,51 @@ class ComfyUIBackend(BaseBackend):
         parsed = urlparse(self.server_url)
         port = parsed.port or 8188
         host = parsed.hostname or "127.0.0.1"
+        is_local = host in ("127.0.0.1", "localhost", "0.0.0.0")
 
-        # Check if already running and responsive
-        print(f"Connecting to ComfyUI server at {self.server_url}...")
-        try:
-            async with httpx.AsyncClient(timeout=2.0) as client:
-                response = await client.get(f"{self.server_url}/system_stats")
-                if response.status_code == 200:
-                    stats = response.json()
-                    device_info = stats.get("devices", [{}])[0].get("type", "unknown")
-                    print(f"ComfyUI is already running. Device: {device_info}")
-                    self._is_loaded = True
-                    self.started_by_us = False
-                    return True
-        except Exception:
-            pass
-
-        # If not running, make sure it is installed
-        await self._ensure_installed(progress_callback)
-
-        # Terminate any orphaned process on the same port
-        for proc in psutil.process_iter(['pid', 'name']):
+        # If it's local, we always terminate any running instance on that port to clean up rogue processes
+        if is_local:
+            print(f"Checking for pre-existing ComfyUI process on port {port}...")
+            for proc in psutil.process_iter(['pid', 'name']):
+                try:
+                    for conn in proc.connections(kind='inet'):
+                        if conn.laddr.port == port:
+                            print(f"Port {port} is occupied by {proc.info['name']} (PID: {proc.info['pid']}). Terminating rogue ComfyUI process...")
+                            if progress_callback:
+                                import inspect
+                                msg = f"[3/3] Terminating rogue ComfyUI process on port {port}..."
+                                if inspect.iscoroutinefunction(progress_callback):
+                                    await progress_callback(msg)
+                                else:
+                                    progress_callback(msg)
+                            try:
+                                proc.terminate()
+                                proc.wait(timeout=2.0)
+                            except psutil.TimeoutExpired:
+                                proc.kill()
+                                proc.wait(timeout=1.0)
+                            except Exception as e:
+                                print(f"Error killing process {proc.info['pid']}: {e}")
+                except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
+                    pass
+        else:
+            # If remote, check if already running and responsive
+            print(f"Connecting to remote ComfyUI server at {self.server_url}...")
             try:
-                for conn in proc.connections(kind='inet'):
-                    if conn.laddr.port == port:
-                        print(f"Port {port} is occupied by {proc.info['name']} (PID: {proc.info['pid']}). Terminating orphaned ComfyUI process...")
-                        if progress_callback:
-                            import inspect
-                            msg = f"[3/3] Terminating orphaned process on port {port}..."
-                            if inspect.iscoroutinefunction(progress_callback):
-                                await progress_callback(msg)
-                            else:
-                                progress_callback(msg)
-                        try:
-                            proc.terminate()
-                            proc.wait(timeout=2.0)
-                        except psutil.TimeoutExpired:
-                            proc.kill()
-                            proc.wait(timeout=1.0)
-                        except Exception as e:
-                            print(f"Error killing process {proc.info['pid']}: {e}")
-            except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
+                async with httpx.AsyncClient(timeout=2.0) as client:
+                    response = await client.get(f"{self.server_url}/system_stats")
+                    if response.status_code == 200:
+                        stats = response.json()
+                        device_info = stats.get("devices", [{}])[0].get("type", "unknown")
+                        print(f"Remote ComfyUI is already running. Device: {device_info}")
+                        self._is_loaded = True
+                        self.started_by_us = False
+                        return True
+            except Exception:
                 pass
+
+        # If not running locally, make sure it is installed
+        await self._ensure_installed(progress_callback)
 
         # Start ComfyUI process
         install_dir, _, python_exe, _, main_py = self._get_install_paths()
@@ -257,9 +260,13 @@ class ComfyUIBackend(BaseBackend):
             
         try:
             import platform
+            log_path = Path(os.path.expanduser("~/.cache/cerberai/comfyui.log"))
+            log_path.parent.mkdir(parents=True, exist_ok=True)
+            self.log_file = open(log_path, "a", encoding="utf-8")
+            
             popen_args = {
-                "stdout": PIPE,
-                "stderr": PIPE,
+                "stdout": self.log_file,
+                "stderr": self.log_file,
                 "text": True,
                 "env": env,
                 "cwd": str(install_dir)
@@ -337,6 +344,14 @@ class ComfyUIBackend(BaseBackend):
                 proc.wait()
         except Exception as e:
             print(f"Error terminating ComfyUI: {e}")
+            
+        # Close log file if opened
+        if hasattr(self, "log_file") and self.log_file:
+            try:
+                self.log_file.close()
+            except Exception:
+                pass
+            self.log_file = None
             
         self.started_by_us = False
         return True
@@ -418,11 +433,21 @@ class ComfyUIBackend(BaseBackend):
         
         # Post the prompt
         async with httpx.AsyncClient(timeout=60.0) as client:
-            response = await client.post(
-                f"{self.server_url}/prompt",
-                json={"prompt": workflow, "client_id": client_id}
-            )
-            response.raise_for_status()
+            try:
+                response = await client.post(
+                    f"{self.server_url}/prompt",
+                    json={"prompt": workflow, "client_id": client_id}
+                )
+                response.raise_for_status()
+            except httpx.HTTPStatusError as e:
+                try:
+                    err_json = e.response.json()
+                    err_details = err_json.get("node_errors", err_json.get("error", err_json))
+                    err_msg = f"ComfyUI validation error: {json.dumps(err_details)}"
+                    print(err_msg)
+                    raise ValueError(err_msg) from e
+                except Exception:
+                    raise e
             res_json = response.json()
             prompt_id = res_json["prompt_id"]
 

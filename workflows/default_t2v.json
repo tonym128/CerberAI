@@ -9,8 +9,8 @@
     "inputs": {
       "text": "__PROMPT__",
       "clip": [
-        "1",
-        1
+        "8",
+        0
       ]
     },
     "class_type": "CLIPTextEncode"
@@ -22,7 +22,7 @@
       "length": 97,
       "batch_size": 1
     },
-    "class_type": "EmptyLatentVideo3D"
+    "class_type": "EmptyLTXVLatentVideo"
   },
   "4": {
     "inputs": {
@@ -55,8 +55,8 @@
     "inputs": {
       "text": "low quality, worst quality, deformed, distorted, blurry",
       "clip": [
-        "1",
-        1
+        "8",
+        0
       ]
     },
     "class_type": "CLIPTextEncode"
@@ -83,11 +83,19 @@
       "pix_fmt": "yuv420p",
       "crf": 20,
       "save_output": true,
+      "pingpong": false,
       "images": [
         "6",
         0
       ]
     },
     "class_type": "VHS_VideoCombine"
+  },
+  "8": {
+    "inputs": {
+      "clip_name": "t5xxl_fp8_e4m3fn.safetensors",
+      "type": "ltxv"
+    },
+    "class_type": "CLIPLoader"
   }
 }

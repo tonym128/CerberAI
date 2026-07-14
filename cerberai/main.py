@@ -52,8 +52,8 @@ if sys.platform.startswith("linux"):
     if is_rocm_env:
         # Prevent GPU hangs during frequent host-device VRAM copies (CPU offloading)
         if "HSA_ENABLE_SDMA" not in os.environ:
-            os.environ["HSA_ENABLE_SDMA"] = "0"
-            print("CerberAI: AMD ROCm detected. Setting HSA_ENABLE_SDMA=0 to prevent GPU hangs/stalls during model offloading.")
+            os.environ["HSA_ENABLE_SDMA"] = "1"
+            print("CerberAI: AMD ROCm detected. Setting HSA_ENABLE_SDMA=1 (SDMA enabled).")
 
 # Initialize managers
 manager = DynamicModelManager(config)
