@@ -143,7 +143,7 @@ def load_config(config_path: str = "config.yaml") -> AppConfig:
                     "server_url": "http://127.0.0.1:8188",
                     "workflow_path": "workflows/default_t2v.json"
                 },
-                "vram_estimate_gb": 0.0,
+                "vram_estimate_gb": 9.0,
                 "purpose": "text-to-video scene generation via ComfyUI"
             }
         ],

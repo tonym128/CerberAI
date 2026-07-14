@@ -166,14 +166,53 @@ class TestComfyUIBackend(unittest.TestCase):
         if os.path.exists("tests/mock_workflow.json"):
             os.unlink("tests/mock_workflow.json")
 
-    def test_load_comfyui_already_running(self):
-        # Server is running on port 8199. load() should connect and succeed immediately without calling Popen.
+    @patch("httpx.AsyncClient.get")
+    def test_load_comfyui_remote_already_running(self, mock_get):
+        # Configure as a remote URL to test remote already running routing
+        self.backend.server_url = "http://192.168.1.100:8199"
+        
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {
+            "devices": [{"type": "cuda"}]
+        }
+        mock_get.return_value = mock_response
+
         async def run_test():
             success = await self.backend.load()
             self.assertTrue(success)
             self.assertTrue(await self.backend.is_loaded())
             self.assertFalse(self.backend.started_by_us)
             self.mock_popen.assert_not_called()
+            
+        asyncio.run(run_test())
+
+    def test_load_comfyui_local_kills_rogue(self):
+        # Configure as a local URL
+        self.backend.server_url = "http://127.0.0.1:8199"
+        
+        # Set up a mock process occupying the port 8199
+        mock_proc = MagicMock()
+        mock_conn = MagicMock()
+        mock_conn.laddr.port = 8199
+        mock_proc.connections.return_value = [mock_conn]
+        mock_proc.info = {"pid": 9999, "name": "comfy_rogue"}
+        
+        # Re-patch psutil.process_iter for this test to return the rogue process
+        self.psutil_patcher.stop()
+        self.psutil_patcher = patch("psutil.process_iter", return_value=[mock_proc])
+        self.psutil_patcher.start()
+
+        async def run_test():
+            success = await self.backend.load()
+            self.assertTrue(success)
+            self.assertTrue(await self.backend.is_loaded())
+            self.assertTrue(self.backend.started_by_us)
+            
+            # Verify the rogue process was terminated and Popen was called
+            mock_proc.terminate.assert_called_once()
+            mock_proc.wait.assert_called_once()
+            self.mock_popen.assert_called_once()
             
         asyncio.run(run_test())
 
