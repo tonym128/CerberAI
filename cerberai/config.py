@@ -138,12 +138,13 @@ def load_config(config_path: str = "config.yaml") -> AppConfig:
             {
                 "id": "video",
                 "type": "video",
-                "backend": "video",
+                "backend": "comfyui",
                 "backend_config": {
-                    "model_name": "THUDM/CogVideoX-2b"
+                    "server_url": "http://127.0.0.1:8188",
+                    "workflow_path": "workflows/default_t2v.json"
                 },
-                "vram_estimate_gb": 8.0,
-                "purpose": "text-to-video scene generation"
+                "vram_estimate_gb": 0.0,
+                "purpose": "text-to-video scene generation via ComfyUI"
             }
         ],
         "resource_limits": {

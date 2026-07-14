@@ -45,7 +45,7 @@ class BaseBackend(ABC):
         self.load = load_diagnostics_wrapper
 
     def _wrap_endpoints(self):
-        for name in ["handle_chat_completion", "stream_chat_completion", "handle_image_generation", "handle_audio_speech", "handle_audio_transcription"]:
+        for name in ["handle_chat_completion", "stream_chat_completion", "handle_image_generation", "handle_audio_speech", "handle_audio_transcription", "handle_video_generation"]:
             method = getattr(self, name, None)
             if method:
                 func = getattr(method, "__func__", None)
@@ -125,3 +125,6 @@ class BaseBackend(ABC):
 
     async def handle_audio_transcription(self, file_bytes: bytes, filename: str, payload: Dict[str, Any]) -> Dict[str, Any]:
         raise NotImplementedError("This backend does not support speech-to-text.")
+
+    async def handle_video_generation(self, payload: Dict[str, Any], progress_callback=None) -> Dict[str, Any]:
+        raise NotImplementedError("This backend does not support video generation.")

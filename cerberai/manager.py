@@ -154,6 +154,9 @@ class DynamicModelManager:
             return DiffusersBackend(model_cfg.id, backend_config, model_cfg.vram_estimate_gb)
         elif b_type == "video":
             return VideoBackend(model_cfg.id, backend_config, model_cfg.vram_estimate_gb)
+        elif b_type == "comfyui":
+            from .backends.comfyui import ComfyUIBackend
+            return ComfyUIBackend(model_cfg.id, backend_config, model_cfg.vram_estimate_gb)
         else:
             print(f"Warning: Backend '{model_cfg.backend}' for model '{model_cfg.id}' is not implemented yet.")
             return None
