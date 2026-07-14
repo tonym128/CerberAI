@@ -183,7 +183,9 @@ def load_config(config_path: str = "config.yaml") -> AppConfig:
             except Exception as ex:
                 print(f"Warning: Could not write default configuration to disk: {ex}")
         else:
-            return AppConfig(**default_config)
+            app_config = AppConfig(**default_config)
+            _apply_vram_auto_detection(app_config, user_specified=False)
+            return app_config
 
     try:
         with open(config_path, "r") as f:
@@ -193,8 +195,26 @@ def load_config(config_path: str = "config.yaml") -> AppConfig:
         if "search" not in data:
             data["search"] = default_config["search"]
             
-        return AppConfig(**data)
+        app_config = AppConfig(**data)
+        user_specified = "resource_limits" in data and "max_vram_gb" in data["resource_limits"]
+        _apply_vram_auto_detection(app_config, user_specified)
+        return app_config
     except Exception as e:
         print(f"⚠️ [WARNING] Failed to load/validate configuration '{config_path}': {e}")
         print("💡 [INFO] Falling back to safe default configuration to prevent gateway boot crash-loops.")
-        return AppConfig(**default_config)
+        app_config = AppConfig(**default_config)
+        _apply_vram_auto_detection(app_config, user_specified=False)
+        return app_config
+
+def _apply_vram_auto_detection(app_config: AppConfig, user_specified: bool):
+    if not user_specified:
+        try:
+            import torch
+            if torch.cuda.is_available():
+                total_bytes = torch.cuda.get_device_properties(0).total_memory
+                total_gb = round(total_bytes / (1024 ** 3), 1)
+                if total_gb > 0:
+                    app_config.resource_limits.max_vram_gb = total_gb
+                    print(f"CerberAI: Dynamically detected system GPU VRAM: {total_gb} GB.")
+        except Exception:
+            pass
