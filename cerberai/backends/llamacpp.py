@@ -132,7 +132,8 @@ class SubprocessManager:
             "--port", str(self.port),
             "--host", self.host,
             "-c", str(ctx_size),
-            "-ngl", str(n_gpu_layers)
+            "-ngl", str(n_gpu_layers),
+            "--embedding"
         ]
 
         # Add multimodal projector for vision models

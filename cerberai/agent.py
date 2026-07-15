@@ -40,7 +40,7 @@ class AgentExecutor:
         self.load_skills()
 
     def register_builtin_tools(self):
-        """Register default tools like Web Search."""
+        """Register default tools like Web Search and local Filesystem."""
         self.tools["web_search"] = {
             "name": "web_search",
             "description": "web_search(query: str) - Search the web for information using DuckDuckGo.",
@@ -55,6 +55,21 @@ class AgentExecutor:
             "name": "execute_python_code",
             "description": "execute_python_code(code: str) - Execute a snippet of Python code locally in a secure, isolated process. Returns stdout and stderr.",
             "func": self.execute_python_code_tool
+        }
+        self.tools["list_directory"] = {
+            "name": "list_directory",
+            "description": "list_directory(path: str = \".\") - List the contents of a local directory, showing files and folders.",
+            "func": self.list_directory_tool
+        }
+        self.tools["read_file"] = {
+            "name": "read_file",
+            "description": "read_file(path: str) - Read the text contents of a local file.",
+            "func": self.read_file_tool
+        }
+        self.tools["write_file"] = {
+            "name": "write_file",
+            "description": "write_file(path: str, content: str) - Write text content to a local file, creating or overwriting it.",
+            "func": self.write_file_tool
         }
 
     async def web_fetch_tool(self, url: str) -> str:
@@ -649,3 +664,57 @@ class AgentExecutor:
                 
         # If we exceeded loops, return the last output
         return response
+
+    async def list_directory_tool(self, path: str = ".") -> str:
+        """List files and folders in a local path."""
+        try:
+            p = Path(path).resolve()
+            if not p.exists():
+                return f"Error: Path '{path}' does not exist."
+            if not p.is_dir():
+                return f"Error: Path '{path}' is a file, not a directory."
+            
+            items = []
+            for item in p.iterdir():
+                item_type = "📁 [DIR]" if item.is_dir() else "📄 [FILE]"
+                size_str = f" ({item.stat().st_size} bytes)" if item.is_file() else ""
+                items.append(f"{item_type} {item.name}{size_str}")
+            
+            if not items:
+                return f"Directory '{path}' is empty."
+                
+            return "\n".join(sorted(items))
+        except Exception as e:
+            return f"Error listing directory: {e}"
+
+    async def read_file_tool(self, path: str) -> str:
+        """Read the content of a local file."""
+        try:
+            p = Path(path).resolve()
+            if not p.exists():
+                return f"Error: File '{path}' does not exist."
+            if not p.is_file():
+                return f"Error: Path '{path}' is a directory, not a file."
+                
+            # Restrict to text/source files to prevent binary garbage dump
+            try:
+                content = p.read_text(encoding="utf-8", errors="strict")
+            except UnicodeDecodeError:
+                return "Error: File content is not valid UTF-8 text (likely binary file)."
+                
+            limit = 12000
+            if len(content) > limit:
+                return content[:limit] + f"\n\n... (File content truncated: {len(content) - limit} characters remaining)"
+            return content
+        except Exception as e:
+            return f"Error reading file: {e}"
+
+    async def write_file_tool(self, path: str, content: str) -> str:
+        """Write content to a local file."""
+        try:
+            p = Path(path).resolve()
+            p.parent.mkdir(parents=True, exist_ok=True)
+            p.write_text(content, encoding="utf-8")
+            return f"Successfully wrote {len(content)} characters to file '{path}'."
+        except Exception as e:
+            return f"Error writing file: {e}"

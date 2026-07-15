@@ -264,7 +264,9 @@ async def stream_with_metrics(
     model_id: str,
     load_time: float = 0.0,
     prompt_tokens: int = 0,
-    model_name: Optional[str] = None
+    model_name: Optional[str] = None,
+    messages: Optional[List[Dict[str, str]]] = None,
+    manager = None
 ) -> AsyncIterator[bytes]:
     start_time = time.time()
     first_token_time = None
@@ -328,6 +330,14 @@ async def stream_with_metrics(
     except Exception as stat_err:
         print(f"Failed to record stream stats: {stat_err}")
         
+    if messages and manager and accumulated_content:
+        try:
+            from .memory import extract_and_save_memories
+            history = messages + [{"role": "assistant", "content": accumulated_content}]
+            asyncio.create_task(extract_and_save_memories(history, manager))
+        except Exception as e:
+            print(f"Memory extraction from stream failed: {e}")
+
     yield f"data: {json.dumps({'metrics': metrics})}\n\n".encode("utf-8")
 
 @app.post("/v1/chat/completions")
@@ -393,6 +403,42 @@ async def chat_completions(request: Request):
 
     # Sanitize messages content if target model is a text-only LLM model (unsupported list content type in llama-server)
     if model_cfg and model_cfg.type == "llm":
+        # Dynamic Semantic Memory Context Injection
+        try:
+            from .memory import get_embedding, search_memories
+            latest_query = ""
+            for msg in reversed(messages):
+                if msg.get("role") == "user":
+                    content = msg.get("content", "")
+                    if isinstance(content, str):
+                        latest_query = content
+                    elif isinstance(content, list):
+                        latest_query = "\n".join([item.get("text", "") for item in content if isinstance(item, dict) and item.get("type") == "text"])
+                    break
+                    
+            if latest_query:
+                query_emb = await get_embedding(latest_query, manager)
+                if query_emb:
+                    memories = search_memories(query_emb, threshold=0.72, limit=4)
+                    if memories:
+                        memory_bullet_points = "\n".join([f"- {m['content']}" for m in memories])
+                        memory_system_inject = (
+                            "\n\n[System Memory of User Context - Use this information to personalize your answer if relevant]:\n"
+                            f"{memory_bullet_points}\n"
+                        )
+                        # Find system message or insert one
+                        sys_msg = None
+                        for m in messages:
+                            if m.get("role") == "system":
+                                sys_msg = m
+                                break
+                        if sys_msg:
+                            sys_msg["content"] = sys_msg["content"] + memory_system_inject
+                        else:
+                            messages.insert(0, {"role": "system", "content": memory_system_inject.strip()})
+        except Exception as e:
+            print(f"Warning: Failed to retrieve/inject semantic memories: {e}")
+
         sanitized_messages = []
         for msg in messages:
             msg_copy = msg.copy()
@@ -624,7 +670,7 @@ async def chat_completions(request: Request):
         if stream:
             try:
                 return StreamingResponse(
-                    stream_with_metrics(backend.stream_chat_completion(payload), target_model_id, load_time=load_time, prompt_tokens=prompt_tokens_est, model_name=backend.actual_model_name),
+                    stream_with_metrics(backend.stream_chat_completion(payload), target_model_id, load_time=load_time, prompt_tokens=prompt_tokens_est, model_name=backend.actual_model_name, messages=messages, manager=manager),
                     media_type="text/event-stream"
                 )
             except Exception as e:
@@ -943,7 +989,7 @@ async def chat_completions(request: Request):
     if stream:
         try:
             return StreamingResponse(
-                stream_with_metrics(backend.stream_chat_completion(payload), target_model_id, load_time=load_time, prompt_tokens=prompt_tokens_est, model_name=backend.actual_model_name),
+                stream_with_metrics(backend.stream_chat_completion(payload), target_model_id, load_time=load_time, prompt_tokens=prompt_tokens_est, model_name=backend.actual_model_name, messages=messages, manager=manager),
                 media_type="text/event-stream"
             )
         except Exception as e:
@@ -970,6 +1016,14 @@ async def chat_completions(request: Request):
                 "tokens_per_second": tps
             }
             result["metrics"] = metrics
+            
+            if content:
+                try:
+                    from .memory import extract_and_save_memories
+                    history = messages + [result["choices"][0]["message"]]
+                    asyncio.create_task(extract_and_save_memories(history, manager))
+                except Exception as e:
+                    print(f"Memory extraction failed: {e}")
             try:
                 from .database import db_add_inference_stat
                 db_add_inference_stat(
