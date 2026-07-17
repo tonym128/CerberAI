@@ -2866,6 +2866,86 @@ body {
     background: #f9fafb;
 }
 
+/* ==========================================================================
+   ONBOARDING / SETUP WIZARD STYLE
+   ========================================================================== */
+.onboarding-content {
+    background-color: #0f111a;
+    border: 1px solid var(--border-color);
+    border-radius: 20px;
+    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(139, 92, 246, 0.2);
+    overflow: hidden;
+    animation: modalSlideUp 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.onboarding-step {
+    animation: fadeIn 0.3s ease-out;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; transform: scale(0.98); }
+    to { opacity: 1; transform: scale(1); }
+}
+
+@keyframes bounce {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-8px); }
+}
+
+.presets-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.preset-card {
+    border: 1px solid rgba(255, 255, 255, 0.08) !important;
+    border-radius: 12px;
+    padding: 16px;
+    cursor: pointer;
+    transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+    background: rgba(255, 255, 255, 0.01);
+    position: relative;
+}
+
+.preset-card:hover {
+    border-color: rgba(139, 92, 246, 0.4) !important;
+    background: rgba(139, 92, 246, 0.04) !important;
+    transform: translateY(-2px);
+    box-shadow: 0 6px 16px rgba(0, 0, 0, 0.4);
+}
+
+.preset-card.selected {
+    border-color: var(--primary) !important;
+    background: rgba(139, 92, 246, 0.08) !important;
+    box-shadow: 0 0 0 1px var(--primary), 0 6px 20px rgba(139, 92, 246, 0.2) !important;
+}
+
+.preset-card.recommended {
+    border-color: rgba(139, 92, 246, 0.2) !important;
+    background: rgba(139, 92, 246, 0.02);
+}
+
+:root.light-theme .onboarding-content {
+    background-color: #ffffff;
+    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.15), 0 0 0 1px rgba(139, 92, 246, 0.1);
+}
+
+:root.light-theme .preset-card {
+    background: rgba(0, 0, 0, 0.01);
+    border: 1px solid rgba(0, 0, 0, 0.06) !important;
+}
+
+:root.light-theme .preset-card:hover {
+    background: rgba(139, 92, 246, 0.03) !important;
+    border-color: rgba(139, 92, 246, 0.3) !important;
+}
+
+:root.light-theme .preset-card.selected {
+    background: rgba(139, 92, 246, 0.06) !important;
+}
+
+
 
 
 

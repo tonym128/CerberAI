@@ -127,6 +127,11 @@ async function pollStatus() {
         const response = await fetch("/status");
         const status = await response.json();
 
+        // Check for onboarding / first run
+        if (status.is_first_run && typeof checkOnboarding === "function") {
+            checkOnboarding(status);
+        }
+
         // Update limits & strategy
         vramMaxLabel.textContent = `${status.limits.max_vram_gb.toFixed(1)} GB`;
         ramLimitLabel.textContent = `${status.limits.max_ram_gb.toFixed(1)} GB`;
@@ -1455,6 +1460,7 @@ if (btnStartPodcast) {
 // ==========================================================================
 // SETUP MODAL OPERATIONS
 // ==========================================================================
+let currentlyConfiguredModels = [];
 const openSetupBtn = document.getElementById("open-setup");
 const setupModal = document.getElementById("setup-modal");
 const closeSetupBtn = document.getElementById("close-setup");
@@ -1661,7 +1667,12 @@ if (openSetupBtn && setupModal) {
                 { id: "image", type: "image", backend: "diffusers", backend_config: { model_name: "Lykon/dreamshaper-8-lcm" }, vram_estimate_gb: 4.0 },
                 { id: "stt", type: "stt", backend: "whisper", backend_config: { model_name: "tiny" }, vram_estimate_gb: 0.5 },
                 { id: "tts", type: "tts", backend: "tts", backend_config: { engine: "kokoro", voice: "af_sarah" }, vram_estimate_gb: 0.5 },
-                { id: "routing", type: "llm", backend: "llama.cpp", backend_config: { repo_id: "microsoft/Phi-3-mini-4k-instruct-gguf", filename: "Phi-3-mini-4k-instruct-q4.gguf", port: 8083, n_gpu_layers: 99 }, vram_estimate_gb: 2.2, purpose: "routing classification", n_ctx: 4096 }
+                { id: "routing", type: "llm", backend: "llama.cpp", backend_config: { repo_id: "microsoft/Phi-3-mini-4k-instruct-gguf", filename: "Phi-3-mini-4k-instruct-q4.gguf", port: 8083, n_gpu_layers: 99 }, vram_estimate_gb: 2.2, purpose: "routing classification", n_ctx: 4096 },
+                { id: "reasoning", type: "llm", backend: "llama.cpp", backend_config: { repo_id: "bartowski/DeepSeek-R1-Distill-Qwen-1.5B-GGUF", filename: "DeepSeek-R1-Distill-Qwen-1.5B-Q4_K_M.gguf", port: 8084, n_gpu_layers: 99 }, vram_estimate_gb: 1.2, purpose: "step-by-step logic, math, multi-step planning, complex reasoning, algorithms, and deep analysis", n_ctx: null },
+                { id: "story", type: "llm", backend: "llama.cpp", backend_config: { repo_id: "Qwen/Qwen3-1.5B-Instruct-GGUF", filename: "qwen3-1.5b-instruct-q4_k_m.gguf", port: 8085, n_gpu_layers: 99 }, vram_estimate_gb: 1.2, purpose: "creative writing, storytelling, fiction, prose, novel drafting, character description, roleplay, and creative brainstorming", n_ctx: null },
+                { id: "agent", type: "llm", backend: "llama.cpp", backend_config: { repo_id: "Qwen/Qwen3-1.5B-Instruct-GGUF", filename: "qwen3-1.5b-instruct-q4_k_m.gguf", port: 8086, n_gpu_layers: 99 }, vram_estimate_gb: 1.2, purpose: "agentic workflows, function calling, tool calling, JSON formatting, structured output, and following system instructions", n_ctx: null },
+                { id: "multilingual", type: "llm", backend: "llama.cpp", backend_config: { repo_id: "Qwen/Qwen3-1.5B-Instruct-GGUF", filename: "qwen3-1.5b-instruct-q4_k_m.gguf", port: 8087, n_gpu_layers: 99 }, vram_estimate_gb: 1.2, purpose: "multilingual translation, localized text generation, non-English languages, and multi-language conversation", n_ctx: null },
+                { id: "video-generation", type: "video", backend: "comfyui", backend_config: { server_url: "http://127.0.0.1:8188", workflow_path: "workflows/default_t2v.json" }, vram_estimate_gb: 4.0, purpose: "text-to-video scene generation via ComfyUI" }
             ]
         },
         "6": {
@@ -1675,7 +1686,12 @@ if (openSetupBtn && setupModal) {
                 { id: "image", type: "image", backend: "diffusers", backend_config: { model_name: "Lykon/dreamshaper-8-lcm" }, vram_estimate_gb: 4.0 },
                 { id: "stt", type: "stt", backend: "whisper", backend_config: { model_name: "base" }, vram_estimate_gb: 0.7 },
                 { id: "tts", type: "tts", backend: "tts", backend_config: { engine: "kokoro", voice: "af_sarah" }, vram_estimate_gb: 0.5 },
-                { id: "routing", type: "llm", backend: "llama.cpp", backend_config: { repo_id: "microsoft/Phi-3-mini-4k-instruct-gguf", filename: "Phi-3-mini-4k-instruct-q4.gguf", port: 8083, n_gpu_layers: 99 }, vram_estimate_gb: 2.2, purpose: "routing classification", n_ctx: 4096 }
+                { id: "routing", type: "llm", backend: "llama.cpp", backend_config: { repo_id: "microsoft/Phi-3-mini-4k-instruct-gguf", filename: "Phi-3-mini-4k-instruct-q4.gguf", port: 8083, n_gpu_layers: 99 }, vram_estimate_gb: 2.2, purpose: "routing classification", n_ctx: 4096 },
+                { id: "reasoning", type: "llm", backend: "llama.cpp", backend_config: { repo_id: "bartowski/DeepSeek-R1-Distill-Qwen-1.5B-GGUF", filename: "DeepSeek-R1-Distill-Qwen-1.5B-Q5_K_M.gguf", port: 8084, n_gpu_layers: 99 }, vram_estimate_gb: 1.4, purpose: "step-by-step logic, math, multi-step planning, complex reasoning, algorithms, and deep analysis", n_ctx: null },
+                { id: "story", type: "llm", backend: "llama.cpp", backend_config: { repo_id: "Qwen/Qwen3-3B-Instruct-GGUF", filename: "qwen3-3b-instruct-q4_k_m.gguf", port: 8085, n_gpu_layers: 99 }, vram_estimate_gb: 2.2, purpose: "creative writing, storytelling, fiction, prose, novel drafting, character description, roleplay, and creative brainstorming", n_ctx: null },
+                { id: "agent", type: "llm", backend: "llama.cpp", backend_config: { repo_id: "Qwen/Qwen3-3B-Instruct-GGUF", filename: "qwen3-3b-instruct-q4_k_m.gguf", port: 8086, n_gpu_layers: 99 }, vram_estimate_gb: 2.2, purpose: "agentic workflows, function calling, tool calling, JSON formatting, structured output, and following system instructions", n_ctx: null },
+                { id: "multilingual", type: "llm", backend: "llama.cpp", backend_config: { repo_id: "Qwen/Qwen3-3B-Instruct-GGUF", filename: "qwen3-3b-instruct-q4_k_m.gguf", port: 8087, n_gpu_layers: 99 }, vram_estimate_gb: 2.2, purpose: "multilingual translation, localized text generation, non-English languages, and multi-language conversation", n_ctx: null },
+                { id: "video-generation", type: "video", backend: "comfyui", backend_config: { server_url: "http://127.0.0.1:8188", workflow_path: "workflows/default_t2v.json" }, vram_estimate_gb: 5.0, purpose: "text-to-video scene generation via ComfyUI" }
             ]
         },
         "8": {
@@ -1689,7 +1705,12 @@ if (openSetupBtn && setupModal) {
                 { id: "image", type: "image", backend: "diffusers", backend_config: { model_name: "Lykon/dreamshaper-8-lcm" }, vram_estimate_gb: 4.0 },
                 { id: "stt", type: "stt", backend: "whisper", backend_config: { model_name: "small" }, vram_estimate_gb: 1.5 },
                 { id: "tts", type: "tts", backend: "tts", backend_config: { engine: "kokoro", voice: "af_sarah" }, vram_estimate_gb: 0.5 },
-                { id: "routing", type: "llm", backend: "llama.cpp", backend_config: { repo_id: "microsoft/Phi-3-mini-4k-instruct-gguf", filename: "Phi-3-mini-4k-instruct-q4.gguf", port: 8083, n_gpu_layers: 99 }, vram_estimate_gb: 2.2, purpose: "routing classification", n_ctx: 4096 }
+                { id: "routing", type: "llm", backend: "llama.cpp", backend_config: { repo_id: "microsoft/Phi-3-mini-4k-instruct-gguf", filename: "Phi-3-mini-4k-instruct-q4.gguf", port: 8083, n_gpu_layers: 99 }, vram_estimate_gb: 2.2, purpose: "routing classification", n_ctx: 4096 },
+                { id: "reasoning", type: "llm", backend: "llama.cpp", backend_config: { repo_id: "bartowski/DeepSeek-R1-Distill-Qwen-8B-GGUF", filename: "DeepSeek-R1-Distill-Qwen-8B-Q4_K_M.gguf", port: 8084, n_gpu_layers: 99 }, vram_estimate_gb: 4.8, purpose: "step-by-step logic, math, multi-step planning, complex reasoning, algorithms, and deep analysis", n_ctx: null },
+                { id: "story", type: "llm", backend: "llama.cpp", backend_config: { repo_id: "bartowski/granite-3.1-8b-instruct-GGUF", filename: "granite-3.1-8b-instruct-Q8_0.gguf", port: 8085, n_gpu_layers: 99 }, vram_estimate_gb: 4.8, purpose: "creative writing, storytelling, fiction, prose, novel drafting, character description, roleplay, and creative brainstorming", n_ctx: null },
+                { id: "agent", type: "llm", backend: "llama.cpp", backend_config: { repo_id: "bartowski/granite-3.1-8b-instruct-GGUF", filename: "granite-3.1-8b-instruct-Q8_0.gguf", port: 8086, n_gpu_layers: 99 }, vram_estimate_gb: 4.8, purpose: "agentic workflows, function calling, tool calling, JSON formatting, structured output, and following system instructions", n_ctx: null },
+                { id: "multilingual", type: "llm", backend: "llama.cpp", backend_config: { repo_id: "Qwen/Qwen3-7B-Instruct-GGUF", filename: "qwen3-7b-instruct-q4_k_m.gguf", port: 8087, n_gpu_layers: 99 }, vram_estimate_gb: 4.8, purpose: "multilingual translation, localized text generation, non-English languages, and multi-language conversation", n_ctx: null },
+                { id: "video-generation", type: "video", backend: "comfyui", backend_config: { server_url: "http://127.0.0.1:8188", workflow_path: "workflows/default_t2v.json" }, vram_estimate_gb: 6.0, purpose: "text-to-video scene generation via ComfyUI" }
             ]
         },
         "16": {
@@ -1703,7 +1724,12 @@ if (openSetupBtn && setupModal) {
                 { id: "image", type: "image", backend: "diffusers", backend_config: { model_name: "stabilityai/sdxl-turbo" }, vram_estimate_gb: 5.5 },
                 { id: "stt", type: "stt", backend: "whisper", backend_config: { model_name: "large-v3" }, vram_estimate_gb: 4.8 },
                 { id: "tts", type: "tts", backend: "tts", backend_config: { engine: "kokoro", voice: "af_sarah" }, vram_estimate_gb: 0.5 },
-                { id: "routing", type: "llm", backend: "llama.cpp", backend_config: { repo_id: "microsoft/Phi-3-mini-4k-instruct-gguf", filename: "Phi-3-mini-4k-instruct-q4.gguf", port: 8083, n_gpu_layers: 99 }, vram_estimate_gb: 2.2, purpose: "routing classification", n_ctx: 4096 }
+                { id: "routing", type: "llm", backend: "llama.cpp", backend_config: { repo_id: "microsoft/Phi-3-mini-4k-instruct-gguf", filename: "Phi-3-mini-4k-instruct-q4.gguf", port: 8083, n_gpu_layers: 99 }, vram_estimate_gb: 2.2, purpose: "routing classification", n_ctx: 4096 },
+                { id: "reasoning", type: "llm", backend: "llama.cpp", backend_config: { repo_id: "bartowski/DeepSeek-R1-Distill-Qwen-14B-GGUF", filename: "DeepSeek-R1-Distill-Qwen-14B-Q5_K_M.gguf", port: 8084, n_gpu_layers: 99 }, vram_estimate_gb: 11.3, purpose: "step-by-step logic, math, multi-step planning, complex reasoning, algorithms, and deep analysis", n_ctx: null },
+                { id: "story", type: "llm", backend: "llama.cpp", backend_config: { repo_id: "bartowski/phi-4-GGUF", filename: "phi-4-Q5_K_M.gguf", port: 8085, n_gpu_layers: 99 }, vram_estimate_gb: 11.0, purpose: "creative writing, storytelling, fiction, prose, novel drafting, character description, roleplay, and creative brainstorming", n_ctx: null },
+                { id: "agent", type: "llm", backend: "llama.cpp", backend_config: { repo_id: "bartowski/granite-3.1-8b-instruct-GGUF", filename: "granite-3.1-8b-instruct-Q8_0.gguf", port: 8086, n_gpu_layers: 99 }, vram_estimate_gb: 9.5, purpose: "agentic workflows, function calling, tool calling, JSON formatting, structured output, and following system instructions", n_ctx: null },
+                { id: "multilingual", type: "llm", backend: "llama.cpp", backend_config: { repo_id: "bartowski/Qwen_Qwen3-14B-GGUF", filename: "Qwen_Qwen3-14B-Q5_K_M.gguf", port: 8087, n_gpu_layers: 99 }, vram_estimate_gb: 11.5, purpose: "multilingual translation, localized text generation, non-English languages, and multi-language conversation", n_ctx: null },
+                { id: "video-generation", type: "video", backend: "comfyui", backend_config: { server_url: "http://127.0.0.1:8188", workflow_path: "workflows/default_t2v.json" }, vram_estimate_gb: 9.0, purpose: "text-to-video scene generation via ComfyUI" }
             ]
         },
         "24": {
@@ -1717,7 +1743,12 @@ if (openSetupBtn && setupModal) {
                 { id: "image", type: "image", backend: "diffusers", backend_config: { model_name: "black-forest-labs/FLUX.1-schnell" }, vram_estimate_gb: 11.5 },
                 { id: "stt", type: "stt", backend: "whisper", backend_config: { model_name: "large-v3" }, vram_estimate_gb: 4.8 },
                 { id: "tts", type: "tts", backend: "tts", backend_config: { engine: "kokoro", voice: "af_sarah" }, vram_estimate_gb: 0.5 },
-                { id: "routing", type: "llm", backend: "llama.cpp", backend_config: { repo_id: "microsoft/Phi-3-mini-4k-instruct-gguf", filename: "Phi-3-mini-4k-instruct-q4.gguf", port: 8083, n_gpu_layers: 99 }, vram_estimate_gb: 2.2, purpose: "routing classification", n_ctx: 4096 }
+                { id: "routing", type: "llm", backend: "llama.cpp", backend_config: { repo_id: "microsoft/Phi-3-mini-4k-instruct-gguf", filename: "Phi-3-mini-4k-instruct-q4.gguf", port: 8083, n_gpu_layers: 99 }, vram_estimate_gb: 2.2, purpose: "routing classification", n_ctx: 4096 },
+                { id: "reasoning", type: "llm", backend: "llama.cpp", backend_config: { repo_id: "bartowski/DeepSeek-R1-Distill-Qwen-32B-GGUF", filename: "DeepSeek-R1-Distill-Qwen-32B-Q4_K_M.gguf", port: 8084, n_gpu_layers: 99 }, vram_estimate_gb: 20.3, purpose: "step-by-step logic, math, multi-step planning, complex reasoning, algorithms, and deep analysis", n_ctx: null },
+                { id: "story", type: "llm", backend: "llama.cpp", backend_config: { repo_id: "bartowski/phi-4-GGUF", filename: "phi-4-Q5_K_M.gguf", port: 8085, n_gpu_layers: 99 }, vram_estimate_gb: 11.0, purpose: "creative writing, storytelling, fiction, prose, novel drafting, character description, roleplay, and creative brainstorming", n_ctx: null },
+                { id: "agent", type: "llm", backend: "llama.cpp", backend_config: { repo_id: "bartowski/granite-3.1-8b-instruct-GGUF", filename: "granite-3.1-8b-instruct-Q8_0.gguf", port: 8086, n_gpu_layers: 99 }, vram_estimate_gb: 9.5, purpose: "agentic workflows, function calling, tool calling, JSON formatting, structured output, and following system instructions", n_ctx: null },
+                { id: "multilingual", type: "llm", backend: "llama.cpp", backend_config: { repo_id: "bartowski/Qwen3-32B-Instruct-GGUF", filename: "Qwen3-32B-Instruct-Q4_K_M.gguf", port: 8087, n_gpu_layers: 99 }, vram_estimate_gb: 20.3, purpose: "multilingual translation, localized text generation, non-English languages, and multi-language conversation", n_ctx: null },
+                { id: "video-generation", type: "video", backend: "comfyui", backend_config: { server_url: "http://127.0.0.1:8188", workflow_path: "workflows/default_t2v.json" }, vram_estimate_gb: 9.0, purpose: "text-to-video scene generation via ComfyUI" }
             ]
         },
         "32": {
@@ -1731,7 +1762,12 @@ if (openSetupBtn && setupModal) {
                 { id: "image", type: "image", backend: "diffusers", backend_config: { model_name: "black-forest-labs/FLUX.1-dev" }, vram_estimate_gb: 12.0 },
                 { id: "stt", type: "stt", backend: "whisper", backend_config: { model_name: "large-v3" }, vram_estimate_gb: 4.8 },
                 { id: "tts", type: "tts", backend: "tts", backend_config: { engine: "kokoro", voice: "af_sarah" }, vram_estimate_gb: 0.5 },
-                { id: "routing", type: "llm", backend: "llama.cpp", backend_config: { repo_id: "microsoft/Phi-3-mini-4k-instruct-gguf", filename: "Phi-3-mini-4k-instruct-q4.gguf", port: 8083, n_gpu_layers: 99 }, vram_estimate_gb: 2.2, purpose: "routing classification", n_ctx: 4096 }
+                { id: "routing", type: "llm", backend: "llama.cpp", backend_config: { repo_id: "microsoft/Phi-3-mini-4k-instruct-gguf", filename: "Phi-3-mini-4k-instruct-q4.gguf", port: 8083, n_gpu_layers: 99 }, vram_estimate_gb: 2.2, purpose: "routing classification", n_ctx: 4096 },
+                { id: "reasoning", type: "llm", backend: "llama.cpp", backend_config: { repo_id: "bartowski/DeepSeek-R1-Distill-Qwen-32B-GGUF", filename: "DeepSeek-R1-Distill-Qwen-32B-Q5_K_M.gguf", port: 8084, n_gpu_layers: 99 }, vram_estimate_gb: 24.5, purpose: "step-by-step logic, math, multi-step planning, complex reasoning, algorithms, and deep analysis", n_ctx: null },
+                { id: "story", type: "llm", backend: "llama.cpp", backend_config: { repo_id: "bartowski/Qwen3-32B-Instruct-GGUF", filename: "Qwen3-32B-Instruct-Q5_K_M.gguf", port: 8085, n_gpu_layers: 99 }, vram_estimate_gb: 24.5, purpose: "creative writing, storytelling, fiction, prose, novel drafting, character description, roleplay, and creative brainstorming", n_ctx: null },
+                { id: "agent", type: "llm", backend: "llama.cpp", backend_config: { repo_id: "bartowski/granite-3.1-8b-instruct-GGUF", filename: "granite-3.1-8b-instruct-Q8_0.gguf", port: 8086, n_gpu_layers: 99 }, vram_estimate_gb: 9.5, purpose: "agentic workflows, function calling, tool calling, JSON formatting, structured output, and following system instructions", n_ctx: null },
+                { id: "multilingual", type: "llm", backend: "llama.cpp", backend_config: { repo_id: "bartowski/Qwen3-32B-Instruct-GGUF", filename: "Qwen3-32B-Instruct-Q5_K_M.gguf", port: 8087, n_gpu_layers: 99 }, vram_estimate_gb: 24.5, purpose: "multilingual translation, localized text generation, non-English languages, and multi-language conversation", n_ctx: null },
+                { id: "video-generation", type: "video", backend: "comfyui", backend_config: { server_url: "http://127.0.0.1:8188", workflow_path: "workflows/default_t2v.json" }, vram_estimate_gb: 9.0, purpose: "text-to-video scene generation via ComfyUI" }
             ]
         },
         "64": {
@@ -1745,7 +1781,12 @@ if (openSetupBtn && setupModal) {
                 { id: "image", type: "image", backend: "diffusers", backend_config: { model_name: "black-forest-labs/FLUX.1-dev" }, vram_estimate_gb: 16.0 },
                 { id: "stt", type: "stt", backend: "whisper", backend_config: { model_name: "large-v3" }, vram_estimate_gb: 4.8 },
                 { id: "tts", type: "tts", backend: "tts", backend_config: { engine: "kokoro", voice: "af_sarah" }, vram_estimate_gb: 0.5 },
-                { id: "routing", type: "llm", backend: "llama.cpp", backend_config: { repo_id: "microsoft/Phi-3-mini-4k-instruct-gguf", filename: "Phi-3-mini-4k-instruct-q4.gguf", port: 8083, n_gpu_layers: 99 }, vram_estimate_gb: 2.2, purpose: "routing classification", n_ctx: 4096 }
+                { id: "routing", type: "llm", backend: "llama.cpp", backend_config: { repo_id: "microsoft/Phi-3-mini-4k-instruct-gguf", filename: "Phi-3-mini-4k-instruct-q4.gguf", port: 8083, n_gpu_layers: 99 }, vram_estimate_gb: 2.2, purpose: "routing classification", n_ctx: 4096 },
+                { id: "reasoning", type: "llm", backend: "llama.cpp", backend_config: { repo_id: "bartowski/DeepSeek-R1-Distill-Llama-70B-GGUF", filename: "DeepSeek-R1-Distill-Llama-70B-Q5_K_M.gguf", port: 8084, n_gpu_layers: 99 }, vram_estimate_gb: 48.0, purpose: "step-by-step logic, math, multi-step planning, complex reasoning, algorithms, and deep analysis", n_ctx: null },
+                { id: "story", type: "llm", backend: "llama.cpp", backend_config: { repo_id: "bartowski/Llama-3.3-70B-Instruct-GGUF", filename: "Llama-3.3-70B-Instruct-Q5_K_S.gguf", port: 8085, n_gpu_layers: 99 }, vram_estimate_gb: 48.0, purpose: "creative writing, storytelling, fiction, prose, novel drafting, character description, roleplay, and creative brainstorming", n_ctx: null },
+                { id: "agent", type: "llm", backend: "llama.cpp", backend_config: { repo_id: "bartowski/Qwen3-Coder-32B-Instruct-GGUF", filename: "Qwen3-Coder-32B-Instruct-Q8_0.gguf", port: 8086, n_gpu_layers: 99 }, vram_estimate_gb: 35.0, purpose: "agentic workflows, function calling, tool calling, JSON formatting, structured output, and following system instructions", n_ctx: null },
+                { id: "multilingual", type: "llm", backend: "llama.cpp", backend_config: { repo_id: "bartowski/Llama-3.3-70B-Instruct-GGUF", filename: "Llama-3.3-70B-Instruct-Q5_K_S.gguf", port: 8087, n_gpu_layers: 99 }, vram_estimate_gb: 48.0, purpose: "multilingual translation, localized text generation, non-English languages, and multi-language conversation", n_ctx: null },
+                { id: "video-generation", type: "video", backend: "comfyui", backend_config: { server_url: "http://127.0.0.1:8188", workflow_path: "workflows/default_t2v.json" }, vram_estimate_gb: 9.0, purpose: "text-to-video scene generation via ComfyUI" }
             ]
         },
         "128": {
@@ -1759,7 +1800,12 @@ if (openSetupBtn && setupModal) {
                 { id: "image", type: "image", backend: "diffusers", backend_config: { model_name: "black-forest-labs/FLUX.1-dev" }, vram_estimate_gb: 22.0 },
                 { id: "stt", type: "stt", backend: "whisper", backend_config: { model_name: "large-v3" }, vram_estimate_gb: 4.8 },
                 { id: "tts", type: "tts", backend: "tts", backend_config: { engine: "kokoro", voice: "af_sarah" }, vram_estimate_gb: 0.5 },
-                { id: "routing", type: "llm", backend: "llama.cpp", backend_config: { repo_id: "microsoft/Phi-3-mini-4k-instruct-gguf", filename: "Phi-3-mini-4k-instruct-q4.gguf", port: 8083, n_gpu_layers: 99 }, vram_estimate_gb: 2.2, purpose: "routing classification", n_ctx: 4096 }
+                { id: "routing", type: "llm", backend: "llama.cpp", backend_config: { repo_id: "microsoft/Phi-3-mini-4k-instruct-gguf", filename: "Phi-3-mini-4k-instruct-q4.gguf", port: 8083, n_gpu_layers: 99 }, vram_estimate_gb: 2.2, purpose: "routing classification", n_ctx: 4096 },
+                { id: "reasoning", type: "llm", backend: "llama.cpp", backend_config: { repo_id: "bartowski/DeepSeek-R1-Distill-Llama-70B-GGUF", filename: "DeepSeek-R1-Distill-Llama-70B-Q5_K_M.gguf", port: 8084, n_gpu_layers: 99 }, vram_estimate_gb: 48.0, purpose: "step-by-step logic, math, multi-step planning, complex reasoning, algorithms, and deep analysis", n_ctx: null },
+                { id: "story", type: "llm", backend: "llama.cpp", backend_config: { repo_id: "bartowski/Llama-3.3-70B-Instruct-GGUF", filename: "Llama-3.3-70B-Instruct-Q5_K_S.gguf", port: 8085, n_gpu_layers: 99 }, vram_estimate_gb: 48.0, purpose: "creative writing, storytelling, fiction, prose, novel drafting, character description, roleplay, and creative brainstorming", n_ctx: null },
+                { id: "agent", type: "llm", backend: "llama.cpp", backend_config: { repo_id: "bartowski/Qwen3-Coder-32B-Instruct-GGUF", filename: "Qwen3-Coder-32B-Instruct-Q8_0.gguf", port: 8086, n_gpu_layers: 99 }, vram_estimate_gb: 35.0, purpose: "agentic workflows, function calling, tool calling, JSON formatting, structured output, and following system instructions", n_ctx: null },
+                { id: "multilingual", type: "llm", backend: "llama.cpp", backend_config: { repo_id: "bartowski/Llama-3.3-70B-Instruct-GGUF", filename: "Llama-3.3-70B-Instruct-Q5_K_S.gguf", port: 8087, n_gpu_layers: 99 }, vram_estimate_gb: 48.0, purpose: "multilingual translation, localized text generation, non-English languages, and multi-language conversation", n_ctx: null },
+                { id: "video-generation", type: "video", backend: "comfyui", backend_config: { server_url: "http://127.0.0.1:8188", workflow_path: "workflows/default_t2v.json" }, vram_estimate_gb: 9.0, purpose: "text-to-video scene generation via ComfyUI" }
             ]
         }
     };
@@ -1801,8 +1847,14 @@ if (openSetupBtn && setupModal) {
 
             // Clear and render new cards
             setupContainer.innerHTML = "";
+            const presetModelIds = new Set(preset.models.map(m => m.id));
             preset.models.forEach(model => {
                 renderSetupCard(model);
+            });
+            currentlyConfiguredModels.forEach(model => {
+                if (!presetModelIds.has(model.id)) {
+                    renderSetupCard(model);
+                }
             });
 
             // Reset selection box back to default
@@ -1816,6 +1868,7 @@ if (openSetupBtn && setupModal) {
             const res = await fetch("/api/config");
             if (!res.ok) throw new Error("Could not retrieve config.");
             const config = await res.json();
+            currentlyConfiguredModels = config.models || [];
 
             // Populate resource limits
             document.getElementById("setup-vram").value = config.resource_limits.max_vram_gb;
@@ -3692,6 +3745,285 @@ const autoPane = document.getElementById("automations-pane");
 if (autoPane) {
     automationsTabObserver.observe(autoPane, { attributes: true, attributeFilter: ["class"] });
 }
+
+// ==========================================================================
+// FIRST-RUN ONBOARDING SETUP WIZARD
+// ==========================================================================
+let onboardingOpened = false;
+let onboardingInit = false;
+let selectedPreset = null;
+let onboardingDownloadInterval = null;
+
+function checkOnboarding(status) {
+    if (onboardingOpened) return;
+    onboardingOpened = true;
+    
+    // Fetch raw config to get actual model configs for merging undefined models
+    fetch("/api/config")
+        .then(res => res.json())
+        .then(config => {
+            currentlyConfiguredModels = config.models || [];
+        })
+        .catch(err => console.error("Failed to fetch initial config models:", err));
+        
+    const modal = document.getElementById("onboarding-modal");
+    if (!modal) return;
+    
+    // Show modal
+    modal.classList.remove("hidden");
+    
+    // Populate VRAM
+    const vramVal = status.limits.max_vram_gb;
+    const vramLabel = document.getElementById("detected-vram-label");
+    if (vramLabel) {
+        vramLabel.textContent = `${vramVal.toFixed(1)} GB`;
+    }
+    
+    // Determine recommended preset
+    let recommendedPreset = "4";
+    if (vramVal >= 15.0) {
+        recommendedPreset = "16";
+    } else if (vramVal >= 7.0) {
+        recommendedPreset = "8";
+    }
+    
+    // Show recommended badge
+    const recommendedCard = document.querySelector(`.preset-card[data-preset="${recommendedPreset}"]`);
+    if (recommendedCard) {
+        recommendedCard.classList.add("recommended");
+        const badge = recommendedCard.querySelector(".recommend-badge");
+        if (badge) badge.classList.remove("hidden");
+    }
+    
+    if (!onboardingInit) {
+        onboardingInit = true;
+        setupOnboardingEvents(vramVal);
+    }
+}
+
+function setupOnboardingEvents(vramVal) {
+    const step1 = document.getElementById("onboarding-step-1");
+    const step2 = document.getElementById("onboarding-step-2");
+    const step3 = document.getElementById("onboarding-step-3");
+    
+    const btnNext1 = document.getElementById("btn-onboarding-next-1");
+    const btnNext2 = document.getElementById("btn-onboarding-next-2");
+    const btnBack2 = document.getElementById("btn-onboarding-back-2");
+    const btnBack3 = document.getElementById("btn-onboarding-back-3");
+    
+    const presetCards = document.querySelectorAll(".preset-card");
+    const btnSkip = document.getElementById("btn-onboarding-skip-download");
+    const btnDownload = document.getElementById("btn-onboarding-download");
+    
+    // Step 1 -> Step 2
+    btnNext1.addEventListener("click", () => {
+        step1.classList.add("hidden");
+        step2.classList.remove("hidden");
+    });
+    
+    // Preset Card Selection
+    presetCards.forEach(card => {
+        card.addEventListener("click", () => {
+            presetCards.forEach(c => c.classList.remove("selected"));
+            card.classList.add("selected");
+            selectedPreset = card.getAttribute("data-preset");
+            btnNext2.disabled = false;
+        });
+    });
+    
+    // Step 2 Back
+    btnBack2.addEventListener("click", () => {
+        step2.classList.add("hidden");
+        step1.classList.remove("hidden");
+    });
+    
+    // Step 2 -> Step 3
+    btnNext2.addEventListener("click", () => {
+        if (!selectedPreset) return;
+        
+        step2.classList.add("hidden");
+        step3.classList.remove("hidden");
+        
+        // Update selected preset name
+        const presetNameMap = {
+            "4": "4 GB VRAM (Ultra-Lightweight)",
+            "8": "8 GB VRAM (Standard)",
+            "16": "16 GB VRAM (Pro / High-End)"
+        };
+        document.getElementById("onboarding-selected-preset-name").textContent = presetNameMap[selectedPreset] || selectedPreset;
+        
+        // Populate models list
+        const preset = PRESETS[selectedPreset];
+        const modelListEl = document.getElementById("onboarding-models-list");
+        modelListEl.innerHTML = "";
+        
+        if (preset && preset.models) {
+            preset.models.forEach(model => {
+                const item = document.createElement("div");
+                item.style.display = "flex";
+                item.style.justifyContent = "space-between";
+                item.style.alignItems = "center";
+                item.style.padding = "8px 12px";
+                item.style.background = "rgba(255,255,255,0.02)";
+                item.style.border = "1px solid rgba(255,255,255,0.04)";
+                item.style.borderRadius = "8px";
+                
+                const backendDetail = model.backend_config.filename || model.backend_config.model_name || model.id;
+                const badgeClass = `modality-${model.type}`;
+                
+                item.innerHTML = `
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                        <span class="modality-badge ${badgeClass}" style="font-size: 9px; padding: 2px 6px;">${model.type.toUpperCase()}</span>
+                        <span style="font-weight: 600; color: var(--text-primary);">${model.id}</span>
+                    </div>
+                    <span style="font-size: 11px; color: var(--text-secondary); max-width: 250px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${backendDetail}">${backendDetail}</span>
+                `;
+                modelListEl.appendChild(item);
+            });
+        }
+    });
+    
+    // Step 3 Back
+    btnBack3.addEventListener("click", () => {
+        step3.classList.add("hidden");
+        step2.classList.remove("hidden");
+    });
+    
+    // Action Buttons
+    btnSkip.addEventListener("click", () => {
+        saveOnboardingConfig(selectedPreset, false);
+    });
+    
+    btnDownload.addEventListener("click", () => {
+        saveOnboardingConfig(selectedPreset, true);
+    });
+}
+
+async function saveOnboardingConfig(presetKey, startDownloads) {
+    const preset = PRESETS[presetKey];
+    if (!preset) return;
+    
+    const btnSkip = document.getElementById("btn-onboarding-skip-download");
+    const btnDownload = document.getElementById("btn-onboarding-download");
+    const btnBack3 = document.getElementById("btn-onboarding-back-3");
+    
+    btnSkip.disabled = true;
+    btnDownload.disabled = true;
+    btnBack3.disabled = true;
+    
+    try {
+        // Fetch current config
+        const configRes = await fetch("/api/config");
+        if (!configRes.ok) throw new Error("Could not retrieve config from server.");
+        const currentConfig = await configRes.json();
+        
+        // Modify limits
+        currentConfig.resource_limits.max_vram_gb = preset.vram;
+        currentConfig.resource_limits.max_ram_gb = preset.ram;
+        
+        // Modify router
+        currentConfig.router.model_type = preset.router_type;
+        currentConfig.router.model_name = preset.router_model;
+        currentConfig.router.fallback_model = "general";
+        
+        // Overwrite models list, keeping any models not defined in the preset (retaining defaults)
+        const presetModelIds = new Set(preset.models.map(m => m.id));
+        const mergedModels = [
+            ...preset.models,
+            ...currentConfig.models.filter(m => !presetModelIds.has(m.id))
+        ];
+        currentConfig.models = mergedModels;
+        
+        // Save back config (will set is_first_run to False)
+        const saveRes = await fetch("/api/config", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(currentConfig)
+        });
+        if (!saveRes.ok) throw new Error("Server rejected configuration save.");
+        
+        if (startDownloads) {
+            // Trigger download-all
+            const downloadSection = document.getElementById("onboarding-download-section");
+            downloadSection.style.display = "block";
+            
+            const triggerRes = await fetch("/api/models/download-all", { method: "POST" });
+            const triggerData = await triggerRes.json();
+            
+            // Start polling progress
+            pollOnboardingDownloadStatus();
+            onboardingDownloadInterval = setInterval(pollOnboardingDownloadStatus, 2000);
+        } else {
+            // Close and complete onboarding
+            closeOnboardingWizard();
+        }
+    } catch (err) {
+        alert(`Failed to configure CerberAI: ${err.message}`);
+        btnSkip.disabled = false;
+        btnDownload.disabled = false;
+        btnBack3.disabled = false;
+    }
+}
+
+function pollOnboardingDownloadStatus() {
+    const label = document.getElementById("onboarding-download-label");
+    const counter = document.getElementById("onboarding-download-counter");
+    const bar = document.getElementById("onboarding-download-bar");
+    
+    fetch("/api/models/download-all/status")
+        .then(res => res.json())
+        .then(data => {
+            if (data.total > 0) {
+                counter.textContent = `${data.completed}/${data.total}`;
+                const pct = (data.completed / data.total) * 100;
+                bar.style.width = `${pct}%`;
+                
+                if (data.running && data.current_model) {
+                    label.textContent = `Downloading: ${data.current_model}...`;
+                }
+                
+                if (!data.running) {
+                    clearInterval(onboardingDownloadInterval);
+                    onboardingDownloadInterval = null;
+                    
+                    if (data.errors && data.errors.length > 0) {
+                        label.textContent = `Done with ${data.errors.length} error(s)`;
+                        bar.style.background = "linear-gradient(90deg, #f59e0b 0%, #ef4444 100%)";
+                        setTimeout(() => {
+                            closeOnboardingWizard();
+                        }, 3000);
+                    } else {
+                        label.textContent = "All models downloaded successfully!";
+                        bar.style.background = "linear-gradient(90deg, #10b981 0%, #3b82f6 100%)";
+                        setTimeout(() => {
+                            closeOnboardingWizard();
+                        }, 2000);
+                    }
+                }
+            } else {
+                // No models to download or finished early
+                clearInterval(onboardingDownloadInterval);
+                closeOnboardingWizard();
+            }
+        })
+        .catch(err => {
+            console.error("Failed to poll onboarding download status:", err);
+        });
+}
+
+function closeOnboardingWizard() {
+    if (onboardingDownloadInterval) {
+        clearInterval(onboardingDownloadInterval);
+    }
+    const modal = document.getElementById("onboarding-modal");
+    if (modal) {
+        modal.classList.add("hidden");
+    }
+    // Refresh application models and status
+    fetchModels();
+    pollStatus();
+}
+
 
 
 

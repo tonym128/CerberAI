@@ -187,6 +187,7 @@ async def get_status():
 
     return {
         "status": "healthy",
+        "is_first_run": getattr(config, "is_first_run", False),
         "limits": {
             "max_vram_gb": config.resource_limits.max_vram_gb,
             "max_ram_gb": config.resource_limits.max_ram_gb,
@@ -1471,6 +1472,12 @@ async def download_all_models(background_tasks: BackgroundTasks):
     asyncio.create_task(_download_worker())
     return JSONResponse(content={"message": f"Started downloading {len(models_to_download)} model(s) in background.", "status": _download_all_status})
 
+@app.get("/api/models/download-all/status")
+async def get_download_all_status():
+    """Retrieve details and progress of running bulk model downloads."""
+    global _download_all_status
+    return JSONResponse(content=_download_all_status)
+
 @app.get("/api/cache/stats")
 async def get_cache_stats():
     """Retrieve cache sizes and status of all cached and configured models."""
@@ -1790,6 +1797,7 @@ async def save_config(request: Request):
             raise HTTPException(status_code=400, detail="Invalid config format. Missing 'models' or 'resource_limits'.")
             
         # Write to config.yaml
+        new_data["is_first_run"] = False
         with open("config.yaml", "w") as f:
             yaml.safe_dump(new_data, f, default_flow_style=False)
             

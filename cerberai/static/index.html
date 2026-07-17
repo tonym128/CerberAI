@@ -953,5 +953,125 @@
             });
         }
     </script>
+
+    <!-- Onboarding / First-Run Setup Wizard -->
+    <div id="onboarding-modal" class="modal hidden">
+        <div class="modal-content onboarding-content" style="width: 750px; max-width: 95vw;">
+            <!-- Step 1: Welcome -->
+            <div id="onboarding-step-1" class="onboarding-step">
+                <div style="text-align: center; padding: 40px 20px;">
+                    <div class="welcome-logo" style="font-size: 64px; margin-bottom: 20px; animation: bounce 2s infinite; display: inline-block;">⚡</div>
+                    <h2 style="font-size: 28px; margin-bottom: 12px; color: var(--text-primary);">Welcome to CerberAI</h2>
+                    <p style="font-size: 14px; color: var(--text-secondary); max-width: 500px; margin: 0 auto 24px; line-height: 1.6;">
+                        CerberAI is a local multi-model orchestrator. It manages your local LLMs, vision, image, and voice engines, auto-loading them to GPU/RAM and auto-evicting them to prevent memory crashes.
+                    </p>
+                    <div style="background: rgba(139, 92, 246, 0.08); border: 1px solid rgba(139, 92, 246, 0.2); border-radius: 12px; padding: 16px; display: inline-flex; align-items: center; gap: 10px; margin-bottom: 30px;">
+                        <span style="font-size: 20px;">🖥️</span>
+                        <span style="font-size: 13.5px; text-align: left;">
+                            We detected <strong id="detected-vram-label" style="color: #a78bfa;">-- GB</strong> of system GPU VRAM.
+                        </span>
+                    </div>
+                    <div>
+                        <button type="button" id="btn-onboarding-next-1" class="btn btn-primary" style="padding: 12px 36px; font-size: 14px; font-weight: 600; border-radius: 8px;">Let's Get Started &rarr;</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Step 2: Choose Preset -->
+            <div id="onboarding-step-2" class="onboarding-step hidden">
+                <div style="padding: 28px 28px 24px;">
+                    <h2 style="font-size: 22px; margin-bottom: 6px; color: var(--text-primary);">Configure Your Hardware</h2>
+                    <p style="font-size: 12.5px; color: var(--text-secondary); margin-bottom: 20px;">Select the hardware preset that best matches your system. This sets memory limits and configures optimized models.</p>
+                    
+                    <div class="presets-grid" style="display: flex; flex-direction: column; gap: 12px; max-height: 380px; overflow-y: auto; padding-right: 4px; margin-bottom: 20px;">
+                        <!-- 4GB Option -->
+                        <div class="preset-card" data-preset="4">
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                                <span style="font-size: 15px; font-weight: 600; color: var(--text-primary);">Ultra-Lightweight / Laptop (4 GB VRAM)</span>
+                                <span class="recommend-badge hidden" style="font-size: 9px; font-weight: 700; background: var(--primary); color: white; padding: 3px 8px; border-radius: 12px; text-transform: uppercase;">Recommended</span>
+                            </div>
+                            <p style="font-size: 11.5px; color: var(--text-secondary); margin-bottom: 10px; line-height: 1.4;">Ideal for laptops or systems without a dedicated Nvidia GPU. Employs lightweight, high-speed 1.5B parameter models.</p>
+                            <div style="display: flex; flex-wrap: wrap; gap: 6px; font-size: 10.5px;">
+                                <span class="modality-badge modality-llm">LLM: Qwen 1.5B</span>
+                                <span class="modality-badge modality-image">Image: Dreamshaper LCM</span>
+                                <span class="modality-badge modality-stt">STT: Whisper Tiny</span>
+                                <span class="modality-badge modality-tts">TTS: Kokoro</span>
+                            </div>
+                        </div>
+
+                        <!-- 8GB Option -->
+                        <div class="preset-card" data-preset="8">
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                                <span style="font-size: 15px; font-weight: 600; color: var(--text-primary);">Standard Desktop GPU (8 GB VRAM)</span>
+                                <span class="recommend-badge hidden" style="font-size: 9px; font-weight: 700; background: var(--primary); color: white; padding: 3px 8px; border-radius: 12px; text-transform: uppercase;">Recommended</span>
+                            </div>
+                            <p style="font-size: 11.5px; color: var(--text-secondary); margin-bottom: 10px; line-height: 1.4;">For mainstream GPUs (e.g., RTX 3060/4060). Balances high-quality reasoning with smooth local performance.</p>
+                            <div style="display: flex; flex-wrap: wrap; gap: 6px; font-size: 10.5px;">
+                                <span class="modality-badge modality-llm">LLM: Granite 8B / Qwen 7B Coder</span>
+                                <span class="modality-badge modality-image">Image: Dreamshaper LCM</span>
+                                <span class="modality-badge modality-stt">STT: Whisper Small</span>
+                                <span class="modality-badge modality-tts">TTS: Kokoro</span>
+                            </div>
+                        </div>
+
+                        <!-- 16GB Option -->
+                        <div class="preset-card" data-preset="16">
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                                <span style="font-size: 15px; font-weight: 600; color: var(--text-primary);">Pro Workstation / Flagship (16+ GB VRAM)</span>
+                                <span class="recommend-badge hidden" style="font-size: 9px; font-weight: 700; background: var(--primary); color: white; padding: 3px 8px; border-radius: 12px; text-transform: uppercase;">Recommended</span>
+                            </div>
+                            <p style="font-size: 11.5px; color: var(--text-secondary); margin-bottom: 10px; line-height: 1.4;">For high-end cards (RTX 4080/4090) and Apple Silicon Macs. Enables intelligent 14B models and SDXL Turbo.</p>
+                            <div style="display: flex; flex-wrap: wrap; gap: 6px; font-size: 10.5px;">
+                                <span class="modality-badge modality-llm">LLM: Qwen 14B Reasoning & Coder</span>
+                                <span class="modality-badge modality-image">Image: SDXL Turbo</span>
+                                <span class="modality-badge modality-stt">STT: Whisper Large V3</span>
+                                <span class="modality-badge modality-tts">TTS: Kokoro</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div style="display: flex; justify-content: space-between; align-items: center; border-top: 1px solid rgba(255,255,255,0.06); padding-top: 16px;">
+                        <button type="button" id="btn-onboarding-back-2" class="btn btn-secondary" style="font-size: 13px; padding: 10px 20px;">&larr; Back</button>
+                        <button type="button" id="btn-onboarding-next-2" class="btn btn-primary" style="font-size: 13px; padding: 10px 24px;" disabled>Continue &rarr;</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Step 3: Model Setup & Downloads -->
+            <div id="onboarding-step-3" class="onboarding-step hidden">
+                <div style="padding: 28px 28px 24px;">
+                    <h2 style="font-size: 22px; margin-bottom: 6px; color: var(--text-primary);">Ready to Initialize</h2>
+                    <p style="font-size: 12.5px; color: var(--text-secondary); margin-bottom: 20px;">We've prepared your configuration. Next, you can pre-download the models so they are ready for instant local execution, or load them on-demand.</p>
+                    
+                    <div style="background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.06); border-radius: 12px; padding: 16px; margin-bottom: 20px;">
+                        <h4 style="font-size: 13.5px; margin-bottom: 10px; color: var(--text-primary);">Configured Models for Preset: <span id="onboarding-selected-preset-name" style="color: #a78bfa;">--</span></h4>
+                        <div id="onboarding-models-list" style="display: flex; flex-direction: column; gap: 8px; font-size: 12px; color: var(--text-secondary); max-height: 180px; overflow-y: auto;">
+                            <!-- Populate list of models in selected preset -->
+                        </div>
+                    </div>
+
+                    <!-- Download All Status Block inside onboarding -->
+                    <div id="onboarding-download-section" style="padding: 14px; border-radius: 12px; background: rgba(139, 92, 246, 0.06); border: 1px solid rgba(139, 92, 246, 0.15); margin-bottom: 24px; display: none;">
+                        <div style="display: flex; justify-content: space-between; align-items: center;">
+                            <span id="onboarding-download-label" style="font-size: 12px; color: var(--text-primary); font-weight: 500;">Downloading model weights...</span>
+                            <span id="onboarding-download-counter" style="font-size: 11px; font-weight: 600; color: var(--primary);">0/0</span>
+                        </div>
+                        <div style="width: 100%; height: 6px; background: rgba(255,255,255,0.06); border-radius: 3px; overflow: hidden; margin-top: 10px;">
+                            <div id="onboarding-download-bar" style="width: 0%; height: 100%; background: linear-gradient(90deg, #8b5cf6 0%, #3b82f6 100%); transition: width 0.4s ease; border-radius: 3px;"></div>
+                        </div>
+                        <div id="onboarding-download-detail" style="font-size: 10px; color: var(--text-secondary); margin-top: 6px;">Please keep CerberAI running while downloading. This might take a few minutes depending on your network.</div>
+                    </div>
+
+                    <div style="display: flex; justify-content: space-between; align-items: center; border-top: 1px solid rgba(255,255,255,0.06); padding-top: 16px;">
+                        <button type="button" id="btn-onboarding-back-3" class="btn btn-secondary" style="font-size: 13px; padding: 10px 20px;">&larr; Back</button>
+                        <div style="display: flex; gap: 8px;">
+                            <button type="button" id="btn-onboarding-skip-download" class="btn btn-secondary" style="font-size: 13px; padding: 10px 18px;">Skip & Launch</button>
+                            <button type="button" id="btn-onboarding-download" class="btn btn-primary" style="font-size: 13px; padding: 10px 24px;">⬇ Save & Pre-Download</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
 </body>
 </html>

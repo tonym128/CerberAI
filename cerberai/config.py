@@ -46,6 +46,7 @@ class AppConfig(BaseModel):
     telegram_bot_token: Optional[str] = None
     telegram_chat_id: Optional[str] = None
     mcp_servers: Dict[str, Any] = Field(default_factory=dict)
+    is_first_run: bool = False
 
 def load_config(config_path: str = "config.yaml") -> AppConfig:
     # Safely define the fallback defaults dict
@@ -177,6 +178,7 @@ def load_config(config_path: str = "config.yaml") -> AppConfig:
     if not os.path.exists(config_path):
         if config_path == "config.yaml":
             try:
+                default_config["is_first_run"] = True
                 with open(config_path, "w") as f:
                     yaml.safe_dump(default_config, f, default_flow_style=False)
                 print(f"Created default configuration file at '{config_path}'")
@@ -194,6 +196,8 @@ def load_config(config_path: str = "config.yaml") -> AppConfig:
         # Merge key structures to avoid validation crashes on older YAML missing new sections
         if "search" not in data:
             data["search"] = default_config["search"]
+        if "is_first_run" not in data:
+            data["is_first_run"] = False
             
         app_config = AppConfig(**data)
         user_specified = "resource_limits" in data and "max_vram_gb" in data["resource_limits"]
