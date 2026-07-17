@@ -144,12 +144,42 @@ def create_transparent_overlay(width: int, height: int, title: str, summary: str
         
     img.save(output_path, "PNG")
 
+async def unload_model_from_manager(manager, model_id: str):
+    """Explicitly unload a model backend from the manager and clean up system state."""
+    if model_id in manager.backends:
+        backend = manager.backends[model_id]
+        if await backend.is_loaded():
+            print(f"Explicitly unloading model '{model_id}' to manage memory...")
+            await backend.unload()
+            if model_id in manager.last_used:
+                del manager.last_used[model_id]
+
+async def log_loaded_models(manager, phase_name: str):
+    """Log the currently loaded models and Pytorch CUDA memory status if available."""
+    loaded = []
+    for m_id, b in manager.backends.items():
+        if await b.is_loaded():
+            loaded.append(m_id)
+    print(f"[{phase_name}] Currently loaded models in manager: {loaded}")
+    
+    import gc
+    gc.collect()
+    try:
+        import torch
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+            allocated = torch.cuda.memory_allocated() / (1024 ** 3)
+            reserved = torch.cuda.memory_reserved() / (1024 ** 3)
+            print(f"[{phase_name}] PyTorch CUDA memory: allocated={allocated:.2f} GB, reserved={reserved:.2f} GB")
+    except ImportError:
+        pass
+
 async def generate_yesterday_news_video(manager, agent, topic: str = None, date_str: str = None, video_mode: str = "image"):
     """
     Background automation runner:
     1. Search for news stories based on target date and topic.
     2. Extract 10 distinct stories using LLM.
-    3. Generate image overlays, audio clips, and compile segment videos concurrently.
+    3. Process slide components sequentially in distinct model execution phases to manage memory.
     4. Concat video clips and output final file.
     """
     import datetime
@@ -163,6 +193,11 @@ async def generate_yesterday_news_video(manager, agent, topic: str = None, date_
         search_msg = f"Searching world news stories from {target_date}..."
         
     update_status("running", 5, search_msg)
+    
+    # Ensure a completely clean slate before starting
+    print("Initializing news generation: Unloading all active models to optimize memory...")
+    await manager.unload_all()
+    await log_loaded_models(manager, "Initialization")
     
     # 1. Fetch news using our web search tool
     raw_search = await agent.web_search_tool(query)
@@ -218,6 +253,7 @@ async def generate_yesterday_news_video(manager, agent, topic: str = None, date_
         router = IntentRouter(manager.config.router, manager.config.models)
         target_model_id = await router.route_chat([{"role": "user", "content": prompt}], "auto", manager)
         backend = await manager.get_model(target_model_id)
+        await log_loaded_models(manager, "LLM Loaded")
         
         payload = {
             "messages": [{"role": "user", "content": prompt}],
@@ -256,10 +292,18 @@ async def generate_yesterday_news_video(manager, agent, topic: str = None, date_
             
         stories = valid_stories[:10]
         print(f"Validated and kept {len(stories)} real, verifiable stories.")
+        
+        # Unload the LLM backend to free up all VRAM for image/video models
+        await unload_model_from_manager(manager, target_model_id)
+        await log_loaded_models(manager, "LLM Unloaded")
+        
     except Exception as e:
         print(f"News verification or parsing error: {e}")
         update_status("failed", 0, f"Verification failed: {e}")
         print("Breaking News video generation failed due to lack of verifiable sources.")
+        # Ensure we clean up any loaded LLM model
+        if 'target_model_id' in locals():
+            await unload_model_from_manager(manager, target_model_id)
         return
         
     # Check VRAM limits to disable video generation for low VRAM systems (< 8GB)
@@ -270,121 +314,144 @@ async def generate_yesterday_news_video(manager, agent, topic: str = None, date_
         update_status("failed", 0, msg)
         return
 
-    # Get tts backend (image/video models loaded lazily to save memory)
-    tts_backend = await manager.get_model("tts")
-    
     temp_dir = tempfile.mkdtemp()
     total_stories = len(stories)
     segment_paths = [None] * total_stories
+    use_video_stream_flags = [False] * total_stories
     
-    completed_count = 0
-    status_lock = asyncio.Lock()
-    
-    async def process_slide(idx, story):
-        nonlocal completed_count
-        
-        # A. Generate Image or Video segment depending on VRAM and selected mode
-        video_temp_raw = os.path.join(temp_dir, f"video_raw_{idx}.mp4")
-        img_temp_raw = os.path.join(temp_dir, f"raw_{idx}.png")
-        
-        has_video_model = any(m.id == "video-generation" for m in manager.config.models)
-        
-        # Determine actual routing
-        do_text_to_video = (video_mode == "text_to_video" and has_video_model and max_vram >= 8.0)
-        do_image_to_video = (video_mode == "image_to_video" and has_video_model and max_vram >= 8.0)
-        
-        use_video_stream = False
-        
-        # 1. Text-to-Video Mode
-        if do_text_to_video:
-            try:
-                # Load video model
-                video_backend = await manager.get_model("video-generation")
-                # Generate video frames directly from text prompt
-                video_res = await video_backend.handle_video_generation({
-                    "prompt": story["image_prompt"],
-                    "num_frames": 16,
-                    "num_inference_steps": 20
-                })
-                b64_video = video_res["b64_json"]
-                with open(video_temp_raw, "wb") as f:
-                    f.write(base64.b64decode(b64_video))
-                use_video_stream = True
-            except Exception as e:
-                print(f"Failed to generate text-to-video for slide {idx}: {e}. Falling back to image slideshow...")
-                do_text_to_video = False
-                do_image_to_video = False
+    has_video_model = any(m.id == "video-generation" for m in manager.config.models)
+    do_text_to_video = (video_mode == "text_to_video" and has_video_model and max_vram >= 8.0)
+    do_image_to_video = (video_mode == "image_to_video" and has_video_model and max_vram >= 8.0)
+
+    # ==========================================
+    # PHASE 1: IMAGE GENERATION
+    # ==========================================
+    need_images = (video_mode == "image" or video_mode == "image_to_video")
+    if need_images:
+        print("--- Phase 1: Generating Static Images ---")
+        await log_loaded_models(manager, "Phase 1 Start")
+        try:
+            img_backend = await manager.get_model("image")
+            await log_loaded_models(manager, "Image Model Loaded")
+            for idx, story in enumerate(stories):
+                img_temp_raw = os.path.join(temp_dir, f"raw_{idx}.png")
+                try:
+                    update_status("running", 20 + int((idx / total_stories) * 20), f"Generating image {idx+1}/{total_stories}...")
+                    img_res = await img_backend.handle_image_generation({"prompt": story["image_prompt"]})
+                    b64_data = img_res["data"][0]["b64_json"]
+                    with open(img_temp_raw, "wb") as f:
+                        f.write(base64.b64decode(b64_data))
+                except Exception as e:
+                    print(f"Failed to generate static image for slide {idx}: {e}")
+                    # Fallback placeholder image
+                    img_placeholder = Image.new("RGB", (512, 512), color=(40, 44, 52))
+                    img_placeholder.save(img_temp_raw)
+        finally:
+            await unload_model_from_manager(manager, "image")
+            await log_loaded_models(manager, "Phase 1 End")
+
+    # ==========================================
+    # PHASE 2: VIDEO GENERATION
+    # ==========================================
+    need_videos = (do_text_to_video or do_image_to_video)
+    if need_videos:
+        print("--- Phase 2: Generating Video / Animations ---")
+        await log_loaded_models(manager, "Phase 2 Start")
+        try:
+            video_backend = await manager.get_model("video-generation")
+            await log_loaded_models(manager, "Video Model Loaded")
+            for idx, story in enumerate(stories):
+                video_temp_raw = os.path.join(temp_dir, f"video_raw_{idx}.mp4")
+                update_status("running", 40 + int((idx / total_stories) * 25), f"Generating video segment {idx+1}/{total_stories}...")
                 
-        # 2. Image-to-Video Mode
-        if do_image_to_video or (not do_text_to_video and video_mode != "image"):
-            try:
-                # First generate the static image as the input
-                img_backend = await manager.get_model("image")
-                img_res = await img_backend.handle_image_generation({"prompt": story["image_prompt"]})
-                b64_data = img_res["data"][0]["b64_json"]
-                with open(img_temp_raw, "wb") as f:
-                    f.write(base64.b64decode(b64_data))
-                
-                # If we are in image_to_video mode, now animate it!
-                if do_image_to_video:
+                if do_text_to_video:
                     try:
-                        # Load video model
-                        video_backend = await manager.get_model("video-generation")
-                        # Pass the base64 image to get animated!
                         video_res = await video_backend.handle_video_generation({
-                            "image": b64_data,
-                            "num_frames": 14,
+                            "prompt": story["image_prompt"],
+                            "num_frames": 16,
                             "num_inference_steps": 20
                         })
                         b64_video = video_res["b64_json"]
                         with open(video_temp_raw, "wb") as f:
                             f.write(base64.b64decode(b64_video))
-                        use_video_stream = True
+                        use_video_stream_flags[idx] = True
                     except Exception as e:
-                        print(f"Failed to generate image-to-video animation for slide {idx}: {e}. Falling back to static image slideshow...")
-                        use_video_stream = False
-            except Exception as img_err:
-                print(f"Failed to generate static image for slide {idx}: {img_err}")
-                # Fallback placeholder image
-                img_placeholder = Image.new("RGB", (512, 512), color=(40, 44, 52))
-                img_placeholder.save(img_temp_raw)
-                use_video_stream = False
-                
-        # 3. Traditional static image generation
-        if video_mode == "image" and not use_video_stream:
+                        print(f"Failed to generate text-to-video for slide {idx}: {e}. Falling back to placeholder image...")
+                        img_temp_raw = os.path.join(temp_dir, f"raw_{idx}.png")
+                        img_placeholder = Image.new("RGB", (512, 512), color=(40, 44, 52))
+                        img_placeholder.save(img_temp_raw)
+                        use_video_stream_flags[idx] = False
+                        
+                elif do_image_to_video:
+                    img_temp_raw = os.path.join(temp_dir, f"raw_{idx}.png")
+                    try:
+                        if os.path.exists(img_temp_raw):
+                            with open(img_temp_raw, "rb") as f:
+                                b64_data = base64.b64encode(f.read()).decode("utf-8")
+                            
+                            video_res = await video_backend.handle_video_generation({
+                                "image": b64_data,
+                                "num_frames": 14,
+                                "num_inference_steps": 20
+                            })
+                            b64_video = video_res["b64_json"]
+                            with open(video_temp_raw, "wb") as f:
+                                f.write(base64.b64decode(b64_video))
+                            use_video_stream_flags[idx] = True
+                        else:
+                            print(f"Static image not found for slide {idx}. Falling back to image slideshow.")
+                            use_video_stream_flags[idx] = False
+                    except Exception as e:
+                        print(f"Failed to generate image-to-video animation for slide {idx}: {e}. Falling back to static image...")
+                        use_video_stream_flags[idx] = False
+        finally:
+            await unload_model_from_manager(manager, "video-generation")
+            await log_loaded_models(manager, "Phase 2 End")
+
+    # ==========================================
+    # PHASE 3: TTS AUDIO GENERATION
+    # ==========================================
+    print("--- Phase 3: Generating TTS Audio ---")
+    await log_loaded_models(manager, "Phase 3 Start")
+    try:
+        tts_backend = await manager.get_model("tts")
+        await log_loaded_models(manager, "TTS Model Loaded")
+        for idx, story in enumerate(stories):
+            audio_temp = os.path.join(temp_dir, f"speech_{idx}.wav")
+            update_status("running", 65 + int((idx / total_stories) * 15), f"Generating voice narration {idx+1}/{total_stories}...")
             try:
-                img_backend = await manager.get_model("image")
-                img_res = await img_backend.handle_image_generation({"prompt": story["image_prompt"]})
-                b64_data = img_res["data"][0]["b64_json"]
-                with open(img_temp_raw, "wb") as f:
-                    f.write(base64.b64decode(b64_data))
+                audio_bytes = await tts_backend.handle_audio_speech({"input": story["summary"]})
+                with open(audio_temp, "wb") as f:
+                    f.write(audio_bytes)
             except Exception as e:
-                print(f"Failed to generate static image for slide {idx}: {e}")
-                # Fallback placeholder image
-                img_placeholder = Image.new("RGB", (512, 512), color=(40, 44, 52))
-                img_placeholder.save(img_temp_raw)
-            
-        # B. Create transparent overlay containing fixed text, news borders, and domain source
+                print(f"Failed to generate TTS for slide {idx}: {e}")
+                # Write silent wav fallback
+                import wave
+                with wave.open(audio_temp, "wb") as w:
+                    w.setnchannels(1)
+                    w.setsampwidth(2)
+                    w.setframerate(24000)
+                    w.writeframes(b'\x00' * 48000 * 3) # 3 seconds of silence
+    finally:
+        await unload_model_from_manager(manager, "tts")
+        await log_loaded_models(manager, "Phase 3 End")
+
+    # ==========================================
+    # PHASE 4: STITCHING AND ASSEMBLY
+    # ==========================================
+    print("--- Phase 4: Segment Assembly and FFmpeg Processing ---")
+    status_lock = asyncio.Lock()
+    completed_count = 0
+    
+    for idx, story in enumerate(stories):
+        update_status("running", 80 + int((idx / total_stories) * 5), f"Assembling slide {idx+1}/{total_stories}...")
+        
+        # A. Create transparent overlay containing fixed text, news borders, and domain source
         overlay_temp = os.path.join(temp_dir, f"overlay_{idx}.png")
         create_transparent_overlay(512, 512, story["title"], story["summary"], story.get("source_url", ""), overlay_temp)
         
-        # C. Generate Speech Audio (WAV)
+        # B. Calculate exact audio duration using Python's standard wave library
         audio_temp = os.path.join(temp_dir, f"speech_{idx}.wav")
-        try:
-            audio_bytes = await tts_backend.handle_audio_speech({"input": story["summary"]})
-            with open(audio_temp, "wb") as f:
-                f.write(audio_bytes)
-        except Exception as e:
-            print(f"Failed to generate TTS for slide {idx}: {e}")
-            # Write silent wav fallback
-            import wave
-            with wave.open(audio_temp, "wb") as w:
-                w.setnchannels(1)
-                w.setsampwidth(2)
-                w.setframerate(24000)
-                w.writeframes(b'\x00' * 48000 * 3) # 3 seconds of silence
-                
-        # Calculate exact audio duration using Python's standard wave library
         duration = 5.0
         try:
             import wave
@@ -400,8 +467,11 @@ async def generate_yesterday_news_video(manager, agent, topic: str = None, date_
         duration = max(2.0, duration + 0.2)
         total_frames = int(duration * 25) # 25 FPS target for zoompan
         
-        # D. Convert Slide + Audio to Video Segment using ffmpeg
+        # C. Convert Slide + Audio to Video Segment using ffmpeg
         segment_path = os.path.join(temp_dir, f"segment_{idx}.mp4")
+        video_temp_raw = os.path.join(temp_dir, f"video_raw_{idx}.mp4")
+        img_temp_raw = os.path.join(temp_dir, f"raw_{idx}.png")
+        use_video_stream = use_video_stream_flags[idx]
         
         if use_video_stream:
             # Loop the generated video file to match the narration duration
@@ -452,13 +522,11 @@ async def generate_yesterday_news_video(manager, agent, topic: str = None, date_
             stderr=asyncio.subprocess.DEVNULL
         )
         await proc.wait()
-        segment_paths[idx] = segment_path
-        
+        segment_paths[idx] = segment_path        
         async with status_lock:
             completed_count += 1
             progress_val = 20 + int((completed_count / total_stories) * 60)
             update_status("running", progress_val, f"Generated slide {completed_count}/{total_stories}: {story['title']}")
-
     # Run slide generation tasks concurrently
     await asyncio.gather(*[process_slide(i, story) for i, story in enumerate(stories)])
         
@@ -923,6 +991,11 @@ async def generate_daily_podcast(manager, agent, topic: str = None, date_str: st
     query = f"top major {topic} stories {target_date}" if topic else f"top major world news stories {target_date}"
     update_podcast_status("running", 5, f"Searching news stories for podcast: '{query}'...", query=query)
     
+    # Ensure a completely clean slate before starting
+    print("Initializing podcast generation: Unloading all active models to optimize memory...")
+    await manager.unload_all()
+    await log_loaded_models(manager, "Podcast Init")
+    
     # 1. Search for news
     try:
         raw_search = await agent.web_search_tool(query)
@@ -966,8 +1039,10 @@ async def generate_daily_podcast(manager, agent, topic: str = None, date_str: st
     )
     
     script = []
+    llm_model_id = manager.config.router.fallback_model
     try:
-        backend = await manager.get_model(manager.config.router.fallback_model)
+        backend = await manager.get_model(llm_model_id)
+        await log_loaded_models(manager, "Podcast LLM Loaded")
         payload = {
             "messages": [{"role": "user", "content": script_prompt}],
             "temperature": 0.5
@@ -980,8 +1055,11 @@ async def generate_daily_podcast(manager, agent, topic: str = None, date_str: st
             content = re.sub(r"\n```$", "", content)
         content = content.strip()
         script = json.loads(content)
+        await unload_model_from_manager(manager, llm_model_id)
+        await log_loaded_models(manager, "Podcast LLM Unloaded")
     except Exception as e:
         print(f"Failed to generate podcast script: {e}")
+        await unload_model_from_manager(manager, llm_model_id)
         script = [
             {"speaker": "Alex", "text": "Hello and welcome to CerberAI Daily Briefing. I'm Alex."},
             {"speaker": "Taylor", "text": "And I'm Taylor. We had some difficulties retrieving the latest news, but we'll be back shortly."},
@@ -1021,7 +1099,7 @@ async def generate_daily_podcast(manager, agent, topic: str = None, date_str: st
     turn_files = []
     try:
         tts_backend = await manager.get_model("tts")
-        await tts_backend.load()
+        await log_loaded_models(manager, "Podcast TTS Loaded")
         
         for idx, turn in enumerate(script):
             speaker = turn.get("speaker", "Alex")
@@ -1046,6 +1124,9 @@ async def generate_daily_podcast(manager, agent, topic: str = None, date_str: st
         except Exception:
             pass
         return
+    finally:
+        await unload_model_from_manager(manager, "tts")
+        await log_loaded_models(manager, "Podcast TTS Unloaded")
         
     update_podcast_status("running", 80, "Assembling podcast tracks and encoding MP3...")
     
